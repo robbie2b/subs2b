@@ -83,8 +83,13 @@ export function createServer(): express.Application {
         {
           name: 'subtitles',
           types: ['movie', 'series', 'anime', 'other'],
-          idPrefixes: ['tt', 'kitsu']
-        }
+          idPrefixes: ['tt', 'kitsu'],
+          extra: [
+            { name: 'filename', isRequired: false },
+            { name: 'videoHash', isRequired: false },
+            { name: 'videoSize', isRequired: false }
+          ]
+        } as any
       ],
       types: ['movie', 'series', 'anime', 'other'],
       catalogs: [],
@@ -452,10 +457,23 @@ const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
   try {
     const configParam = req.params.config;
     const userConfig = await decodeUserConfigAsync(configParam);
-    const { type, id } = req.params;
+    const { type, id, extra } = req.params;
     const baseUrl = getBaseUrl(req);
 
-    const query = parseSubtitleQuery(type, id, req.query as Record<string, string>);
+    // Îmbină query string-ul cu argumentele primite prin ruta Stremio (:extra)
+    const extraArgs: Record<string, string> = { ...(req.query as Record<string, string>) };
+    if (extra) {
+      try {
+        const searchParams = new URLSearchParams(extra);
+        for (const [key, value] of searchParams.entries()) {
+          extraArgs[key] = value;
+        }
+      } catch {
+        // Fallback silențios dacă parametrul nu necesită decodare
+      }
+    }
+
+    const query = parseSubtitleQuery(type, id, extraArgs);
     const response = await getAggregatedSubtitles(query, userConfig, baseUrl);
 
     res.setHeader('Cache-Control', 'max-age=1800, public');
@@ -465,6 +483,7 @@ const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
     res.json({ subtitles: [] });
   }
 };
+
 
 app.get('/:config/subtitles/:type/:id.json', handleSubtitles);
 app.get('/:config/subtitles/:type/:id/:extra.json', handleSubtitles);
