@@ -3,6 +3,7 @@ import { OpenSubtitlesProvider } from '../src/providers/openSubtitles';
 import { GenericStremioAddonProvider } from '../src/providers/genericStremioAddon';
 import { mergeWithDefaults } from '../src/config/userConfig';
 import { RawSubtitleItem, SubtitleQuery } from '../src/types/provider';
+import { ENV } from '../src/config/env';
 
 const query: SubtitleQuery = { type: 'movie', id: 'tt0000001', imdbId: 'tt0000001', season: null, episode: null, kitsuId: null };
 
@@ -42,6 +43,8 @@ function check(label: string, ok: boolean, info?: unknown): void {
 }
 
 async function main(): Promise<void> {
+  // ---- mode: fallback ----
+  ENV.OPENSUBTITLES_ADDON_MODE = 'fallback';
   // 1. direct integration fails -> the addon is used as fallback
   directBehaviour = 'fail';
   addonCalls = 0;
@@ -66,6 +69,18 @@ async function main(): Promise<void> {
   addonCalls = 0;
   res = await executeParallelSearch(query, configWith(false));
   check('addon works normally without direct integration', addonCalls === 1 && res.some(r => r.release === 'Addon.Release'), { addonCalls, res });
+
+  // ---- mode: parallel (default): addon runs together with the direct integration ----
+  ENV.OPENSUBTITLES_ADDON_MODE = 'parallel';
+  directBehaviour = 'ok';
+  addonCalls = 0;
+  res = await executeParallelSearch(query, configWith(true));
+  check('parallel mode: addon runs alongside direct', addonCalls === 1 && res.length === 2, { addonCalls, res });
+
+  directBehaviour = 'fail';
+  addonCalls = 0;
+  res = await executeParallelSearch(query, configWith(true));
+  check('parallel mode: addon results kept when direct fails', addonCalls === 1 && res.some(r => r.release === 'Addon.Release'), { addonCalls, res });
 
   if (failed) {
     console.error(failed + ' fallback check(s) failed');

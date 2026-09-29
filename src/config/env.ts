@@ -13,6 +13,9 @@ export const ENV = {
   DEFAULT_SUBSRO_API_KEY: process.env.SUBSRO_API_KEY || '',
   SUBSRO_PROXY_URL: (process.env.SUBSRO_PROXY_URL || '').replace(/\/+$/, ''),
   SUBSRO_PROXY_TOKEN: process.env.SUBSRO_PROXY_TOKEN || '',
+  // "parallel" (default): OpenSubtitles addons run together with the direct integration.
+  // "fallback": they run only if the direct integration fails.
+  OPENSUBTITLES_ADDON_MODE: (process.env.OPENSUBTITLES_ADDON_MODE || 'parallel').trim().toLowerCase() === 'fallback' ? 'fallback' : 'parallel',
   CACHE_TTL_MINUTES: parseInt(process.env.CACHE_TTL_MINUTES || '30', 10),
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
   RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX || '150', 10),

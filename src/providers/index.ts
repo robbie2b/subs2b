@@ -6,6 +6,7 @@ import { SubsourceProvider } from './subsource';
 import { SubsRoProvider } from './subsro';
 import { GenericStremioAddonProvider } from './genericStremioAddon';
 import { Logger } from '../utils/logger';
+import { ENV } from '../config/env';
 
 const BUILTIN_PROVIDERS: SubtitleProvider[] = [
   new OpenSubtitlesProvider(),
@@ -37,9 +38,11 @@ export async function executeParallelSearch(
     return true;
   });
 
-  // When the direct OpenSubtitles integration is active, OpenSubtitles addons are used ONLY as a fallback:
-  // they run after it and only if it failed (error / timeout), never alongside it.
-  const directOpenSubtitlesActive = activeProviders.some(p => p.id === 'opensubtitles');
+  // OPENSUBTITLES_ADDON_MODE=fallback: when the direct OpenSubtitles integration is active, OpenSubtitles
+  // addons are used ONLY as a fallback (they run after it, and only if it failed: error / timeout).
+  // Default "parallel": they run together with it and deduplication merges the results.
+  const directOpenSubtitlesActive =
+    ENV.OPENSUBTITLES_ADDON_MODE === 'fallback' && activeProviders.some(p => p.id === 'opensubtitles');
   const fallbackProviders: SubtitleProvider[] = [];
 
   if (Array.isArray(config.customAddons)) {
