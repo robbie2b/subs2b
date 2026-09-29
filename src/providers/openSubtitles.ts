@@ -1,6 +1,7 @@
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
 import { ENV } from '../config/env';
+import { Logger } from '../utils/logger';
 import { mapWhitelistToOpenSubtitles } from '../utils/languages';
 
 interface OpenSubtitlesRestItem {
@@ -69,11 +70,10 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
       params.type = 'movie';
     }
 
-    // Exact-file match: the player's OpenSubtitles-style hash flags subtitles made for this very file
-    const videoHash = query.extra?.videoHash;
-    if (videoHash && /^[0-9a-f]{16}$/i.test(videoHash)) {
-      params.moviehash = videoHash.toLowerCase();
-    }
+    // Exact-file match: the player's OpenSubtitles-style hash finds subtitles made for this very file.
+    // It goes in a separate request so it can never narrow the main (imdb) search.
+    const rawHash = query.extra?.videoHash;
+    const videoHash = rawHash && /^[0-9a-f]{16}$/i.test(rawHash) ? rawHash.toLowerCase() : null;
 
     // Native language filter: convert whitelist into OpenSubtitles API v1 format
     const effectiveLangs = (context.config.languages && context.config.languages.length > 0)
@@ -81,31 +81,56 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
       : ['pob', 'eng'];
     const activeRemap = context.config.language_remapping || context.config.languageRemap;
     const osLangs = mapWhitelistToOpenSubtitles(effectiveLangs, activeRemap);
-    if (osLangs.length > 0) {
-      params.languages = osLangs.join(',');
+    // The API only accepts ISO 639-1 style codes ("ro", "pt-br"); 3-letter codes like "ron" are not valid there
+    const validOsLangs = osLangs.filter(l => /^[a-z]{2}(-[a-z]{2})?$/i.test(l));
+    const languageParam = (validOsLangs.length > 0 ? validOsLangs : osLangs).join(',');
+    if (languageParam) {
+      params.languages = languageParam;
     }
 
-    const response = await this.httpGet<OpenSubtitlesRestResponse>(
-      'https://api.opensubtitles.com/api/v1/subtitles',
-      {
-        params,
-        headers: {
-          'Api-Key': apiKey,
-          'User-Agent': 'AIOSubs v1.0.0',
-          'Content-Type': 'application/json'
+    const fetchPage = async (p: Record<string, string | number>): Promise<OpenSubtitlesRestItem[]> => {
+      const res = await this.httpGet<OpenSubtitlesRestResponse>(
+        'https://api.opensubtitles.com/api/v1/subtitles',
+        {
+          params: p,
+          headers: {
+            'Api-Key': apiKey,
+            'User-Agent': 'AIOSubs v1.0.0',
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
         },
-        timeout: 10000
-      },
-      signal
-    );
+        signal
+      );
+      return res.data && Array.isArray(res.data.data) ? res.data.data : [];
+    };
 
-    if (!response.data || !Array.isArray(response.data.data)) {
-      return [];
+    const hashParams: Record<string, string | number> | null = videoHash
+      ? { moviehash: videoHash, ...(languageParam ? { languages: languageParam } : {}) }
+      : null;
+
+    const [mainList, hashList] = await Promise.all([
+      fetchPage(params),
+      hashParams ? fetchPage(hashParams).catch(() => [] as OpenSubtitlesRestItem[]) : Promise.resolve([] as OpenSubtitlesRestItem[])
+    ]);
+
+    Logger.info(`[OPENSUBTITLES] main=${mainList.length} hash=${hashList.length} langs=${languageParam}`, {
+      hashMatchFlags: hashList.filter(i => (i.attributes as { moviehash_match?: boolean }).moviehash_match === true).length
+    });
+
+    // Merge: hash results first; anything from the hash request that the API flags as a match is exact
+    const seen = new Set<string>();
+    const rawList: OpenSubtitlesRestItem[] = [];
+    for (const item of [...hashList, ...mainList]) {
+      const key = String(item.id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rawList.push(item);
     }
 
     const items: RawSubtitleItem[] = [];
 
-    for (const item of response.data.data) {
+    for (const item of rawList) {
       const attr = item.attributes;
       if (!attr || !attr.files || attr.files.length === 0) continue;
 
