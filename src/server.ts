@@ -17,6 +17,7 @@ import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { subsroGet } from './utils/subsroHttp';
+import { getDebug } from './utils/debugLog';
 
 export function createServer(): express.Application {
   const app = express();
@@ -508,7 +509,8 @@ const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
     }
 
     const query = parseSubtitleQuery(type, id, extraArgs);
-    const response = await getAggregatedSubtitles(query, userConfig, baseUrl);
+    const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
+    const response = await getAggregatedSubtitles(query, userConfig, baseUrl, debugKey);
 
     res.setHeader('Cache-Control', 'max-age=1800, public');
     res.json(response);
@@ -518,6 +520,17 @@ const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+
+// Latest requests + scores for this configuration (only reachable with its UUID, which is already the addon's credential)
+app.get('/:config/debug/recent.json', async (req: Request, res: Response): Promise<void> => {
+  const key = req.params.config;
+  if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ entries: getDebug(key) });
+});
 
 app.get('/:config/subtitles/:type/:id.json', handleSubtitles);
 app.get('/:config/subtitles/:type/:id/:extra.json', handleSubtitles);

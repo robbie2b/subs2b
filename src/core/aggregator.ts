@@ -7,6 +7,7 @@ import { deduplicateSubtitles, prioritizeSubtitles } from '../utils/deduplicator
 import { globalSubtitleCache } from '../utils/cache';
 import { Logger } from '../utils/logger';
 import { rankSubtitles } from '../utils/scorer';
+import { recordDebug, DebugTopEntry } from '../utils/debugLog';
 
 // Temporary inspector helper: URL path only, first segment (may hold a key) masked, query string dropped
 function inspectorPath(rawUrl: string): string {
@@ -62,7 +63,8 @@ export function parseSubtitleQuery(
 export async function getAggregatedSubtitles(
   query: SubtitleQuery,
   config: UserConfig,
-  baseUrl: string
+  baseUrl: string,
+  debugKey?: string
 ): Promise<StremioSubtitlesResponse> {
   const enabledProviderIds = Object.keys(config.providers).filter(
     id => config.providers[id]?.enabled !== false
@@ -160,6 +162,11 @@ export async function getAggregatedSubtitles(
     Logger.info(`Deduplication: ${beforeCount} -> ${orderedItems.length} subtitles${hashMatched.length ? ` (${hashMatched.length} hash match)` : ''}`);
   }
 
+  const afterDedupCount = orderedItems.length;
+  let debugTop: DebugTopEntry[] = [];
+  let debugUsedFilename = false;
+  let debugFallback = false;
+
   // Bazarr-style scoring: best match for the playing file goes first (players auto-pick position 1)
   try {
     const ranked = rankSubtitles(orderedItems, {
@@ -175,8 +182,36 @@ export async function getAggregatedSubtitles(
       Logger.info(`[SCORE] #${i + 1} ${d.score}${d.rejected ? ' REJECTED' : ''} [${d.provider}] ${d.release} | ${d.reasons.join(', ')}`);
     });
     orderedItems = ranked.items;
+    debugUsedFilename = ranked.usedFilename;
+    debugFallback = ranked.fallback;
+    debugTop = ranked.details.slice(0, 12).map((d, i) => ({
+      rank: i + 1,
+      score: d.score,
+      rejected: d.rejected,
+      provider: d.provider,
+      release: d.release,
+      reasons: d.reasons
+    }));
   } catch (err) {
     Logger.error('Scoring failed, keeping provider order', err);
+  }
+
+  if (debugKey) {
+    const rawByProvider: Record<string, number> = {};
+    for (const r of rawSubtitles) rawByProvider[r.provider] = (rawByProvider[r.provider] || 0) + 1;
+    recordDebug(debugKey, {
+      at: new Date().toISOString(),
+      id: query.id,
+      extra: query.extra,
+      rawTotal: rawSubtitles.length,
+      rawByProvider,
+      afterLanguage: whitelistedItems.length,
+      afterDedup: afterDedupCount,
+      afterScoring: orderedItems.length,
+      usedFilename: debugUsedFilename,
+      scoringFallback: debugFallback,
+      top: debugTop
+    });
   }
 
   // Build clean response with original IDs, normalized language codes, absolute URLs, and formatted display title
