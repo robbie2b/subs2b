@@ -34,6 +34,11 @@ const pcam = parseRelease('Guardians.of.the.Galaxy.Vol.3.2023.2160p.CAM.NEW.AUDI
 check('cam is bad quality', pcam.badQuality, pcam);
 check('HDTC is bad quality', parseRelease('Guardians.Of.The.Galaxy.Volume.3.2023.1080p.Trial.HDTC.x264.AC-3.YG').badQuality);
 
+const pHone = parseRelease('Slow Horses (2022) S01E01 (2160p ATVP WEB-DL Hybrid H265 DV HDR10  DDP Atmos 5.1 English - HONE).mkv');
+check('group inside parentheses', pHone.group === 'hone', pHone);
+check('parenthesised name still parses episode/service', pHone.season === 1 && pHone.episode === 1 && pHone.service === 'atvp', pHone);
+check('Movie (2019) has no group', parseRelease('Movie (2019)').group === null);
+
 const pep = parseRelease('Friends.S03E09.1080p.BluRay.x264-GRP.mkv');
 check('season/episode', pep.season === 3 && pep.episode === 9, pep);
 

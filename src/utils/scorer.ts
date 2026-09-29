@@ -134,7 +134,10 @@ function detectGroup(raw: string): string | null {
     s = next;
   }
 
-  const m = s.match(/-([A-Za-z0-9]{2,15})$/);
+  // Some releases put the group inside the closing parenthesis: "(... English - HONE)"
+  s = s.replace(/\)\s*$/, '').trim();
+
+  const m = s.match(/-\s*([A-Za-z0-9]{2,15})$/);
   if (!m) return null;
   const g = m[1].toLowerCase();
   if (NOT_A_GROUP.has(g) || /^\d+$/.test(g) || /^\d{3,4}p$/.test(g)) return null;
