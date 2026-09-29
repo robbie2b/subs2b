@@ -6,6 +6,7 @@ import zlib from 'zlib';
 import path from 'path';
 import { LRUCache } from 'lru-cache';
 import { Logger } from '../utils/logger';
+import { subsroGet } from '../utils/subsroHttp';
 
 export interface ProxyDownloadEntry {
   originalUrl: string;
@@ -549,10 +550,9 @@ export async function handleSubsRoDownload(req: Request, res: Response): Promise
   }
 
   try {
-    const upstream = await axios.get<ArrayBuffer>(`https://api.subs.ro/v1.0/subtitle/${id}/download`, {
+    const upstream = await subsroGet<ArrayBuffer>(`https://api.subs.ro/v1.0/subtitle/${id}/download`, apiKey, {
       responseType: 'arraybuffer',
-      timeout: 20000,
-      headers: { 'X-Subs-Api-Key': apiKey, 'User-Agent': 'AIOSubs v1.0.0', 'Accept': '*/*' }
+      timeout: 20000
     });
 
     let buffer: Buffer = Buffer.from(upstream.data);

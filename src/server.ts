@@ -16,6 +16,7 @@ import { Logger } from './utils/logger';
 import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
+import { subsroGet } from './utils/subsroHttp';
 
 export function createServer(): express.Application {
   const app = express();
@@ -257,10 +258,7 @@ export function createServer(): express.Application {
 
     if (service === 'subsro') {
       try {
-        const response = await axios.get('https://api.subs.ro/v1.0/quota', {
-          headers: { 'X-Subs-Api-Key': apiKey },
-          timeout: 8000
-        });
+        const response = await subsroGet<{ quota?: { remaining_quota?: number } }>('https://api.subs.ro/v1.0/quota', apiKey, { timeout: 8000 });
         const remaining = response.data?.quota?.remaining_quota;
         if (response.status === 200 && typeof remaining === 'number' && remaining >= 0) {
           res.json({ valid: true });
@@ -273,6 +271,13 @@ export function createServer(): express.Application {
           ? String(err.response?.data?.message || '')
           : String(err.response?.data || '').slice(0, 120);
         console.error('[SUBSRO] Key validation failed:', status, upstreamMsg || err.code || err.message);
+        if (String(err.message).includes('Cloudflare')) {
+          res.json({
+            valid: false,
+            error: 'Subs.ro blochează serverul (verificare anti-bot Cloudflare). Nu cheia e problema.'
+          });
+          return;
+        }
         res.json({
           valid: false,
           error: `Subs.ro a respins cheia (HTTP ${status || 'fără răspuns'}${upstreamMsg ? `: ${upstreamMsg}` : err.code ? `: ${err.code}` : ''}).`

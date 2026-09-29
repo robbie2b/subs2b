@@ -2,6 +2,7 @@ import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
 import { ENV } from '../config/env';
 import { Logger } from '../utils/logger';
+import { subsroGet } from '../utils/subsroHttp';
 
 interface SubsRoItem {
   id: number | string;
@@ -65,13 +66,10 @@ export class SubsRoProvider extends BaseSubtitleProvider {
     const imdbId = query.imdbId.startsWith('tt') ? query.imdbId : `tt${query.imdbId}`;
     const isSeries = query.season !== null && query.episode !== null;
 
-    const response = await this.httpGet<SubsRoSearchResponse>(
+    const response = await subsroGet<SubsRoSearchResponse>(
       `https://api.subs.ro/v1.0/search/imdbid/${imdbId}`,
-      {
-        headers: { 'X-Subs-Api-Key': apiKey },
-        timeout: 10000
-      },
-      signal
+      apiKey,
+      { timeout: 10000, signal }
     );
 
     const list = Array.isArray(response.data?.items) ? response.data.items : [];
