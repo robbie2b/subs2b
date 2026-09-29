@@ -74,6 +74,27 @@ export async function getAggregatedSubtitles(
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);
   }
 
+  // ===== INSPECTOR TEMPORAR - se sterge dupa teste =====
+  try {
+    console.log('[INSPECTOR] id=' + query.id + ' extra=' + JSON.stringify(query.extra));
+    console.log('[INSPECTOR] total=' + rawSubtitles.length);
+    for (const s of rawSubtitles) {
+      console.log('[INSPECTOR] ' + JSON.stringify({
+        provider: s.provider,
+        lang: s.lang,
+        release: s.release,
+        format: s.format,
+        hi: s.hearingImpaired,
+        fps: s.fps,
+        rating: s.rating,
+        downloads: s.downloads
+      }));
+    }
+  } catch (e) {
+    console.log('[INSPECTOR] eroare la afisare:', e);
+  }
+  // ===== SFARSIT INSPECTOR =====
+
   // Canonicalize language codes to ISO 639-2 and drop unsupported codes to avoid player issues
   const normalizedItems: RawSubtitleItem[] = [];
 
