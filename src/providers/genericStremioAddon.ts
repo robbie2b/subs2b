@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
 
@@ -107,7 +108,8 @@ export class GenericStremioAddonProvider extends BaseSubtitleProvider {
       const isHI = /(hearing\.impaired|\.hi\.|\[hi\]|\(hi\)|\[cc\]|\.cc\.)/i.test(release);
 
       items.push({
-        id: `${this.id}-${sub.id || Math.random().toString(36).substring(2, 9)}`,
+        // upstream ids can collide (e.g. same archive id + same name prefix); the URL hash keeps them unique
+        id: `${this.id}-${sub.id || 'sub'}-${createHash('sha1').update(sub.url).digest('hex').slice(0, 10)}`,
         provider: this.id,
         providerName: this.name,
         url: sub.url,

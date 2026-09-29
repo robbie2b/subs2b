@@ -180,7 +180,15 @@ export async function getAggregatedSubtitles(
   }
 
   // Build clean response with original IDs, normalized language codes, absolute URLs, and formatted display title
+  // Stremio treats the subtitle id as unique: never send the same id twice
+  const usedIds = new Set<string>();
   const subtitles: StremioSubtitle[] = orderedItems.map(item => {
+    let uniqueId = item.id;
+    for (let n = 2; usedIds.has(uniqueId); n++) {
+      uniqueId = `${item.id}-${n}`;
+    }
+    usedIds.add(uniqueId);
+
     let finalUrl = item.url;
     if (finalUrl.startsWith('/')) {
       finalUrl = `${baseUrl}${finalUrl}`;
@@ -197,7 +205,7 @@ export async function getAggregatedSubtitles(
     const displayTitle = item.release || `${item.providerName || item.provider} Subtitle`;
 
     return {
-      id: item.id,
+      id: uniqueId,
       lang: item.lang,
       url: finalUrl,
       title: displayTitle
