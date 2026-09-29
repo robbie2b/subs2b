@@ -55,8 +55,8 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
   ];
   const r = rankSubtitles(items, { filename: 'Obsession.2025.UHD.BluRay.2160p.TrueHD.Atmos.7.1.DV.HEVC.REMUX-FraMeSToR.mkv' });
   const order = r.items.map(i => i.release);
-  check('same release group wins even at lower resolution', order[0] === 'Obsession.2025.1080p.BluRay.REMUX.AVC-FraMeSToR', order);
-  check('remux 2160p second', order[1] === 'Obsession.2025.2160p.UHD.Blu-ray.Remux.DV.HDR.HEVC.TrueHD.Atmos.7.1-CiNEPHiLES', order);
+  check('a 2160p REMUX file gets the 2160p REMUX subtitle first (same resolution class)', order[0] === 'Obsession.2025.2160p.UHD.Blu-ray.Remux.DV.HDR.HEVC.TrueHD.Atmos.7.1-CiNEPHiLES', order);
+  check('the HD remux with the same group name comes right after', order[1] === 'Obsession.2025.1080p.BluRay.REMUX.AVC-FraMeSToR', order);
   check('HDTS is last', order[order.length - 1] === 'Obsession.2026.720p.VOSTFR.HDTS.x264-FS.ro', order);
   check('nothing dropped (2026 is within 1 year)', r.items.length === items.length, order);
 }
@@ -96,6 +96,28 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
   const order = r.items.map(i => i.release);
   check('exact episode + group first', order[0] === 'Friends.S03E09.1080p.BluRay.x264-GRP', order);
   check('other episodes/seasons/titles dropped', order.length === 2, order);
+}
+
+// ---------- UHD vs HD master (Game of Thrones S01E01 case) ----------
+{
+  const items = [
+    item('game.of.thrones.s01e01.1080p.bluray.x264-FraMeSToR', 'org.stremio.subsro'),
+    item('Game of Thrones S01E01 Winter is Coming 2160p UHD BluRay TrueHD 7.1 DoVi-DON', 'org.stremio.subsro'),
+    item('Game.of.Thrones.S01E01.720p.BluRay.X264-REWARD', 'org.stremio.subsro')
+  ];
+  const uhd = rankSubtitles(items, {
+    filename: 'Game.of.Thrones.S01E01.Winter.Is.Coming.2160p.TrueHD.Atmos.7.1.DV.HEVC.REMUX-FraMeSToR.mkv',
+    season: 1,
+    episode: 1
+  });
+  check('UHD file: the UHD subtitle beats an HD subtitle that only shares the group name', uhd.items[0].release.includes('2160p'), uhd.items.map(i => i.release));
+
+  const hd = rankSubtitles(items, {
+    filename: 'Game.of.Thrones.S01E01.Winter.Is.Coming.1080p.BluRay.x264-FraMeSToR.mkv',
+    season: 1,
+    episode: 1
+  });
+  check('HD file: the same-group HD subtitle still wins', hd.items[0].release.includes('1080p.bluray.x264-FraMeSToR'), hd.items.map(i => i.release));
 }
 
 // ---------- provider bonus ----------

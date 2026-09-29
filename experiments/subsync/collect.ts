@@ -41,11 +41,14 @@ function safeName(s: string): string {
 }
 
 async function main(): Promise<void> {
-  const q = new URLSearchParams({ type, id, lang: 'eng', filename: filename || '' });
-  const eng = await getJson(BASE + '/' + UUID + '/debug/search.json?' + q.toString());
-  const roUrl =
-    BASE + '/' + UUID + '/subtitles/' + type + '/' + encodeURIComponent(id) + '/filename=' + encodeURIComponent(filename || '') + '.json';
-  const ron = await getJson(roUrl);
+  // ONLY_RON=1 skips the English references; MAX_RO limits how many Romanian candidates are downloaded (best ranked first)
+  const onlyRon = process.env.ONLY_RON === '1';
+  const maxRo = parseInt(process.env.MAX_RO || '1000', 10);
+  const search = (lang: string) =>
+    getJson(BASE + '/' + UUID + '/debug/search.json?' + new URLSearchParams({ type, id, lang, filename: filename || '' }).toString());
+  const eng = onlyRon ? { subtitles: [] as ListItem[] } : await search('eng');
+  const ron = await search('ron');
+  ron.subtitles = (ron.subtitles || []).slice(0, maxRo);
 
   const plan: Array<{ lang: string; rank: number; item: ListItem }> = [];
   (ron.subtitles || []).forEach((item, i) => plan.push({ lang: 'ron', rank: i + 1, item }));

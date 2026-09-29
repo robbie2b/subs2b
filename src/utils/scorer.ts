@@ -336,10 +336,17 @@ function scoreOne(
 
   // ---- similarity to the video file ----
   if (video) {
+    // UHD (2160p) and HD releases usually come from different masters of the same film, whose timing differs
+    // (measured: 2 s for Game of Thrones S01E01, 25 s for The Godfather). A shared release group name therefore
+    // says little when one side is UHD and the other HD, and the resolution class matters more.
+    const differentMaster = Boolean(
+      sub.resolution && video.resolution && (sub.resolution >= 2160) !== (video.resolution >= 2160)
+    );
+
     if (sub.group && video.group) {
       if (sub.group === video.group) {
-        score += 50;
-        reasons.push('group=' + sub.group);
+        score += differentMaster ? 15 : 50;
+        reasons.push('group=' + sub.group + (differentMaster ? ' (other resolution class)' : ''));
       }
     }
     const src = sourceScore(sub.source, video.source);
@@ -350,6 +357,9 @@ function scoreOne(
       if (sub.resolution === video.resolution) {
         score += 10;
         reasons.push('res=' + sub.resolution);
+      } else if (differentMaster) {
+        score -= 12;
+        reasons.push('UHD/HD master differs');
       } else {
         score -= 3;
       }
