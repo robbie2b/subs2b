@@ -110,6 +110,16 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
   check('fallback keeps the list when everything is rejected', r.items.length === 2 && r.fallback === true, r);
 }
 
+// ---------- exact file hash beats everything ----------
+{
+  const items = [
+    item('Movie.2020.1080p.BluRay.x264-AAA'),
+    item('Movie.2020.480p.HDTV.x264-ZZZ', 'opensubtitles', { rawMetadata: { moviehashMatch: true } })
+  ];
+  const r = rankSubtitles(items, { filename: 'Movie.2020.1080p.BluRay.x264-AAA.mkv' });
+  check('hash match ranks first', r.items[0].provider === 'opensubtitles', r.items.map(i => i.provider));
+}
+
 check('empty input', rankSubtitles([], {}).items.length === 0);
 
 if (failed) {

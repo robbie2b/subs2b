@@ -68,8 +68,9 @@ export async function getAggregatedSubtitles(
     id => config.providers[id]?.enabled !== false
   );
 
+  // The file hash changes which OpenSubtitles results are flagged as exact matches, so it is part of the key
   const cacheKey = globalSubtitleCache.generateKey(
-    query.id,
+    query.extra?.videoHash ? `${query.id}|h${query.extra.videoHash}` : query.id,
     config.languages,
     enabledProviderIds,
     query.season,
@@ -152,8 +153,11 @@ export async function getAggregatedSubtitles(
 
   if (config.deduplication) {
     const beforeCount = orderedItems.length;
-    orderedItems = deduplicateSubtitles(orderedItems, 0.85, config.deduplicationStrategy || 'both');
-    Logger.info(`Deduplication: ${beforeCount} -> ${orderedItems.length} subtitles`);
+    // Exact file-hash matches must never be merged away as "duplicates" of a similar release
+    const hashMatched = orderedItems.filter(i => i.rawMetadata?.moviehashMatch === true);
+    const others = orderedItems.filter(i => i.rawMetadata?.moviehashMatch !== true);
+    orderedItems = [...hashMatched, ...deduplicateSubtitles(others, 0.85, config.deduplicationStrategy || 'both')];
+    Logger.info(`Deduplication: ${beforeCount} -> ${orderedItems.length} subtitles${hashMatched.length ? ` (${hashMatched.length} hash match)` : ''}`);
   }
 
   // Bazarr-style scoring: best match for the playing file goes first (players auto-pick position 1)

@@ -69,6 +69,12 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
       params.type = 'movie';
     }
 
+    // Exact-file match: the player's OpenSubtitles-style hash flags subtitles made for this very file
+    const videoHash = query.extra?.videoHash;
+    if (videoHash && /^[0-9a-f]{16}$/i.test(videoHash)) {
+      params.moviehash = videoHash.toLowerCase();
+    }
+
     // Native language filter: convert whitelist into OpenSubtitles API v1 format
     const effectiveLangs = (context.config.languages && context.config.languages.length > 0)
       ? context.config.languages
@@ -122,7 +128,7 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
         fps: attr.fps,
         rating: attr.ratings,
         downloads: attr.download_count,
-        rawMetadata: { fileId, attributes: attr }
+        rawMetadata: { fileId, attributes: attr, moviehashMatch: Boolean((attr as { moviehash_match?: boolean }).moviehash_match) }
       });
     }
 

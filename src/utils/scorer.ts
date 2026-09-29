@@ -383,6 +383,11 @@ function scoreOne(
     if (sub.group) score += 2;
   }
 
+  if (item.rawMetadata && item.rawMetadata.moviehashMatch === true) {
+    score += 200;
+    reasons.push('HASH MATCH (exact file)');
+  }
+
   if (sub.badQuality) {
     score -= 100;
     reasons.push('bad quality (cam/ts)');
