@@ -249,6 +249,12 @@ class ConfigStorage {
     return undefined;
   }
 
+  /** The PostgreSQL pool when a database is in use (null with local file storage) */
+  public async getPool(): Promise<Pool | null> {
+    await this.initialize();
+    return this.useDatabase ? this.pool : null;
+  }
+
   public async getConfigByUuidAsync(uuid: string): Promise<UserConfig | null> {
     await this.initialize();
     const record = await this.findRecord(uuid.trim().toLowerCase());

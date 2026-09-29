@@ -86,6 +86,13 @@
           </svg>
           <span class="nav-label">Install</span>
         </button>
+
+        <button class="nav-item" data-page="debug" title="Debug">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M14,12H10V10H14M14,16H10V14H14M20,8H17.19C16.74,7.22 16.12,6.55 15.37,6.04L17,4.41L15.59,3L13.42,5.17C12.96,5.06 12.5,5 12,5C11.5,5 11.04,5.06 10.59,5.17L8.41,3L7,4.41L8.63,6.04C7.88,6.55 7.26,7.22 6.81,8H4V10H6.09C6.04,10.33 6,10.66 6,11V12H4V14H6V15C6,15.34 6.04,15.67 6.09,16H4V18H6.81C8.47,20.87 12.14,21.84 15,20.18C15.91,19.66 16.65,18.9 17.19,18H20V16H17.91C17.96,15.67 18,15.34 18,15V14H20V12H18V11C18,10.66 17.96,10.33 17.91,10H20V8Z" />
+          </svg>
+          <span class="nav-label">Debug</span>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -1078,6 +1085,57 @@
           </div>
         </section>
 
+        <!-- Page 6: Debug -->
+        <section class="page-view" id="page-debug">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Debug</h1>
+              <p class="view-subtitle">Live server log and when the addon is used</p>
+            </div>
+          </div>
+
+          <div class="dbg-card">
+            <div class="dbg-head">
+              <div>
+                <div class="section-badge-header">WHEN IS THE ADDON USED</div>
+                <p class="section-desc-subtle" id="dbg-usage-summary">Loading...</p>
+              </div>
+            </div>
+            <div id="dbg-heatmap" class="dbg-heatmap"></div>
+            <div id="dbg-suggestion" class="dbg-suggestion"></div>
+          </div>
+
+          <div class="dbg-card">
+            <div class="dbg-head">
+              <div>
+                <div class="section-badge-header">WHAT WAS ACCESSED</div>
+                <p class="section-desc-subtle">Latest subtitle requests (one per Play). Times are in Europe/Bucharest.</p>
+              </div>
+            </div>
+            <div class="dbg-table-wrap">
+              <table class="dbg-table">
+                <thead><tr><th>Time</th><th>Content</th><th>File sent by the player</th></tr></thead>
+                <tbody id="dbg-recent"><tr><td colspan="3">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="dbg-card">
+            <div class="dbg-head">
+              <div>
+                <div class="section-badge-header">LIVE LOG</div>
+                <p class="section-desc-subtle">Server log lines, refreshed every 2 seconds while this page is open (kept in memory, reset on restart).</p>
+              </div>
+              <div class="dbg-actions">
+                <label class="dbg-check"><input type="checkbox" id="dbg-autoscroll" checked> Auto-scroll</label>
+                <button class="btn-outline" id="dbg-log-pause" type="button">Pause</button>
+                <button class="btn-outline" id="dbg-log-clear" type="button">Clear view</button>
+              </div>
+            </div>
+            <pre id="dbg-log" class="dbg-log"></pre>
+          </div>
+        </section>
+
       </main>
     </div>
   </div>
@@ -1391,6 +1449,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="app.js"></script>
+  <script src="debug-page.js"></script>
 </body>
 
 </html>

@@ -126,7 +126,7 @@ const FALLBACK_LANGUAGES = [
   { code: 'heb', name: 'Hebrew' }
 ];
 
-const PAGES_ORDER = ['home', 'services', 'addons', 'filters', 'install'];
+const PAGES_ORDER = ['home', 'services', 'addons', 'filters', 'install', 'debug'];
 
 const state = {
   activeView: 'landing', // 'landing' | 'wizard'
@@ -595,6 +595,12 @@ function activatePageView(targetView, pageId) {
     switchFilterTab(state.activeFilterTab || 'whitelist');
   } else if (pageId === 'install') {
     renderInstallPageDetails();
+  }
+
+  if (pageId === 'debug') {
+    startDebugPage();
+  } else {
+    stopDebugPage();
   }
 }
 

@@ -3053,3 +3053,22 @@ button:active {
   color: #fff;
   background: rgba(124, 92, 255, 0.15);
 }
+
+/* Debug page */
+.dbg-card { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 16px; }
+.dbg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.dbg-actions { display: flex; align-items: center; gap: 8px; }
+.dbg-check { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
+.dbg-muted { color: var(--text-muted); }
+.dbg-heatmap { overflow-x: auto; }
+.dbg-hm-row { display: grid; grid-template-columns: 34px repeat(24, minmax(22px, 1fr)); gap: 2px; margin-bottom: 2px; min-width: 640px; }
+.dbg-hm-head span { font-size: 10px; color: var(--text-muted); text-align: center; }
+.dbg-hm-day { font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; }
+.dbg-hm-cell { height: 22px; border-radius: 3px; background: var(--bg-chip); font-size: 10px; color: var(--text-main); display: flex; align-items: center; justify-content: center; }
+.dbg-hm-total { margin-top: 6px; }
+.dbg-suggestion { margin-top: 12px; font-size: 13px; color: var(--text-secondary); }
+.dbg-table-wrap { max-height: 320px; overflow: auto; }
+.dbg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dbg-table th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 6px 8px; position: sticky; top: 0; background: var(--bg-card); }
+.dbg-table td { padding: 6px 8px; border-top: 1px solid var(--border-subtle); color: var(--text-secondary); word-break: break-all; }
+.dbg-log { background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 10px; height: 380px; overflow: auto; font-size: 11px; line-height: 1.5; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; margin-top: 10px; }

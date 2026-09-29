@@ -131,6 +131,11 @@ player sent, how many subtitles each provider returned, what was filtered, and t
 for every score. It is kept in memory only (reset on restart) and needs the UUID of your configuration, which is
 already the credential of your addon, so do not share it.
 
+The **Debug** page of the configuration interface shows the live server log and *when* the addon is used: every
+subtitles request (one per Play) is counted per weekday and hour (stored in the database when `DATABASE_URL` is set),
+together with the content id and the file name the player sent. Only these counters are stored, never the UUID.
+The keep-alive pings of `/health` are not counted. Note that the live log is the log of the whole server.
+
 Render logs show the same information: lines starting with `Request`, `Scoring` and `[SCORE]`.
 
 ## Security notes

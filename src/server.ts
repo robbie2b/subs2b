@@ -17,12 +17,13 @@ import {
   handleVttConvert
 } from './proxy/subtitleProxy';
 import { globalSubtitleCache } from './utils/cache';
-import { Logger } from './utils/logger';
+import { Logger, getLogLines } from './utils/logger';
 import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { subsroGet } from './utils/subsroHttp';
 import { getDebug } from './utils/debugLog';
+import { recordUsage, getUsage } from './storage/usageStore';
 
 interface KeyValidation {
   valid: boolean;
@@ -416,6 +417,7 @@ export function createServer(): express.Application {
       const query = parseSubtitleQuery(type, id, extraArgs);
       const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
       const response = await getAggregatedSubtitles(query, userConfig, getBaseUrl(req), debugKey);
+      if (debugKey) void recordUsage(debugKey, { id, type, filename: extraArgs.filename });
 
       res.setHeader('Cache-Control', 'max-age=1800, public');
       res.json(response);
@@ -444,6 +446,22 @@ export function createServer(): express.Application {
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
     res.json({ entries: getDebug(key) });
+  });
+
+  // When the addon is used: counts per weekday/hour plus the latest requests
+  app.get('/:config/debug/usage.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await getUsage(key, typeof req.query.tz === 'string' ? req.query.tz : undefined));
+  });
+
+  // Live server log (poll with ?after=<last seq received>)
+  app.get('/:config/debug/logs.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(getLogLines(parseInt(String(req.query.after || '0'), 10) || 0));
   });
 
   // Which OpenSubtitles subtitles exist for an exact file hash, in ALL languages
