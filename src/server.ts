@@ -248,7 +248,7 @@ export function createServer(): express.Application {
 
   app.post('/api/validate-key/:service', async (req: Request, res: Response): Promise<void> => {
     const service = (req.params.service || '').toLowerCase();
-    const apiKey = (req.body?.apiKey as string || '').trim();
+    const apiKey = (req.body?.apiKey as string || '').trim().replace(/^["']|["']$/g, '');
 
     if (!apiKey) {
       res.json({ valid: false, error: 'Chave não informada.' });
@@ -269,11 +269,13 @@ export function createServer(): express.Application {
         res.json({ valid: false, error: 'Cheia Subs.ro nu a fost acceptată.' });
       } catch (err: any) {
         const status = err.response?.status;
+        const upstreamMsg = typeof err.response?.data === 'object'
+          ? String(err.response?.data?.message || '')
+          : String(err.response?.data || '').slice(0, 120);
+        console.error('[SUBSRO] Key validation failed:', status, upstreamMsg || err.code || err.message);
         res.json({
           valid: false,
-          error: status === 401 || status === 403
-            ? 'Cheie Subs.ro invalidă sau inexistentă.'
-            : 'Nu m-am putut conecta la Subs.ro.'
+          error: `Subs.ro a respins cheia (HTTP ${status || 'fără răspuns'}${upstreamMsg ? `: ${upstreamMsg}` : err.code ? `: ${err.code}` : ''}).`
         });
       }
       return;
