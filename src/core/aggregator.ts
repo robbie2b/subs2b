@@ -152,6 +152,7 @@ export async function getAggregatedSubtitles(
   });
 
   let orderedItems = prioritizeSubtitles(whitelistedItems, config.providerPriority);
+  const beforeDedupItems = orderedItems;
 
   if (config.deduplication) {
     const beforeCount = orderedItems.length;
@@ -163,6 +164,10 @@ export async function getAggregatedSubtitles(
   }
 
   const afterDedupCount = orderedItems.length;
+  const keptIds = new Set(orderedItems.map(i => i.id));
+  const dedupDropped = beforeDedupItems
+    .filter(i => !keptIds.has(i.id))
+    .map(i => ({ provider: i.provider, release: i.release || '' }));
   let debugTop: DebugTopEntry[] = [];
   let debugUsedFilename = false;
   let debugFallback = false;
@@ -207,6 +212,7 @@ export async function getAggregatedSubtitles(
       rawByProvider,
       afterLanguage: whitelistedItems.length,
       afterDedup: afterDedupCount,
+      dedupDropped,
       afterScoring: orderedItems.length,
       usedFilename: debugUsedFilename,
       scoringFallback: debugFallback,

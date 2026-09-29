@@ -21,6 +21,8 @@ export interface DebugEntry {
   rawByProvider: Record<string, number>;
   afterLanguage: number;
   afterDedup: number;
+  /** subtitles removed as duplicates of a similar release */
+  dedupDropped: Array<{ provider: string; release: string }>;
   afterScoring: number;
   usedFilename: boolean;
   scoringFallback: boolean;
