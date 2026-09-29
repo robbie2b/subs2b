@@ -6,6 +6,7 @@ import { validateAndNormalizeLanguage, isLanguageWhitelisted } from '../utils/no
 import { deduplicateSubtitles, prioritizeSubtitles } from '../utils/deduplicator';
 import { globalSubtitleCache } from '../utils/cache';
 import { Logger } from '../utils/logger';
+import { rankSubtitles } from '../utils/scorer';
 
 // Temporary inspector helper: URL path only, first segment (may hold a key) masked, query string dropped
 function inspectorPath(rawUrl: string): string {
@@ -153,6 +154,25 @@ export async function getAggregatedSubtitles(
     const beforeCount = orderedItems.length;
     orderedItems = deduplicateSubtitles(orderedItems, 0.85, config.deduplicationStrategy || 'both');
     Logger.info(`Deduplication: ${beforeCount} -> ${orderedItems.length} subtitles`);
+  }
+
+  // Bazarr-style scoring: best match for the playing file goes first (players auto-pick position 1)
+  try {
+    const ranked = rankSubtitles(orderedItems, {
+      filename: query.extra?.filename,
+      season: query.season,
+      episode: query.episode,
+      providerBonus: { subsro: 8 }
+    });
+    Logger.info(
+      `Scoring: ${orderedItems.length} -> ${ranked.items.length} subtitles (filename: ${ranked.usedFilename ? 'yes' : 'no'}${ranked.fallback ? ', fallback' : ''})`
+    );
+    ranked.details.slice(0, 5).forEach((d, i) => {
+      Logger.info(`[SCORE] #${i + 1} ${d.score}${d.rejected ? ' REJECTED' : ''} [${d.provider}] ${d.release} | ${d.reasons.join(', ')}`);
+    });
+    orderedItems = ranked.items;
+  } catch (err) {
+    Logger.error('Scoring failed, keeping provider order', err);
   }
 
   // Build clean response with original IDs, normalized language codes, absolute URLs, and formatted display title
