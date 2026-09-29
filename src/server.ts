@@ -532,6 +532,51 @@ app.get('/:config/debug/recent.json', async (req: Request, res: Response): Promi
   res.json({ entries: getDebug(key) });
 });
 
+// Diagnostic: which OpenSubtitles subtitles exist for an exact file hash, in ALL languages (reference candidates)
+app.get('/:config/debug/hash.json', async (req: Request, res: Response): Promise<void> => {
+  const key = req.params.config;
+  if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const hash = String(req.query.hash || '').toLowerCase();
+  if (!/^[0-9a-f]{16}$/.test(hash)) {
+    res.status(400).json({ error: 'hash must be 16 hex characters' });
+    return;
+  }
+  const cfg = await decodeUserConfigAsync(key);
+  const apiKey = cfg.providers.opensubtitles?.apiKey;
+  if (!apiKey) {
+    res.status(400).json({ error: 'OpenSubtitles key not configured' });
+    return;
+  }
+  try {
+    const params: Record<string, string | number> = { moviehash: hash };
+    if (req.query.imdb) params.imdb_id = String(req.query.imdb).replace(/^tt/i, '');
+    const r = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
+      params,
+      headers: { 'Api-Key': apiKey, 'User-Agent': 'AIOSubs v1.0.0', 'Content-Type': 'application/json' },
+      timeout: 10000
+    });
+    const data = Array.isArray(r.data?.data) ? r.data.data : [];
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      hash,
+      total: r.data?.total_count ?? data.length,
+      results: data.map((d: any) => ({
+        lang: d.attributes?.language,
+        release: d.attributes?.release,
+        moviehash_match: d.attributes?.moviehash_match === true,
+        fps: d.attributes?.fps,
+        hearing_impaired: d.attributes?.hearing_impaired === true,
+        downloads: d.attributes?.download_count
+      }))
+    });
+  } catch (err: any) {
+    res.status(502).json({ error: err.response?.status ? 'HTTP ' + err.response.status : String(err.message) });
+  }
+});
+
 // Diagnostic: same search as the player would trigger, but for another language (used by offline sync experiments)
 app.get('/:config/debug/search.json', async (req: Request, res: Response): Promise<void> => {
   const key = req.params.config;
