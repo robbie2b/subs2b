@@ -7,6 +7,16 @@ import { deduplicateSubtitles, prioritizeSubtitles } from '../utils/deduplicator
 import { globalSubtitleCache } from '../utils/cache';
 import { Logger } from '../utils/logger';
 
+// Temporary inspector helper: URL path only, first segment (may hold a key) masked, query string dropped
+function inspectorPath(rawUrl: string): string {
+  try {
+    const segs = new URL(rawUrl, 'http://x').pathname.split('/').filter(Boolean);
+    return segs.map((s, i) => (i === 0 && s.length > 16 ? s.slice(0, 4) + '...' : s.slice(0, 90))).join('/');
+  } catch {
+    return '';
+  }
+}
+
 export function parseSubtitleQuery(
   type: string,
   id: string,
@@ -87,7 +97,8 @@ export async function getAggregatedSubtitles(
         hi: s.hearingImpaired,
         fps: s.fps,
         rating: s.rating,
-        downloads: s.downloads
+        downloads: s.downloads,
+        path: inspectorPath(s.url)
       }));
     }
   } catch (e) {
