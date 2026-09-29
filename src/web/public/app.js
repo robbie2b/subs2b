@@ -74,6 +74,7 @@ const DEFAULT_CONFIG = {
   deduplication: true,
   deduplicationStrategy: 'both',
   maxSubtitles: 0,
+  convertVttToSrt: true,
   cacheTtlMinutes: 30
 };
 
@@ -477,6 +478,10 @@ function applyConfigWithMigration(parsed) {
 
   if (typeof parsed.maxSubtitles === 'number') {
     merged.maxSubtitles = parsed.maxSubtitles;
+  }
+
+  if (typeof parsed.convertVttToSrt === 'boolean') {
+    merged.convertVttToSrt = parsed.convertVttToSrt;
   }
 
   state.config = merged;
@@ -1386,6 +1391,22 @@ function setupFiltersActions() {
   }
 
   setupMaxSubtitlesUI();
+  setupConvertVttUI();
+}
+
+function renderConvertVtt() {
+  const toggle = document.getElementById('toggle-convert-vtt');
+  if (toggle) toggle.checked = state.config.convertVttToSrt !== false;
+}
+
+function setupConvertVttUI() {
+  const toggle = document.getElementById('toggle-convert-vtt');
+  if (!toggle) return;
+  renderConvertVtt();
+  toggle.addEventListener('change', () => {
+    state.config.convertVttToSrt = toggle.checked;
+    notifyConfigChanged();
+  });
 }
 
 const MAX_SUBTITLES_LIMIT = 200;
@@ -2850,6 +2871,7 @@ function renderAll() {
   renderFiltersPriority();
   renderInstallPageDetails();
   renderMaxSubtitles();
+  renderConvertVtt();
   updateStats();
 }
 

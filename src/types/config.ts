@@ -38,6 +38,9 @@ export interface UserConfig {
   /** Maximum number of subtitles shown to the player (0 = show all). Everything is still searched and scored. */
   maxSubtitles: number;
 
+  /** Convert WebVTT subtitles to SRT before they reach the player (SRT respects the player's size/position settings) */
+  convertVttToSrt: boolean;
+
   cacheTtlMinutes: number;
 }
 

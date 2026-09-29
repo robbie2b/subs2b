@@ -50,6 +50,9 @@ subtitles are *shown* to the player, best first.
 - **Language whitelist and remapping:** everything is normalized to ISO 639-2; free rules such as `pt-br → pob`.
 - **Deduplication** by download URL and release-name similarity, with provider priority.
 - **Results limit** to show only the best *N* subtitles.
+- **VTT to SRT conversion:** subtitles delivered as WebVTT (for example by the community Subs.ro addon) are converted to plain SRT
+  on the fly, without cue positioning or styling, so the player applies your own subtitle size and position settings.
+  It can be turned off in Filters & Ordering → Results.
 - **Configuration page** with UUID + password (bcrypt), install links and a QR code for mobile.
 - **Diagnostics** page with the last requests and how each subtitle was scored (see below).
 
@@ -136,7 +139,8 @@ Render logs show the same information: lines starting with `Request`, `Scoring` 
 - Some subtitle links handed to the player contain the provider API key (OpenSubtitles direct, Subsource, Subs.ro
   direct) because the player downloads through this server. Treat the links as private too.
 - The download proxy only fetches from subtitle sites (SubDL, Subsource, OpenSubtitles, Stremio's mirror) and ignores
-  files bigger than 10 MB inside archives.
+  files bigger than 10 MB inside archives. The VTT converter also accepts the hosts of the addons imported in that
+  configuration, and does not follow redirects to other hosts.
 - Passwords are stored as bcrypt hashes and never logged.
 
 ## Tests

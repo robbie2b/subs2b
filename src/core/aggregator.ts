@@ -8,7 +8,7 @@ import { globalSubtitleCache } from '../utils/cache';
 import { Logger } from '../utils/logger';
 import { rankSubtitles } from '../utils/scorer';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
-import { isAllowedDownloadUrl } from '../proxy/subtitleProxy';
+import { isAllowedDownloadUrl, addonHostsOf } from '../proxy/subtitleProxy';
 
 function toNumberOrNull(value: string | undefined): number | null {
   const n = parseInt(value ?? '', 10);
@@ -47,7 +47,7 @@ export async function getAggregatedSubtitles(
   query: SubtitleQuery,
   config: UserConfig,
   baseUrl: string,
-  debugKey?: string
+  configId?: string
 ): Promise<StremioSubtitlesResponse> {
   const enabledProviderIds = Object.keys(config.providers).filter(
     id => config.providers[id]?.enabled !== false
@@ -153,10 +153,10 @@ export async function getAggregatedSubtitles(
     Logger.error('Scoring failed, keeping provider order', err);
   }
 
-  if (debugKey) {
+  if (configId) {
     const rawByProvider: Record<string, number> = {};
     for (const r of rawSubtitles) rawByProvider[r.provider] = (rawByProvider[r.provider] || 0) + 1;
-    recordDebug(debugKey, {
+    recordDebug(configId, {
       at: new Date().toISOString(),
       id: query.id,
       extra: query.extra,
@@ -179,6 +179,8 @@ export async function getAggregatedSubtitles(
     orderedItems = orderedItems.slice(0, limit);
   }
 
+  const addonHosts = addonHostsOf(config);
+
   // Stremio treats the subtitle id as unique: never send the same id twice
   const usedIds = new Set<string>();
   const subtitles: StremioSubtitle[] = orderedItems.map(item => {
@@ -191,6 +193,14 @@ export async function getAggregatedSubtitles(
     let finalUrl = item.url;
     if (finalUrl.startsWith('/')) {
       finalUrl = `${baseUrl}${finalUrl}`;
+    } else if (
+      config.convertVttToSrt !== false &&
+      configId &&
+      (item.format === 'vtt' || /\.vtt($|\?)/i.test(finalUrl)) &&
+      isAllowedDownloadUrl(finalUrl, addonHosts)
+    ) {
+      // WebVTT is converted to SRT by this server so the player applies its own subtitle size/position settings
+      finalUrl = `${baseUrl}/${configId}/sub/convert.srt?url=${encodeURIComponent(finalUrl)}`;
     } else if (/\.zip($|\?)/i.test(finalUrl) && isAllowedDownloadUrl(finalUrl)) {
       // Archives from known subtitle sites go through /sub/proxy so the player receives plain subtitle text
       const ext = item.format === 'vtt' || finalUrl.toLowerCase().endsWith('.vtt') ? '.vtt' : '.srt';

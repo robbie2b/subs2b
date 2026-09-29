@@ -4,8 +4,13 @@ import AdmZip from 'adm-zip';
 import iconv from 'iconv-lite';
 import zlib from 'zlib';
 import path from 'path';
+import { LRUCache } from 'lru-cache';
 import { Logger } from '../utils/logger';
 import { subsroGet } from '../utils/subsroHttp';
+import { isWebVtt, vttToSrt } from '../utils/subtitleFormat';
+import { configStorage } from '../storage/configStore';
+import { UserConfig } from '../types/config';
+import { USER_AGENT } from '../config/version';
 
 /** A subtitle is a small text file: anything bigger inside an archive is ignored (protects the server's memory) */
 const MAX_SUBTITLE_BYTES = 10 * 1024 * 1024;
@@ -15,15 +20,32 @@ const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) subs2b/1.0
 /** Sites the generic proxy is allowed to download from (prevents it from being used as an open proxy) */
 const ALLOWED_DOWNLOAD_HOSTS = ['subdl.com', 'subsource.net', 'opensubtitles.org', 'opensubtitles.com', 'strem.io'];
 
-export function isAllowedDownloadUrl(rawUrl: string): boolean {
+function isAllowedHost(hostname: string, extraHosts: string[] = []): boolean {
+  const host = hostname.toLowerCase();
+  return ALLOWED_DOWNLOAD_HOSTS.some(allowed => host === allowed || host.endsWith('.' + allowed)) || extraHosts.includes(host);
+}
+
+export function isAllowedDownloadUrl(rawUrl: string, extraHosts: string[] = []): boolean {
   try {
     const url = new URL(rawUrl);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
-    const host = url.hostname.toLowerCase();
-    return ALLOWED_DOWNLOAD_HOSTS.some(allowed => host === allowed || host.endsWith('.' + allowed));
+    return isAllowedHost(url.hostname, extraHosts);
   } catch {
     return false;
   }
+}
+
+/** Hosts of the Stremio addons imported by this configuration (their subtitle links may be downloaded and converted) */
+export function addonHostsOf(config: UserConfig): string[] {
+  const hosts: string[] = [];
+  for (const addon of config.customAddons || []) {
+    try {
+      hosts.push(new URL(addon.manifestUrl.replace(/^stremio:\/\//, 'https://')).hostname.toLowerCase());
+    } catch {
+      // invalid manifest URL: ignored
+    }
+  }
+  return hosts;
 }
 
 function sendError(res: Response, status: number, message: string): void {
@@ -150,7 +172,7 @@ export function validateAndFormatSubtitle(
   }
 
   // Check for presence of cue timing blocks (e.g. 00:00:01,000 --> 00:00:04,000 or 00:00:01.000 --> 00:00:04.000)
-  const timingRegex = /(\d{1,2}:\d{2}:\d{2}[,.]\d{2,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{2,3})/;
+  const timingRegex = /((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,3})/;
   const match = timingRegex.exec(text);
   if (!match) {
     return { content: text, format: preferredFormat, valid: false, reason: 'No valid timing block (-->) found in the subtitle text.' };
@@ -179,9 +201,8 @@ export function validateAndFormatSubtitle(
   }
 
   // Preferred format is 'srt'
-  if (text.startsWith('WEBVTT')) {
-    // Strip WEBVTT header and NOTE blocks
-    text = text.replace(/^WEBVTT[^\n]*\n+/i, '').replace(/^NOTE[^\n]*\n+/gm, '').trim();
+  if (isWebVtt(text)) {
+    text = vttToSrt(text).trim();
   }
 
   // Convert dots to commas in timestamps for SRT
@@ -477,5 +498,53 @@ export async function handleSubsRoDownload(req: Request, res: Response): Promise
     const msg = err instanceof Error ? err.message : String(err);
     Logger.error(`Subs.ro download failed for ${id}: ${msg}`, err);
     sendError(res, 502, `Error downloading from Subs.ro: ${msg}`);
+  }
+}
+
+const convertedSubtitles = new LRUCache<string, string>({ max: 200, ttl: 4 * 60 * 60 * 1000 });
+
+/**
+ * GET /:config/sub/convert.srt?url=...  Downloads a subtitle (normally a .vtt served by an imported addon) and
+ * returns it as plain SRT, so the player applies its own size/position settings. The URL must belong to a subtitle
+ * site or to an addon imported in that configuration. If anything fails the player is sent to the original link.
+ */
+export async function handleVttConvert(req: Request, res: Response): Promise<void> {
+  const original = String(req.query.url || '');
+  const config = await configStorage.getConfigByUuidAsync(String(req.params.config || ''));
+  const hosts = config ? addonHostsOf(config) : [];
+
+  if (!config || !isAllowedDownloadUrl(original, hosts)) {
+    sendError(res, 400, 'Subtitle URL is missing or not from a subtitle site or an addon of this configuration.');
+    return;
+  }
+
+  try {
+    let srt = convertedSubtitles.get(original);
+    if (srt === undefined) {
+      const upstream = await axios.get<ArrayBuffer>(original, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+        maxContentLength: MAX_SUBTITLE_BYTES,
+        maxRedirects: 3,
+        // a redirect must not lead outside the allowed hosts
+        beforeRedirect: (options: { hostname?: string }) => {
+          if (!options.hostname || !isAllowedHost(options.hostname, hosts)) {
+            throw new Error('Redirect to a host that is not allowed');
+          }
+        },
+        headers: { 'User-Agent': USER_AGENT, 'Accept': '*/*' }
+      });
+      const { buffer } = decompressBuffer(Buffer.from(upstream.data));
+      const validation = validateAndFormatSubtitle(toCleanUtf8(buffer), 'srt');
+      if (!validation.valid) {
+        throw new Error(validation.reason);
+      }
+      srt = validation.content;
+      convertedSubtitles.set(original, srt);
+    }
+    sendSubtitleResponse(res, srt, 'srt', 'subtitle.srt');
+  } catch (err: unknown) {
+    Logger.warn('VTT -> SRT conversion failed, sending the player to the original link', { reason: err instanceof Error ? err.message : String(err) });
+    res.redirect(302, original);
   }
 }
