@@ -85,11 +85,11 @@ export async function getAggregatedSubtitles(
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);
   }
 
-  // ===== INSPECTOR TEMPORAR - se sterge dupa teste =====
+  // Inspector: id + extra (filename/videoHash) per request; set DEBUG_INSPECTOR=1 to also list every raw subtitle
   try {
     console.log('[INSPECTOR] id=' + query.id + ' extra=' + JSON.stringify(query.extra));
     console.log('[INSPECTOR] total=' + rawSubtitles.length);
-    for (const s of rawSubtitles) {
+    for (const s of (process.env.DEBUG_INSPECTOR === '1' ? rawSubtitles : [])) {
       console.log('[INSPECTOR] ' + JSON.stringify({
         provider: s.provider,
         lang: s.lang,

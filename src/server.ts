@@ -21,6 +21,9 @@ import { subsroGet } from './utils/subsroHttp';
 export function createServer(): express.Application {
   const app = express();
 
+  // Render (and most hosts) sit behind a reverse proxy: needed for correct client IPs / rate limiting
+  app.set('trust proxy', 1);
+
   configStorage.initialize().catch(err => {
     Logger.error('Async storage initialization error:', err);
   });

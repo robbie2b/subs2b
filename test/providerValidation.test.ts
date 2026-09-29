@@ -17,10 +17,10 @@ console.log('🧪 Iniciando suíte de testes de validação do AIO Subtitles...\
 // 1. Validate exactly 3 registered built-in providers: OpenSubtitles, SubDL, Subsource
 console.log('--- Teste 1: Validação de Provedores Nativos Definitivos ---');
 const providers = getAllProviders();
-const expectedIds = ['opensubtitles', 'subdl', 'subsource'];
+const expectedIds = ['opensubtitles', 'subdl', 'subsource', 'subsro'];
 
-if (providers.length !== 3) {
-  console.error(`❌ Esperava exatamente 3 provedores nativos, encontrou ${providers.length}!`);
+if (providers.length !== 4) {
+  console.error(`❌ Esperava exatamente 4 provedores nativos, encontrou ${providers.length}!`);
   process.exit(1);
 }
 
