@@ -34,6 +34,13 @@ export interface ProviderLogEntry {
   error?: string;
 }
 
+export interface SearchOutcome {
+  items: RawSubtitleItem[];
+  /** true when the provider errored or timed out (an empty result is NOT a failure) */
+  failed: boolean;
+  error?: string;
+}
+
 export interface SubtitleProvider {
   readonly id: string;
   readonly name: string;
@@ -41,6 +48,7 @@ export interface SubtitleProvider {
   readonly requiresApiKey: boolean;
   readonly defaultEnabled: boolean;
   search(query: SubtitleQuery, context: ProviderContext): Promise<RawSubtitleItem[]>;
+  searchWithStatus?(query: SubtitleQuery, context: ProviderContext): Promise<SearchOutcome>;
 }
 
 export interface ProviderContext {

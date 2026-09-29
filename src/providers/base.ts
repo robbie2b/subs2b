@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { SubtitleProvider, SubtitleQuery, ProviderContext, RawSubtitleItem, ProviderLogEntry } from '../types/provider';
+import { SubtitleProvider, SubtitleQuery, ProviderContext, RawSubtitleItem, ProviderLogEntry, SearchOutcome } from '../types/provider';
 import { Logger } from '../utils/logger';
 
 export abstract class BaseSubtitleProvider implements SubtitleProvider {
@@ -16,6 +16,11 @@ export abstract class BaseSubtitleProvider implements SubtitleProvider {
   ): Promise<RawSubtitleItem[]>;
 
   async search(query: SubtitleQuery, context: ProviderContext): Promise<RawSubtitleItem[]> {
+    return (await this.searchWithStatus(query, context)).items;
+  }
+
+  /** Like search(), but also tells the caller whether the provider failed (error / timeout / HTTP error). */
+  async searchWithStatus(query: SubtitleQuery, context: ProviderContext): Promise<SearchOutcome> {
     const startTime = Date.now();
     const abortController = new AbortController();
     const timeoutMs = context.timeoutMs || 6000;
@@ -36,7 +41,7 @@ export abstract class BaseSubtitleProvider implements SubtitleProvider {
       };
       Logger.logProviderResult(logEntry);
 
-      return items;
+      return { items, failed: false };
     } catch (err: unknown) {
       clearTimeout(timeoutTimer);
       const durationMs = Date.now() - startTime;
@@ -51,7 +56,7 @@ export abstract class BaseSubtitleProvider implements SubtitleProvider {
       };
       Logger.logProviderResult(logEntry);
 
-      return [];
+      return { items: [], failed: true, error: errorMessage };
     }
   }
 

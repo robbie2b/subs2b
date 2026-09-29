@@ -1,4 +1,4 @@
-import { SubtitleProvider, SubtitleQuery, RawSubtitleItem, ProviderContext } from '../types/provider';
+import { SubtitleProvider, SubtitleQuery, RawSubtitleItem, ProviderContext, SearchOutcome } from '../types/provider';
 import { UserConfig } from '../types/config';
 import { OpenSubtitlesProvider } from './openSubtitles';
 import { SubDLProvider } from './subdl';
@@ -13,6 +13,10 @@ const BUILTIN_PROVIDERS: SubtitleProvider[] = [
   new SubsourceProvider(),
   new SubsRoProvider()
 ];
+
+function isOpenSubtitlesAddon(id: string, name: string): boolean {
+  return /opensubtitles/i.test(`${id} ${name}`);
+}
 
 export function getAllProviders(): SubtitleProvider[] {
   return [...BUILTIN_PROVIDERS];
@@ -33,15 +37,23 @@ export async function executeParallelSearch(
     return true;
   });
 
+  // When the direct OpenSubtitles integration is active, OpenSubtitles addons are used ONLY as a fallback:
+  // they run after it and only if it failed (error / timeout), never alongside it.
+  const directOpenSubtitlesActive = activeProviders.some(p => p.id === 'opensubtitles');
+  const fallbackProviders: SubtitleProvider[] = [];
+
   if (Array.isArray(config.customAddons)) {
     for (const custom of config.customAddons) {
       if (custom && custom.enabled !== false && custom.manifestUrl) {
         if (Array.isArray(custom.selectedResources) && !custom.selectedResources.includes('subtitles')) {
           continue;
         }
-        activeProviders.push(
-          new GenericStremioAddonProvider(custom.id, custom.name, custom.manifestUrl)
-        );
+        const addonProvider = new GenericStremioAddonProvider(custom.id, custom.name, custom.manifestUrl);
+        if (directOpenSubtitlesActive && isOpenSubtitlesAddon(custom.id, custom.name)) {
+          fallbackProviders.push(addonProvider);
+        } else {
+          activeProviders.push(addonProvider);
+        }
       }
     }
   }
@@ -56,7 +68,7 @@ export async function executeParallelSearch(
     timeoutMs: config.providerTimeoutMs
   });
 
-  const searchPromises = activeProviders.map(provider => {
+  const runProvider = (provider: SubtitleProvider): Promise<SearchOutcome> => {
     const customConfig = config.customAddons?.find(c => c.id === provider.id);
     const timeoutMs = (customConfig && typeof customConfig.timeout === 'number' && customConfig.timeout > 0)
       ? customConfig.timeout
@@ -67,20 +79,44 @@ export async function executeParallelSearch(
       providerConfig: config.providers[provider.id] || { enabled: true },
       timeoutMs
     };
-    return provider.search(query, context);
-  });
+    if (provider.searchWithStatus) {
+      return provider.searchWithStatus(query, context);
+    }
+    return provider.search(query, context).then(items => ({ items, failed: false }));
+  };
 
-  const settledResults = await Promise.allSettled(searchPromises);
+  const settledResults = await Promise.allSettled(activeProviders.map(runProvider));
   const aggregatedSubtitles: RawSubtitleItem[] = [];
+  let directFailed = false;
 
   settledResults.forEach((result, idx) => {
     const provider = activeProviders[idx];
     if (result.status === 'fulfilled') {
-      aggregatedSubtitles.push(...result.value);
+      aggregatedSubtitles.push(...result.value.items);
+      if (provider.id === 'opensubtitles' && result.value.failed) {
+        directFailed = true;
+      }
     } else {
       Logger.error(`Provider [${provider.id}] search promise rejected`, result.reason);
+      if (provider.id === 'opensubtitles') {
+        directFailed = true;
+      }
     }
   });
+
+  if (fallbackProviders.length > 0) {
+    if (directFailed) {
+      Logger.warn(`[FALLBACK] Direct OpenSubtitles failed -> using addon(s): ${fallbackProviders.map(p => p.id).join(', ')}`);
+      const fallbackResults = await Promise.allSettled(fallbackProviders.map(runProvider));
+      for (const result of fallbackResults) {
+        if (result.status === 'fulfilled') {
+          aggregatedSubtitles.push(...result.value.items);
+        }
+      }
+    } else {
+      Logger.info(`[FALLBACK] Direct OpenSubtitles ok -> addon(s) not used: ${fallbackProviders.map(p => p.id).join(', ')}`);
+    }
+  }
 
   return aggregatedSubtitles;
 }
