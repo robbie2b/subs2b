@@ -517,7 +517,7 @@ export function createServer(): express.Application {
   // /sub/proxy/:data and /proxy/subtitle/:data  legacy links with a base64 URL
   app.get(['/sub/proxy', '/sub/proxy/:data', '/proxy/subtitle/:data'], handleUnifiedSubtitleProxy);
   app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
-  app.get('/:config/sub/convert.srt', subtitlesLimiter, handleVttConvert);
+  app.get(['/:config/sub/convert/:data.srt', '/:config/sub/convert.srt'], subtitlesLimiter, handleVttConvert);
   app.get('/proxy/download/subsro/:id', handleSubsRoDownload);
 
   app.use((req: Request, res: Response) => {

@@ -200,7 +200,9 @@ export async function getAggregatedSubtitles(
       isAllowedDownloadUrl(finalUrl, addonHosts)
     ) {
       // WebVTT is converted to SRT by this server so the player applies its own subtitle size/position settings
-      finalUrl = `${baseUrl}/${configId}/sub/convert.srt?url=${encodeURIComponent(finalUrl)}`;
+      // The link must END in .srt: players guess the format from the end of the link (a trailing ".vtt" makes them
+      // parse the converted SRT as WebVTT and drop it), so the original address is carried inside the path
+      finalUrl = `${baseUrl}/${configId}/sub/convert/${Buffer.from(finalUrl).toString('base64url')}.srt`;
     } else if (/\.zip($|\?)/i.test(finalUrl) && isAllowedDownloadUrl(finalUrl)) {
       // Archives from known subtitle sites go through /sub/proxy so the player receives plain subtitle text
       const ext = item.format === 'vtt' || finalUrl.toLowerCase().endsWith('.vtt') ? '.vtt' : '.srt';

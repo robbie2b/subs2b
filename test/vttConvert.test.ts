@@ -121,7 +121,13 @@ async function integrationTests(): Promise<void> {
 
   try {
     const ok = await client.get(`/${uuid}/sub/convert.srt`, { params: { url: `${upstreamBase}/sub.vtt` } });
-    check(ok.status === 200, 'a VTT from an imported addon is converted (200)', ok.status);
+    check(ok.status === 200, 'a VTT from an imported addon is converted (200, older ?url= link)', ok.status);
+
+    const encodedPath = Buffer.from(`${upstreamBase}/sub.vtt`).toString('base64url');
+    const viaPath = await client.get(`/${uuid}/sub/convert/${encodedPath}.srt`);
+    check(viaPath.status === 200 && viaPath.data === '1\n00:00:01,000 --> 00:00:02,000\nHello', 'the same conversion works through the .srt path link', { status: viaPath.status, data: viaPath.data });
+    const badPath = await client.get(`/${uuid}/sub/convert/${Buffer.from('http://example.com/sub.vtt').toString('base64url')}.srt`);
+    check(badPath.status === 400, 'a forbidden host is refused through the path link too', badPath.status);
     check(String(ok.headers['content-type']).startsWith('text/plain'), 'served as plain text', ok.headers['content-type']);
     check(ok.data === '1\n00:00:01,000 --> 00:00:02,000\nHello', 'and the body is clean SRT', ok.data);
 
@@ -157,7 +163,8 @@ async function integrationTests(): Promise<void> {
   const byId = (r: { subtitles: Array<{ id: string; url: string }> }, id: string) => r.subtitles.find(s => s.id === id)?.url;
 
   const on = await run({}, uuid);
-  check(byId(on, 'vtt-addon') === `https://addon.example/${uuid}/sub/convert.srt?url=${encodeURIComponent(`${upstreamBase}/abc/sub.vtt`)}`, 'a VTT link of an imported addon goes through the converter', byId(on, 'vtt-addon'));
+  check(byId(on, 'vtt-addon') === `https://addon.example/${uuid}/sub/convert/${Buffer.from(`${upstreamBase}/abc/sub.vtt`).toString('base64url')}.srt`, 'a VTT link of an imported addon goes through the converter', byId(on, 'vtt-addon'));
+  check(String(byId(on, 'vtt-addon')).endsWith('.srt') && !String(byId(on, 'vtt-addon')).includes('.vtt'), 'and the converted link ends in .srt (players guess the format from the end of the link)');
   check(byId(on, 'srt-addon') === `${upstreamBase}/abc/sub.srt`, 'an SRT link is left alone', byId(on, 'srt-addon'));
   check(byId(on, 'vtt-foreign') === 'https://unknown-site.example.com/x.vtt', 'a VTT link from an unknown site is left alone', byId(on, 'vtt-foreign'));
   check(byId(on, 'own') === 'https://addon.example/sub/proxy?url=x', 'the server\'s own links are left alone', byId(on, 'own'));

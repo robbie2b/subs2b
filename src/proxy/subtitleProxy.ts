@@ -504,12 +504,13 @@ export async function handleSubsRoDownload(req: Request, res: Response): Promise
 const convertedSubtitles = new LRUCache<string, string>({ max: 200, ttl: 4 * 60 * 60 * 1000 });
 
 /**
- * GET /:config/sub/convert.srt?url=...  Downloads a subtitle (normally a .vtt served by an imported addon) and
+ * GET /:config/sub/convert/<base64url of the address>.srt  (or the older ?url= form)  Downloads a subtitle (normally a .vtt served by an imported addon) and
  * returns it as plain SRT, so the player applies its own size/position settings. The URL must belong to a subtitle
  * site or to an addon imported in that configuration. If anything fails the player is sent to the original link.
  */
 export async function handleVttConvert(req: Request, res: Response): Promise<void> {
-  const original = String(req.query.url || '');
+  const encoded = typeof req.params.data === 'string' ? Buffer.from(req.params.data, 'base64url').toString('utf8') : '';
+  const original = encoded || String(req.query.url || '');
   const config = await configStorage.getConfigByUuidAsync(String(req.params.config || ''));
   const hosts = config ? addonHostsOf(config) : [];
 
