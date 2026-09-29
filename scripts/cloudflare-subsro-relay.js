@@ -15,14 +15,19 @@ export default {
     const upstream = await fetch('https://api.subs.ro' + url.pathname + url.search, {
       headers: {
         'X-Subs-Api-Key': request.headers.get('X-Subs-Api-Key') || '',
-        'User-Agent': 'Subs.ro API Test Script',
-        'Accept': request.headers.get('Accept') || '*/*'
+        'User-Agent': request.headers.get('User-Agent') || 'Subs.ro API Test Script',
+        'Accept': request.headers.get('Accept') || '*/*',
+        'Accept-Language': 'ro-RO,ro;q=0.9,en;q=0.8'
       }
     });
 
     return new Response(upstream.body, {
       status: upstream.status,
-      headers: { 'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream' }
+      headers: {
+        'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
+        'X-Upstream-Status': String(upstream.status),
+        'X-Upstream-Mitigated': upstream.headers.get('cf-mitigated') || ''
+      }
     });
   }
 };
