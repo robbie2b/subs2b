@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { Logger } from './logger';
+import { ENV } from '../config/env';
 
 // Subs.ro sits behind Cloudflare, which may challenge some clients. We try a few
 // User-Agents (the official example script's first) and remember the one that works.
@@ -25,14 +26,19 @@ export async function subsroGet<T = unknown>(
 ): Promise<AxiosResponse<T>> {
   let lastRes: AxiosResponse<T> | null = null;
 
+  // Optional relay (e.g. Cloudflare Worker) for hosts whose IP is challenged by Subs.ro's Cloudflare
+  const useRelay = Boolean(ENV.SUBSRO_PROXY_URL);
+  const targetUrl = useRelay ? url.replace('https://api.subs.ro', ENV.SUBSRO_PROXY_URL) : url;
+
   for (let i = 0; i < USER_AGENTS.length; i++) {
     const idx = (workingIndex + i) % USER_AGENTS.length;
-    const res = await axios.get<T>(url, {
+    const res = await axios.get<T>(targetUrl, {
       ...options,
       validateStatus: () => true,
       headers: {
         ...(options.headers || {}),
         'X-Subs-Api-Key': apiKey,
+        ...(useRelay ? { 'X-Relay-Token': ENV.SUBSRO_PROXY_TOKEN } : {}),
         'User-Agent': USER_AGENTS[idx],
         'Accept': options.responseType === 'arraybuffer' ? '*/*' : 'application/json'
       }
