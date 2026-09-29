@@ -15,6 +15,27 @@ interface GenericStremioSubtitlesResponse {
   subtitles?: GenericStremioSubtitleItem[];
 }
 
+/**
+ * Some addons (e.g. the community Subs.ro addon) put the real subtitle file name in the URL,
+ * base64url-encoded (.../proxy/<id>/<encoded-name>/sub.vtt). Decode it to recover the release name.
+ */
+export function decodeReleaseFromUrl(rawUrl: string): string | null {
+  try {
+    const segments = new URL(rawUrl).pathname.split('/').filter(Boolean);
+    for (const seg of segments) {
+      if (seg.length < 12 || !/^[A-Za-z0-9_-]+$/.test(seg)) continue;
+      const decoded = Buffer.from(seg, 'base64url').toString('utf8');
+      if (decoded.includes('\ufffd') || /[\u0000-\u001f]/.test(decoded)) continue;
+      if (!/\.(srt|vtt|ass|ssa)$/i.test(decoded)) continue;
+      const base = decoded.split(/[\\/]/).pop() || decoded;
+      return base.replace(/\.(srt|vtt|ass|ssa)$/i, '');
+    }
+  } catch {
+    // not decodable, ignore
+  }
+  return null;
+}
+
 export class GenericStremioAddonProvider extends BaseSubtitleProvider {
   readonly id: string;
   readonly name: string;

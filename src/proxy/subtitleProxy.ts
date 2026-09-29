@@ -497,7 +497,7 @@ export async function handleSubtitleProxy(req: Request, res: Response): Promise<
  * Picks the subtitle file inside a Subs.ro ZIP archive.
  * For series, prefers the file whose name matches the requested season/episode.
  */
-function pickSubsRoEntry(zip: AdmZip, season: number | null, episode: number | null): AdmZip.IZipEntry | null {
+export function pickSubsRoEntry(zip: AdmZip, season: number | null, episode: number | null): AdmZip.IZipEntry | null {
   const entries = zip.getEntries().filter(e =>
     !e.isDirectory &&
     !e.entryName.includes('__MACOSX') &&
@@ -507,12 +507,11 @@ function pickSubsRoEntry(zip: AdmZip, season: number | null, episode: number | n
   if (entries.length === 0) return null;
   if (season === null || episode === null) return entries[0];
 
-  const e2 = String(episode).padStart(2, '0');
   const patterns = [
-    new RegExp(`s0*${season}[\s._-]*e0*${episode}(?!\d)`, 'i'),
-    new RegExp(`(?<!\d)0*${season}x${e2}(?!\d)`, 'i'),
-    new RegExp(`(?:^|[^a-z0-9])e0*${episode}(?!\d)`, 'i'),
-    new RegExp(`(?:episod(?:ul)?|episode|ep)[\s._-]*0*${episode}(?!\d)`, 'i')
+    new RegExp('s0*' + season + '[\\s._-]*e0*' + episode + '(?!\\d)', 'i'),
+    new RegExp('(?<!\\d)0*' + season + 'x0*' + episode + '(?!\\d)', 'i'),
+    new RegExp('(?:^|[^a-z0-9])e0*' + episode + '(?!\\d)', 'i'),
+    new RegExp('(?:episod(?:ul)?|episode|ep)[\\s._-]*0*' + episode + '(?!\\d)', 'i')
   ];
   for (const re of patterns) {
     const hit = entries.find(e => re.test(path.basename(e.entryName)));
