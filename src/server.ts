@@ -532,6 +532,31 @@ app.get('/:config/debug/recent.json', async (req: Request, res: Response): Promi
   res.json({ entries: getDebug(key) });
 });
 
+// Diagnostic: same search as the player would trigger, but for another language (used by offline sync experiments)
+app.get('/:config/debug/search.json', async (req: Request, res: Response): Promise<void> => {
+  const key = req.params.config;
+  if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const lang = String(req.query.lang || '').toLowerCase();
+  const id = String(req.query.id || '');
+  const type = String(req.query.type || 'movie');
+  if (!/^[a-z]{3}$/.test(lang) || !id) {
+    res.status(400).json({ error: 'lang (3 letters) and id are required' });
+    return;
+  }
+  const extra: Record<string, string> = {};
+  for (const name of ['filename', 'videoHash', 'videoSize']) {
+    if (typeof req.query[name] === 'string') extra[name] = req.query[name] as string;
+  }
+  const baseConfig = await decodeUserConfigAsync(key);
+  const overridden = { ...baseConfig, languages: [lang], language_remapping: {}, languageRemap: {} };
+  const response = await getAggregatedSubtitles(parseSubtitleQuery(type, id, extra), overridden, getBaseUrl(req));
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(response);
+});
+
 app.get('/:config/subtitles/:type/:id.json', handleSubtitles);
 app.get('/:config/subtitles/:type/:id/:extra.json', handleSubtitles);
 app.get('/subtitles/:type/:id.json', handleSubtitles);
