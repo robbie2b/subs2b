@@ -24,7 +24,10 @@ ENV NODE_ENV=production
 ENV PORT=7000
 ENV HOST=0.0.0.0
 
-# Create unprivileged user for security
+# Folder for the local configuration file (used when DATABASE_URL is not set), owned by the unprivileged user
+RUN mkdir -p /app/data && chown node:node /app/data
+
+# Run as an unprivileged user for security
 USER node
 
 # Copy production node_modules and built dist

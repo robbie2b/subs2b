@@ -6,7 +6,7 @@ import { UserConfig } from '../types/config';
 import { Logger } from '../utils/logger';
 import { ENV } from '../config/env';
 
-export interface StoredConfigRecord {
+interface StoredConfigRecord {
   uuid: string;
   passwordHash: string;
   config: UserConfig;
@@ -26,6 +26,8 @@ export interface AuthConfigResult {
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SELECT_CONFIG_SQL =
+  'SELECT uuid, password_hash, config_data, created_at, updated_at FROM configurations WHERE LOWER(uuid) = $1';
 
 export function isUuid(str: string): boolean {
   return typeof str === 'string' && UUID_REGEX.test(str.trim());
@@ -41,12 +43,22 @@ function getStoreFilePath(): string {
   return path.join(getDataDirectory(), 'configurations.json');
 }
 
-function makeDualResult<T extends object>(syncVal: T, promiseVal: Promise<T>): T & Promise<T> {
-  const target = promiseVal as T & Promise<T>;
-  Object.assign(target, syncVal);
-  return target;
+/** Converts a PostgreSQL row into a stored record */
+function rowToRecord(row: any, uuid: string = String(row.uuid).toLowerCase()): StoredConfigRecord {
+  return {
+    uuid,
+    passwordHash: row.password_hash,
+    config: typeof row.config_data === 'string' ? JSON.parse(row.config_data) : row.config_data,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString()
+  };
 }
 
+/**
+ * Stores each addon configuration (identified by a UUID and protected by a password).
+ * Uses PostgreSQL when DATABASE_URL is set, otherwise a local JSON file. Records are cached in memory.
+ * The UUID is never written to the logs: it is the credential that identifies the addon.
+ */
 class ConfigStorage {
   private cache: Map<string, StoredConfigRecord> = new Map();
   private pool: Pool | null = null;
@@ -63,7 +75,6 @@ class ConfigStorage {
 
       if (dbUrl) {
         try {
-          console.log('[DB] A inicializar pool de conexões com PostgreSQL...');
           Logger.info('Initializing PostgreSQL connection pool...');
           const isLocal = /localhost|127\.0\.0\.1/i.test(dbUrl);
           const ssl = isLocal || dbUrl.includes('sslmode=disable')
@@ -79,7 +90,7 @@ class ConfigStorage {
           });
 
           pool.on('error', (err) => {
-            console.error('[DB] Erro inesperado no cliente de conexão PostgreSQL:', err);
+            Logger.error('Unexpected PostgreSQL client error', err);
           });
 
           // Test connection and ensure table exists
@@ -101,7 +112,6 @@ class ConfigStorage {
 
           this.pool = pool;
           this.useDatabase = true;
-          console.log('[DB] Conexão com PostgreSQL estabelecida com sucesso. Tabela "configurations" pronta.');
           Logger.info('Persistent PostgreSQL database connected and table "configurations" ready.');
 
           await this.warmupFromDatabase();
@@ -110,7 +120,6 @@ class ConfigStorage {
           this.initialized = true;
           return;
         } catch (err: any) {
-          console.error('[DB] Erro ao conectar ao PostgreSQL via DATABASE_URL:', err?.message || err);
           Logger.error('Failed to connect to PostgreSQL at DATABASE_URL. Falling back to local filesystem storage.', err);
           this.useDatabase = false;
           if (this.pool) {
@@ -129,19 +138,6 @@ class ConfigStorage {
     return this.initPromise;
   }
 
-  private ensureInitializedSync(): void {
-    if (this.initialized) return;
-    this.loadFromLocalFile();
-    this.initialized = true;
-
-    const dbUrl = (process.env.DATABASE_URL || ENV.DATABASE_URL || '').trim();
-    if (dbUrl && !this.initPromise) {
-      this.initialize().catch(err => {
-        Logger.error('Background DB initialization failed:', err);
-      });
-    }
-  }
-
   private async warmupFromDatabase(): Promise<void> {
     if (!this.pool) return;
     try {
@@ -149,17 +145,8 @@ class ConfigStorage {
         'SELECT uuid, password_hash, config_data, created_at, updated_at FROM configurations'
       );
       for (const row of res.rows) {
-        const configObj: UserConfig = typeof row.config_data === 'string'
-          ? JSON.parse(row.config_data)
-          : row.config_data;
-        const cleanUuid = String(row.uuid).toLowerCase();
-        this.cache.set(cleanUuid, {
-          uuid: cleanUuid,
-          passwordHash: row.password_hash,
-          config: configObj,
-          createdAt: new Date(row.created_at).toISOString(),
-          updatedAt: new Date(row.updated_at).toISOString()
-        });
+        const record = rowToRecord(row);
+        this.cache.set(record.uuid, record);
       }
       Logger.info(`Preloaded ${res.rowCount || 0} configuration(s) from PostgreSQL into memory cache.`);
     } catch (err) {
@@ -173,20 +160,16 @@ class ConfigStorage {
       const storeFile = getStoreFilePath();
       if (!fs.existsSync(storeFile)) return;
 
-      const raw = fs.readFileSync(storeFile, 'utf-8');
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
       if (!parsed || typeof parsed !== 'object') return;
 
       let migratedCount = 0;
-      for (const [k, v] of Object.entries(parsed)) {
+      for (const v of Object.values(parsed)) {
         const rec = v as StoredConfigRecord;
         if (!rec || !rec.uuid || !rec.passwordHash || !rec.config) continue;
 
         const cleanUuid = rec.uuid.trim().toLowerCase();
-        const existing = await this.pool.query(
-          'SELECT uuid FROM configurations WHERE LOWER(uuid) = $1',
-          [cleanUuid]
-        );
+        const existing = await this.pool.query('SELECT uuid FROM configurations WHERE LOWER(uuid) = $1', [cleanUuid]);
         if (existing.rowCount === 0) {
           await this.pool.query(
             `INSERT INTO configurations (uuid, password_hash, config_data, created_at, updated_at)
@@ -222,8 +205,7 @@ class ConfigStorage {
       }
 
       if (fs.existsSync(storeFile)) {
-        const raw = fs.readFileSync(storeFile, 'utf-8');
-        const parsed = JSON.parse(raw);
+        const parsed = JSON.parse(fs.readFileSync(storeFile, 'utf-8'));
         if (typeof parsed === 'object' && parsed !== null) {
           for (const [k, v] of Object.entries(parsed)) {
             this.cache.set(k.toLowerCase(), v as StoredConfigRecord);
@@ -238,64 +220,39 @@ class ConfigStorage {
   private persistLocalFile(): void {
     try {
       const dataDir = getDataDirectory();
-      const storeFile = getStoreFilePath();
-
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
-
-      const obj: Record<string, StoredConfigRecord> = {};
-      for (const [k, v] of this.cache.entries()) {
-        obj[k] = v;
-      }
-      fs.writeFileSync(storeFile, JSON.stringify(obj, null, 2), 'utf-8');
+      fs.writeFileSync(getStoreFilePath(), JSON.stringify(Object.fromEntries(this.cache), null, 2), 'utf-8');
     } catch (err) {
       Logger.error('Failed to persist configurations to file', err);
     }
   }
 
-  public getConfigByUuid(uuid: string): UserConfig | null {
-    this.ensureInitializedSync();
-    const cleanUuid = uuid.trim().toLowerCase();
-    const record = this.cache.get(cleanUuid);
-    return record ? record.config : null;
+  /** Finds a record in the memory cache, then in the database (and caches it) */
+  private async findRecord(cleanUuid: string): Promise<StoredConfigRecord | undefined> {
+    const cached = this.cache.get(cleanUuid);
+    if (cached) return cached;
+
+    if (this.useDatabase && this.pool) {
+      try {
+        const res = await this.pool.query(SELECT_CONFIG_SQL, [cleanUuid]);
+        if (res.rows.length > 0) {
+          const record = rowToRecord(res.rows[0], cleanUuid);
+          this.cache.set(cleanUuid, record);
+          return record;
+        }
+      } catch (err: any) {
+        Logger.error('Failed to fetch a configuration from the database', err);
+      }
+    }
+    return undefined;
   }
 
   public async getConfigByUuidAsync(uuid: string): Promise<UserConfig | null> {
     await this.initialize();
-    const cleanUuid = uuid.trim().toLowerCase();
-    const cached = this.cache.get(cleanUuid);
-    if (cached) return cached.config;
-
-    if (this.useDatabase && this.pool) {
-      try {
-        console.log("[DB] A consultar dados para o UUID:", cleanUuid);
-        const res = await this.pool.query(
-          'SELECT uuid, password_hash, config_data, created_at, updated_at FROM configurations WHERE LOWER(uuid) = $1',
-          [cleanUuid]
-        );
-        if (res.rows.length > 0) {
-          const row = res.rows[0];
-          const record: StoredConfigRecord = {
-            uuid: cleanUuid,
-            passwordHash: row.password_hash,
-            config: typeof row.config_data === 'string' ? JSON.parse(row.config_data) : row.config_data,
-            createdAt: new Date(row.created_at).toISOString(),
-            updatedAt: new Date(row.updated_at).toISOString()
-          };
-          this.cache.set(cleanUuid, record);
-          console.log("[DB] Resultado da consulta: SUCESSO (Encontrado no PostgreSQL)");
-          return record.config;
-        } else {
-          console.log("[DB] Resultado da consulta: NÃO ENCONTRADO");
-        }
-      } catch (err: any) {
-        console.error(`[DB] Erro ao consultar UUID ${cleanUuid} no PostgreSQL:`, err?.message || err);
-        Logger.error(`Failed to fetch configuration for UUID ${cleanUuid} from database`, err);
-      }
-    }
-
-    return null;
+    const record = await this.findRecord(uuid.trim().toLowerCase());
+    return record ? record.config : null;
   }
 
   public async saveConfigAsync(
@@ -306,48 +263,20 @@ class ConfigStorage {
     await this.initialize();
 
     const cleanUuid = uuid.trim().toLowerCase();
-    console.log("[DB] A guardar dados para o UUID:", cleanUuid);
 
     if (!isUuid(cleanUuid)) {
-      console.log("[DB] Resultado da gravação: ERRO (Formato de UUID inválido)");
-      return { success: false, error: 'Formato de UUID inválido.' };
+      return { success: false, error: 'Invalid UUID format.' };
     }
 
     if (!passwordPlain || passwordPlain.trim() === '') {
-      console.log("[DB] Resultado da gravação: ERRO (Senha ausente)");
-      return { success: false, error: 'A senha é obrigatória para salvar a configuração.' };
+      return { success: false, error: 'A password is required to save the configuration.' };
     }
 
-    let existing = this.cache.get(cleanUuid);
-
-    if (!existing && this.useDatabase && this.pool) {
-      try {
-        const res = await this.pool.query(
-          'SELECT uuid, password_hash, config_data, created_at, updated_at FROM configurations WHERE LOWER(uuid) = $1',
-          [cleanUuid]
-        );
-        if (res.rows.length > 0) {
-          const row = res.rows[0];
-          existing = {
-            uuid: cleanUuid,
-            passwordHash: row.password_hash,
-            config: typeof row.config_data === 'string' ? JSON.parse(row.config_data) : row.config_data,
-            createdAt: new Date(row.created_at).toISOString(),
-            updatedAt: new Date(row.updated_at).toISOString()
-          };
-          this.cache.set(cleanUuid, existing);
-        }
-      } catch (err: any) {
-        console.error('[DB] Erro ao consultar existência no PostgreSQL:', err?.message || err);
-        Logger.error('Failed to query existing configuration in database', err);
-      }
-    }
+    const existing = await this.findRecord(cleanUuid);
 
     if (existing) {
-      const match = bcrypt.compareSync(passwordPlain, existing.passwordHash);
-      if (!match) {
-        console.log("[DB] Resultado da gravação: ERRO (UUID ou senha inválidos)");
-        return { success: false, error: 'UUID ou senha inválidos.' };
+      if (!bcrypt.compareSync(passwordPlain, existing.passwordHash)) {
+        return { success: false, error: 'Invalid UUID or password.' };
       }
 
       existing.config = config;
@@ -362,36 +291,22 @@ class ConfigStorage {
              WHERE LOWER(uuid) = $2`,
             [JSON.stringify(config), cleanUuid]
           );
-          console.log("[DB] Resultado da gravação: SUCESSO (UPDATE no PostgreSQL)");
         } catch (err: any) {
           const errMsg = err?.message || String(err);
-          console.error(`[DB] Erro ao atualizar no PostgreSQL para UUID ${cleanUuid}:`, errMsg);
-          console.log("[DB] Resultado da gravação: ERRO (Database write failed)");
-          Logger.error(`Failed to update configuration in PostgreSQL for UUID: ${cleanUuid}`, err);
+          Logger.error('Failed to update a configuration in PostgreSQL', err);
           return { success: false, error: `Database write failed: ${errMsg}` };
         }
       } else {
         this.persistLocalFile();
-        console.log("[DB] Resultado da gravação: SUCESSO (Arquivo local persistido)");
       }
 
-      Logger.info(`Updated configuration for UUID: ${cleanUuid}`);
+      Logger.info('Configuration updated');
       return { success: true };
     }
 
-    const salt = bcrypt.genSaltSync(10);
-    const passwordHash = bcrypt.hashSync(passwordPlain, salt);
+    const passwordHash = bcrypt.hashSync(passwordPlain, bcrypt.genSaltSync(10));
     const now = new Date().toISOString();
-
-    const newRecord: StoredConfigRecord = {
-      uuid: cleanUuid,
-      passwordHash,
-      config,
-      createdAt: now,
-      updatedAt: now
-    };
-
-    this.cache.set(cleanUuid, newRecord);
+    this.cache.set(cleanUuid, { uuid: cleanUuid, passwordHash, config, createdAt: now, updatedAt: now });
 
     if (this.useDatabase && this.pool) {
       try {
@@ -400,72 +315,17 @@ class ConfigStorage {
            VALUES ($1, $2, $3, NOW(), NOW())`,
           [cleanUuid, passwordHash, JSON.stringify(config)]
         );
-        console.log("[DB] Resultado da gravação: SUCESSO (INSERT no PostgreSQL)");
       } catch (err: any) {
         const errMsg = err?.message || String(err);
-        console.error(`[DB] Erro ao inserir no PostgreSQL para UUID ${cleanUuid}:`, errMsg);
-        console.log("[DB] Resultado da gravação: ERRO (Database write failed)");
-        Logger.error(`Failed to insert configuration into PostgreSQL for UUID: ${cleanUuid}`, err);
+        Logger.error('Failed to insert a configuration into PostgreSQL', err);
         return { success: false, error: `Database write failed: ${errMsg}` };
       }
     } else {
       this.persistLocalFile();
-      console.log("[DB] Resultado da gravação: SUCESSO (Arquivo local criado)");
     }
 
-    Logger.info(`Created new configuration for UUID: ${cleanUuid}`);
+    Logger.info('Configuration created');
     return { success: true };
-  }
-
-  public saveConfig(
-    uuid: string,
-    passwordPlain: string,
-    config: UserConfig
-  ): SaveConfigResult & Promise<SaveConfigResult> {
-    const cleanUuid = uuid.trim().toLowerCase();
-    let syncResult: SaveConfigResult;
-
-    if (!isUuid(cleanUuid)) {
-      syncResult = { success: false, error: 'Formato de UUID inválido.' };
-    } else if (!passwordPlain || passwordPlain.trim() === '') {
-      syncResult = { success: false, error: 'A senha é obrigatória para salvar a configuração.' };
-    } else {
-      this.ensureInitializedSync();
-      const existing = this.cache.get(cleanUuid);
-      if (existing) {
-        const match = bcrypt.compareSync(passwordPlain, existing.passwordHash);
-        if (!match) {
-          syncResult = { success: false, error: 'UUID ou senha inválidos.' };
-        } else {
-          existing.config = config;
-          existing.updatedAt = new Date().toISOString();
-          this.cache.set(cleanUuid, existing);
-          if (!this.useDatabase) {
-            this.persistLocalFile();
-          }
-          syncResult = { success: true };
-        }
-      } else {
-        const salt = bcrypt.genSaltSync(10);
-        const passwordHash = bcrypt.hashSync(passwordPlain, salt);
-        const now = new Date().toISOString();
-        const newRecord: StoredConfigRecord = {
-          uuid: cleanUuid,
-          passwordHash,
-          config,
-          createdAt: now,
-          updatedAt: now
-        };
-        this.cache.set(cleanUuid, newRecord);
-        if (!this.useDatabase) {
-          this.persistLocalFile();
-        }
-        syncResult = { success: true };
-      }
-    }
-
-    const promise = this.saveConfigAsync(uuid, passwordPlain, config);
-    return makeDualResult(syncResult, promise);
   }
 
   public async authenticateAndGetConfigAsync(
@@ -475,99 +335,18 @@ class ConfigStorage {
     await this.initialize();
 
     const cleanUuid = uuid.trim().toLowerCase();
-    console.log("[DB] A autenticar dados para o UUID:", cleanUuid);
+    const invalid: AuthConfigResult = { success: false, error: 'Invalid UUID or password.' };
 
     if (!isUuid(cleanUuid) || !passwordPlain) {
-      console.log("[DB] Resultado da autenticação: ERRO (UUID ou senha em branco)");
-      return { success: false, error: 'UUID ou senha inválidos.' };
+      return invalid;
     }
 
-    let existing = this.cache.get(cleanUuid);
-
-    if (!existing && this.useDatabase && this.pool) {
-      try {
-        const res = await this.pool.query(
-          'SELECT uuid, password_hash, config_data, created_at, updated_at FROM configurations WHERE LOWER(uuid) = $1',
-          [cleanUuid]
-        );
-        if (res.rows.length > 0) {
-          const row = res.rows[0];
-          existing = {
-            uuid: cleanUuid,
-            passwordHash: row.password_hash,
-            config: typeof row.config_data === 'string' ? JSON.parse(row.config_data) : row.config_data,
-            createdAt: new Date(row.created_at).toISOString(),
-            updatedAt: new Date(row.updated_at).toISOString()
-          };
-          this.cache.set(cleanUuid, existing);
-        }
-      } catch (err) {
-        console.error('[DB] Erro ao consultar banco durante autenticação:', err);
-        Logger.error('Failed to query configuration from database during authentication', err);
-      }
+    const existing = await this.findRecord(cleanUuid);
+    if (!existing || !bcrypt.compareSync(passwordPlain, existing.passwordHash)) {
+      return invalid;
     }
 
-    if (!existing) {
-      console.log("[DB] Resultado da autenticação: ERRO (UUID não encontrado)");
-      return { success: false, error: 'UUID ou senha inválidos.' };
-    }
-
-    const match = bcrypt.compareSync(passwordPlain, existing.passwordHash);
-    if (!match) {
-      console.log("[DB] Resultado da autenticação: ERRO (Senha não confere)");
-      return { success: false, error: 'UUID ou senha inválidos.' };
-    }
-
-    console.log("[DB] Resultado da autenticação: SUCESSO");
-    return {
-      success: true,
-      config: existing.config
-    };
-  }
-
-  public authenticateAndGetConfig(
-    uuid: string,
-    passwordPlain: string
-  ): AuthConfigResult & Promise<AuthConfigResult> {
-    this.ensureInitializedSync();
-
-    const cleanUuid = uuid.trim().toLowerCase();
-    let syncResult: AuthConfigResult;
-
-    if (!isUuid(cleanUuid) || !passwordPlain) {
-      syncResult = { success: false, error: 'UUID ou senha inválidos.' };
-    } else {
-      const existing = this.cache.get(cleanUuid);
-      if (!existing) {
-        syncResult = { success: false, error: 'UUID ou senha inválidos.' };
-      } else {
-        const match = bcrypt.compareSync(passwordPlain, existing.passwordHash);
-        if (!match) {
-          syncResult = { success: false, error: 'UUID ou senha inválidos.' };
-        } else {
-          syncResult = {
-            success: true,
-            config: existing.config
-          };
-        }
-      }
-    }
-
-    const promise = this.authenticateAndGetConfigAsync(uuid, passwordPlain);
-    return makeDualResult(syncResult, promise);
-  }
-
-  public async close(): Promise<void> {
-    if (this.pool) {
-      try {
-        await this.pool.end();
-      } catch {}
-      this.pool = null;
-    }
-  }
-
-  public isUsingDatabase(): boolean {
-    return this.useDatabase;
+    return { success: true, config: existing.config };
   }
 }
 

@@ -7,10 +7,14 @@ import axios from 'axios';
 import QRCode from 'qrcode';
 
 import { ENV } from './config/env';
+import { APP_NAME, APP_VERSION, USER_AGENT } from './config/version';
 import { StremioManifest } from './types/stremio';
-import { decodeUserConfig, decodeUserConfigAsync, mergeWithDefaults } from './config/userConfig';
-import { handleSubtitleProxy, handleSubsRoDownload, handleOpenSubtitlesRestDownload, handleShortIdDownload, handleUnifiedSubtitleProxy } from './proxy/subtitleProxy';
-import { getAllProviders } from './providers';
+import { DEFAULT_USER_CONFIG, decodeUserConfigAsync, mergeWithDefaults } from './config/userConfig';
+import {
+  handleSubsRoDownload,
+  handleOpenSubtitlesRestDownload,
+  handleUnifiedSubtitleProxy
+} from './proxy/subtitleProxy';
 import { globalSubtitleCache } from './utils/cache';
 import { Logger } from './utils/logger';
 import { configStorage, isUuid } from './storage/configStore';
@@ -19,28 +23,120 @@ import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { subsroGet } from './utils/subsroHttp';
 import { getDebug } from './utils/debugLog';
 
+interface KeyValidation {
+  valid: boolean;
+  error?: string;
+}
+
+const KEY_VALIDATORS: Record<string, (apiKey: string) => Promise<KeyValidation>> = {
+  async subsro(apiKey) {
+    try {
+      const response = await subsroGet<{ quota?: { remaining_quota?: number } }>('https://api.subs.ro/v1.0/quota', apiKey, { timeout: 8000 });
+      const remaining = response.data?.quota?.remaining_quota;
+      if (response.status === 200 && typeof remaining === 'number' && remaining >= 0) {
+        return { valid: true };
+      }
+      return { valid: false, error: 'The Subs.ro key was not accepted.' };
+    } catch (err: any) {
+      const status = err.response?.status;
+      const upstreamMsg = typeof err.response?.data === 'object'
+        ? String(err.response?.data?.message || '')
+        : String(err.response?.data || '').slice(0, 120);
+      Logger.warn(`Subs.ro key validation failed: ${status ?? ''} ${upstreamMsg || err.code || err.message}`);
+      if (String(err.message).includes('Cloudflare')) {
+        return {
+          valid: false,
+          error: `Subs.ro is blocking this server (Cloudflare anti-bot check); the key itself is not the problem. Relay: ${ENV.SUBSRO_PROXY_URL ? 'configured' : 'not configured (set SUBSRO_PROXY_URL / SUBSRO_PROXY_TOKEN)'}.`
+        };
+      }
+      return {
+        valid: false,
+        error: `Subs.ro rejected the key (HTTP ${status || 'no response'}${upstreamMsg ? `: ${upstreamMsg}` : err.code ? `: ${err.code}` : ''}).`
+      };
+    }
+  },
+
+  async opensubtitles(apiKey) {
+    if (apiKey.length < 16) {
+      return { valid: false, error: 'The OpenSubtitles key looks invalid or incomplete.' };
+    }
+    try {
+      await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
+        params: { imdb_id: '0133093', _t: Date.now() },
+        headers: { 'Api-Key': apiKey, 'User-Agent': USER_AGENT, 'Content-Type': 'application/json' },
+        timeout: 6000
+      });
+      return { valid: true };
+    } catch (err: any) {
+      Logger.warn(`OpenSubtitles key validation failed: ${err.response?.status ?? ''} ${err.message}`);
+      const status = err.response?.status;
+      return {
+        valid: false,
+        error: status === 403 || status === 401
+          ? 'Key not authorized or unknown to OpenSubtitles. Check that you enabled "Under development" for the key on OpenSubtitles.com.'
+          : 'Could not communicate with OpenSubtitles.'
+      };
+    }
+  },
+
+  async subdl(apiKey) {
+    try {
+      const response = await axios.get('https://api.subdl.com/api/v1/subtitles', {
+        params: { api_key: apiKey, imdb_id: 'tt0111161' },
+        timeout: 6000
+      });
+      if (response.status === 200 && response.data?.status !== false) {
+        return { valid: true };
+      }
+      return { valid: false, error: response.data?.error || 'Invalid SubDL key.' };
+    } catch {
+      return { valid: false, error: 'Invalid SubDL key or connection error.' };
+    }
+  },
+
+  async subsource(apiKey) {
+    if (apiKey.length < 6) {
+      return { valid: false, error: 'Invalid API key.' };
+    }
+    try {
+      await axios.get('https://api.subsource.net/api/v1/subtitles/search?imdb=tt0111161', {
+        headers: { 'X-API-Key': apiKey, 'Referer': 'https://subsource.net/' },
+        timeout: 6000
+      });
+      return { valid: true };
+    } catch {
+      // The Subsource endpoint is unreliable for validation: a plausible-looking key is accepted
+      return apiKey.length >= 8 ? { valid: true } : { valid: false, error: 'Invalid API key.' };
+    }
+  }
+};
+
 export function createServer(): express.Application {
   const app = express();
 
   // Render (and most hosts) sit behind a reverse proxy: needed for correct client IPs / rate limiting
   app.set('trust proxy', 1);
 
-  configStorage.initialize().catch(err => {
-    Logger.error('Async storage initialization error:', err);
-  });
-
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  const limiter = rateLimit({
+  const subtitlesLimiter = rateLimit({
     windowMs: ENV.RATE_LIMIT_WINDOW_MS,
     max: ENV.RATE_LIMIT_MAX,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later.' }
   });
-  app.use('/subtitles', limiter);
+
+  // The configuration API triggers outbound calls (key validation, manifest checks), so it is limited too
+  app.use('/api', rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' }
+  }));
 
   const getBaseUrl = (req: Request): string => {
     if (ENV.BASE_URL && ENV.BASE_URL.trim() !== '') {
@@ -52,33 +148,25 @@ export function createServer(): express.Application {
   };
 
   const buildManifest = async (configEncoded?: string): Promise<StremioManifest> => {
-    let name = 'AIOSubs';
-    let description = 'Dedicated subtitle aggregator and organizer for Stremio and Nuvio.';
-    let logo = '/assets/AIOsubs_logo_wordmark.png';
-    let version = '1.0.0';
+    let name = DEFAULT_USER_CONFIG.instanceName as string;
+    let description = 'Subtitle aggregator with automatic best-match scoring for Stremio and Nuvio.';
+    let logo = DEFAULT_USER_CONFIG.instanceLogo as string;
+    let version = APP_VERSION;
 
     if (configEncoded) {
       try {
         const userCfg = await decodeUserConfigAsync(configEncoded);
-        if (userCfg.instanceName && userCfg.instanceName.trim() !== '') {
-          name = userCfg.instanceName.trim();
-        }
-        if (userCfg.instanceDesc && userCfg.instanceDesc.trim() !== '') {
-          description = userCfg.instanceDesc.trim();
-        }
-        if (userCfg.instanceLogo && userCfg.instanceLogo.trim() !== '') {
-          logo = userCfg.instanceLogo.trim();
-        }
-        if (userCfg.instanceVersion && userCfg.instanceVersion.trim() !== '') {
-          version = userCfg.instanceVersion.trim().replace(/^v/i, '');
-        }
+        name = userCfg.instanceName?.trim() || name;
+        description = userCfg.instanceDesc?.trim() || description;
+        logo = userCfg.instanceLogo?.trim() || logo;
+        version = userCfg.instanceVersion?.trim().replace(/^v/i, '') || version;
       } catch {
         // Use default branding on decode failure
       }
     }
 
     return {
-      id: 'org.aiosubtitles.addon',
+      id: 'org.subs2b.addon',
       version,
       name,
       description,
@@ -89,12 +177,13 @@ export function createServer(): express.Application {
           name: 'subtitles',
           types: ['movie', 'series', 'anime', 'other'],
           idPrefixes: ['tt', 'kitsu'],
+          // The player sends these so subtitles can be matched to the exact file being played
           extra: [
             { name: 'filename', isRequired: false },
             { name: 'videoHash', isRequired: false },
             { name: 'videoSize', isRequired: false }
           ]
-        } as any
+        }
       ],
       types: ['movie', 'series', 'anime', 'other'],
       catalogs: [],
@@ -113,8 +202,8 @@ export function createServer(): express.Application {
   const healthHandler = (_req: Request, res: Response) => {
     res.json({
       status: 'ok',
-      addon: 'AIOSubtitles',
-      version: '1.0.0',
+      addon: APP_NAME,
+      version: APP_VERSION,
       uptime: process.uptime(),
       cacheSize: globalSubtitleCache.size,
       nodeVersion: process.version
@@ -123,8 +212,9 @@ export function createServer(): express.Application {
   app.get('/health', healthHandler);
   app.get('/api/health', healthHandler);
 
+  // The configuration page is also served under /<uuid>/..., so relative asset links resolve there too
   app.use('/:config', (req: Request, res: Response, next: NextFunction) => {
-    if (['manifest.json', 'subtitles', 'api', 'sub', 'proxy', 'download', 'health', 'assets'].includes(req.params.config)) {
+    if (['manifest.json', 'subtitles', 'api', 'sub', 'proxy', 'health', 'assets'].includes(req.params.config)) {
       return next();
     }
     return express.static(publicDir, { index: false })(req, res, next);
@@ -134,29 +224,14 @@ export function createServer(): express.Application {
     res.json({ languages: SUPPORTED_LANGUAGES });
   });
 
-  app.get('/api/providers', (_req: Request, res: Response) => {
-    const list = getAllProviders().map(p => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      requiresApiKey: p.requiresApiKey,
-      defaultEnabled: p.defaultEnabled
-    }));
-    res.json({ providers: list });
-  });
-
   app.post('/api/manifest/validate', async (req: Request, res: Response): Promise<void> => {
-    let inputUrl = (req.body?.url as string) || '';
-    if (!inputUrl || inputUrl.trim() === '') {
-      res.status(400).json({ valid: false, error: 'URL do manifest não pode estar vazia.' });
+    let inputUrl = ((req.body?.url as string) || '').trim();
+    if (!inputUrl) {
+      res.status(400).json({ valid: false, error: 'The manifest URL cannot be empty.' });
       return;
     }
 
-    inputUrl = inputUrl.trim();
-    if (inputUrl.startsWith('stremio://')) {
-      inputUrl = inputUrl.replace(/^stremio:\/\//, 'https://');
-    }
-
+    inputUrl = inputUrl.replace(/^stremio:\/\//, 'https://');
     if (!inputUrl.toLowerCase().endsWith('/manifest.json')) {
       inputUrl = `${inputUrl.replace(/\/+$/, '')}/manifest.json`;
     }
@@ -164,37 +239,14 @@ export function createServer(): express.Application {
     try {
       const response = await axios.get(inputUrl, {
         timeout: 8000,
-        headers: {
-          'User-Agent': 'AIOSubtitles/1.0.0 (Stremio Addon Validator)',
-          'Accept': 'application/json'
-        }
+        headers: { 'User-Agent': `${USER_AGENT} (Stremio Addon Validator)`, 'Accept': 'application/json' }
       });
 
       const manifest = response.data;
       if (!manifest || typeof manifest !== 'object') {
-        res.status(400).json({ valid: false, error: 'A resposta do endpoint não é um JSON de manifest válido.' });
+        res.status(400).json({ valid: false, error: 'The endpoint did not return a valid manifest JSON.' });
         return;
       }
-
-      const hasSubtitles = Array.isArray(manifest.resources) && manifest.resources.some((r: unknown) => {
-        if (typeof r === 'string') return r.toLowerCase() === 'subtitles';
-        if (typeof r === 'object' && r !== null && 'name' in r) {
-          return String((r as { name: string }).name).toLowerCase() === 'subtitles';
-        }
-        return false;
-      });
-
-      if (!hasSubtitles) {
-        res.status(400).json({
-          valid: false,
-          error: `O addon "${manifest.name || manifest.id || 'Externo'}" não declara o recurso de legendas ('subtitles'). Somente addons que fornecem legendas são suportados.`
-        });
-        return;
-      }
-
-      const addonName = manifest.name && String(manifest.name).trim() !== ''
-        ? String(manifest.name).trim()
-        : (manifest.id ? String(manifest.id).trim() : 'External Subtitles Addon');
 
       const declaredResources: string[] = Array.isArray(manifest.resources)
         ? manifest.resources.map((r: unknown) => {
@@ -204,7 +256,19 @@ export function createServer(): express.Application {
           }
           return '';
         }).filter(Boolean)
-        : ['subtitles'];
+        : [];
+
+      if (!declaredResources.some(r => r.toLowerCase() === 'subtitles')) {
+        res.status(400).json({
+          valid: false,
+          error: `The addon "${manifest.name || manifest.id || 'External'}" does not declare the 'subtitles' resource. Only addons that provide subtitles are supported.`
+        });
+        return;
+      }
+
+      const addonName = manifest.name && String(manifest.name).trim() !== ''
+        ? String(manifest.name).trim()
+        : (manifest.id ? String(manifest.id).trim() : 'External Subtitles Addon');
 
       const isConfigurable = Boolean(manifest.behaviorHints?.configurable || manifest.configurationURL);
       const configurationURL = manifest.configurationURL || (manifest.behaviorHints?.configurable ? inputUrl.replace(/\/manifest\.json$/i, '/configure') : '');
@@ -222,32 +286,26 @@ export function createServer(): express.Application {
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      res.status(400).json({
-        valid: false,
-        error: `Não foi possível acessar o manifest em "${inputUrl}": ${msg}`
-      });
+      res.status(400).json({ valid: false, error: `Could not reach the manifest at "${inputUrl}": ${msg}` });
     }
   });
 
   app.get('/api/qrcode', async (req: Request, res: Response): Promise<void> => {
     const text = String(req.query.text || '').trim();
     if (!text) {
-      res.status(400).json({ error: 'Texto não fornecido para geração do QR Code.' });
+      res.status(400).json({ error: 'No text provided for the QR code.' });
       return;
     }
     try {
       const dataUrl = await QRCode.toDataURL(text, {
         width: 220,
         margin: 2,
-        color: {
-          dark: '#000000',
-          light: '#ffffff'
-        }
+        color: { dark: '#000000', light: '#ffffff' }
       });
       res.json({ dataUrl });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: `Erro ao gerar QR Code: ${msg}` });
+      res.status(500).json({ error: `Error generating the QR code: ${msg}` });
     }
   });
 
@@ -256,382 +314,218 @@ export function createServer(): express.Application {
     const apiKey = (req.body?.apiKey as string || '').trim().replace(/^["']|["']$/g, '');
 
     if (!apiKey) {
-      res.json({ valid: false, error: 'Chave não informada.' });
+      res.json({ valid: false, error: 'No key provided.' });
       return;
     }
 
-    if (service === 'subsro') {
-      try {
-        const response = await subsroGet<{ quota?: { remaining_quota?: number } }>('https://api.subs.ro/v1.0/quota', apiKey, { timeout: 8000 });
-        const remaining = response.data?.quota?.remaining_quota;
-        if (response.status === 200 && typeof remaining === 'number' && remaining >= 0) {
-          res.json({ valid: true });
-          return;
-        }
-        res.json({ valid: false, error: 'Cheia Subs.ro nu a fost acceptată.' });
-      } catch (err: any) {
-        const status = err.response?.status;
-        const upstreamMsg = typeof err.response?.data === 'object'
-          ? String(err.response?.data?.message || '')
-          : String(err.response?.data || '').slice(0, 120);
-        console.error('[SUBSRO] Key validation failed:', status, upstreamMsg || err.code || err.message);
-        if (String(err.message).includes('Cloudflare')) {
-          res.json({
-            valid: false,
-            error: `Subs.ro blochează serverul (verificare anti-bot Cloudflare). Releu ${ENV.SUBSRO_PROXY_URL ? 'ACTIV (' + ENV.SUBSRO_PROXY_URL + ')' : 'INACTIV - variabilele SUBSRO_PROXY_URL/TOKEN nu sunt încă aplicate'}. Nu cheia e problema.`
-          });
-          return;
-        }
-        res.json({
-          valid: false,
-          error: `Subs.ro a respins cheia (HTTP ${status || 'fără răspuns'}${upstreamMsg ? `: ${upstreamMsg}` : err.code ? `: ${err.code}` : ''}).`
-        });
-      }
+    const validator = KEY_VALIDATORS[service];
+    if (!validator) {
+      res.status(400).json({ valid: false, error: 'Unknown service.' });
       return;
     }
 
-    if (service === 'opensubtitles') {
-      try {
-        if (!apiKey || apiKey.length < 16) {
-          res.json({ valid: false, error: 'Chave do OpenSubtitles inválida ou incompleta.' });
-          return;
-        }
-
-        const response = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
-          params: {
-            imdb_id: '0133093',
-            _t: Date.now()
-          },
-          headers: {
-            'Api-Key': apiKey,
-            'User-Agent': 'AIOSubs v1.0.0',
-            'Content-Type': 'application/json'
-          },
-          timeout: 6000
-        });
-
-        if (response.status === 200) {
-          res.json({ valid: true });
-          return;
-        }
-
-        res.json({ valid: false, error: 'Resposta inesperada do OpenSubtitles' });
-      } catch (err: any) {
-        console.error('OpenSubtitles validation error:', err.response?.status, err.response?.data || err.message);
-        const errMsg = err.response?.status === 403 || err.response?.status === 401
-          ? 'Chave não autorizada ou inexistente no OpenSubtitles. Verifique se ativou "Under development" no OpenSubtitles.com.'
-          : 'Falha na comunicação com o OpenSubtitles.';
-        res.json({ valid: false, error: errMsg });
-      }
-      return;
-    }
-
-    if (service === 'subdl') {
-    try {
-      const response = await axios.get('https://api.subdl.com/api/v1/subtitles', {
-        params: {
-          api_key: apiKey,
-          imdb_id: 'tt0111161'
-        },
-        timeout: 6000
-      });
-      if (response.status === 200 && response.data?.status !== false) {
-        res.json({ valid: true });
-        return;
-      }
-      res.json({ valid: false, error: response.data?.error || 'Chave inválida no SubDL' });
-    } catch {
-      res.json({ valid: false, error: 'Chave inválida ou erro na conexão com SubDL' });
-    }
-    return;
-  }
-
-  if (service === 'subsource') {
-    try {
-      if (apiKey.length < 6) {
-        res.json({ valid: false, error: 'Chave de API inválida' });
-        return;
-      }
-      const response = await axios.get('https://api.subsource.net/api/v1/subtitles/search?imdb=tt0111161', {
-        headers: {
-          'X-API-Key': apiKey,
-          'Referer': 'https://subsource.net/'
-        },
-        timeout: 6000
-      });
-      if (response.status === 200) {
-        res.json({ valid: true });
-        return;
-      }
-      res.json({ valid: false, error: 'Chave inválida no Subsource' });
-    } catch {
-      if (apiKey.length >= 8) {
-        res.json({ valid: true });
-        return;
-      }
-      res.json({ valid: false, error: 'Chave inválida' });
-    }
-    return;
-  }
-
-  res.status(400).json({ valid: false, error: 'Serviço desconhecido' });
-});
-
-const handleConfigSave = async (req: Request, res: Response): Promise<void> => {
-  const rawUuid = req.params?.uuid || req.body?.uuid || '';
-  const uuid = String(rawUuid).trim();
-  const password = String(req.body?.password || '').trim();
-  const config = req.body?.config;
-
-  console.log(`[HTTP] Recebida requisição de gravação para UUID: ${uuid || '(não informado)'}`);
-
-  if (!uuid || !isUuid(uuid)) {
-    res.status(400).json({ success: false, error: 'UUID inválido.' });
-    return;
-  }
-
-  if (!password) {
-    res.status(400).json({ success: false, error: 'A senha é obrigatória para salvar a configuração.' });
-    return;
-  }
-
-  if (!config || typeof config !== 'object') {
-    res.status(400).json({ success: false, error: 'Configuração inválida.' });
-    return;
-  }
-
-  const mergedConfig = mergeWithDefaults(config);
-  const saveResult = await configStorage.saveConfigAsync(uuid, password, mergedConfig);
-  if (!saveResult.success) {
-    const isDbError = saveResult.error?.includes('Database write failed');
-    const statusCode = isDbError ? 500 : 401;
-    res.status(statusCode).json({ success: false, error: saveResult.error || 'Não foi possível salvar a configuração.' });
-    return;
-  }
-
-  const baseUrl = getBaseUrl(req);
-  const manifestUrl = `${baseUrl}/${uuid}/manifest.json`;
-  const cleanHost = manifestUrl.replace(/^https?:\/\//i, '');
-  const stremioUrl = `stremio://${cleanHost}`;
-  const stremioWebUrl = `https://web.stremio.com/#/addons?addon=${encodeURIComponent(manifestUrl)}`;
-
-  res.status(200).json({
-    success: true,
-    uuid,
-    manifestUrl,
-    stremioUrl,
-    stremioWebUrl
+    res.json(await validator(apiKey));
   });
-};
 
-app.post('/api/config/save', handleConfigSave);
-app.post('/api/config/create', handleConfigSave);
-app.post('/api/save', handleConfigSave);
-app.post('/api/create', handleConfigSave);
-app.post('/save', handleConfigSave);
-app.post('/create', handleConfigSave);
-app.put('/api/config/:uuid', handleConfigSave);
-app.put('/api/save/:uuid', handleConfigSave);
-app.put('/api/config', handleConfigSave);
+  const handleConfigSave = async (req: Request, res: Response): Promise<void> => {
+    const uuid = String(req.params?.uuid || req.body?.uuid || '').trim();
+    const password = String(req.body?.password || '').trim();
+    const config = req.body?.config;
 
-const handleConfigLoad = async (req: Request, res: Response): Promise<void> => {
-  const rawUuid = req.params?.uuid || req.body?.uuid || '';
-  const uuid = String(rawUuid).trim();
-  const password = String(req.body?.password || '').trim();
+    if (!uuid || !isUuid(uuid)) {
+      res.status(400).json({ success: false, error: 'Invalid UUID.' });
+      return;
+    }
 
-  if (!uuid || !isUuid(uuid) || !password) {
-    res.status(401).json({ success: false, error: 'UUID ou senha inválidos.' });
-    return;
-  }
+    if (!password) {
+      res.status(400).json({ success: false, error: 'A password is required to save the configuration.' });
+      return;
+    }
 
-  const authResult = await configStorage.authenticateAndGetConfigAsync(uuid, password);
-  if (!authResult.success || !authResult.config) {
-    res.status(401).json({ success: false, error: 'UUID ou senha inválidos.' });
-    return;
-  }
+    if (!config || typeof config !== 'object') {
+      res.status(400).json({ success: false, error: 'Invalid configuration.' });
+      return;
+    }
 
-  res.status(200).json({
-    success: true,
-    uuid,
-    config: authResult.config
+    const saveResult = await configStorage.saveConfigAsync(uuid, password, mergeWithDefaults(config));
+    if (!saveResult.success) {
+      const isDbError = saveResult.error?.includes('Database write failed');
+      res.status(isDbError ? 500 : 401).json({ success: false, error: saveResult.error || 'Could not save the configuration.' });
+      return;
+    }
+
+    const manifestUrl = `${getBaseUrl(req)}/${uuid}/manifest.json`;
+
+    res.status(200).json({
+      success: true,
+      uuid,
+      manifestUrl,
+      stremioUrl: `stremio://${manifestUrl.replace(/^https?:\/\//i, '')}`,
+      stremioWebUrl: `https://web.stremio.com/#/addons?addon=${encodeURIComponent(manifestUrl)}`
+    });
+  };
+
+  app.post(['/api/config/save', '/api/config/create', '/api/save'], handleConfigSave);
+  app.put('/api/config/:uuid', handleConfigSave);
+
+  app.post('/api/config/load', async (req: Request, res: Response): Promise<void> => {
+    const uuid = String(req.body?.uuid || '').trim();
+    const password = String(req.body?.password || '').trim();
+
+    if (!uuid || !isUuid(uuid) || !password) {
+      res.status(401).json({ success: false, error: 'Invalid UUID or password.' });
+      return;
+    }
+
+    const authResult = await configStorage.authenticateAndGetConfigAsync(uuid, password);
+    if (!authResult.success || !authResult.config) {
+      res.status(401).json({ success: false, error: 'Invalid UUID or password.' });
+      return;
+    }
+
+    res.status(200).json({ success: true, uuid, config: authResult.config });
   });
-};
 
-app.post('/api/config/load', handleConfigLoad);
-app.post('/api/config/login', handleConfigLoad);
-app.post('/api/load', handleConfigLoad);
-app.post('/api/login', handleConfigLoad);
-app.post('/login', handleConfigLoad);
-app.post('/load', handleConfigLoad);
+  app.get(['/', '/configure', '/dashboard', '/:config/configure'], (_req: Request, res: Response) => {
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
 
-app.get('/', (_req: Request, res: Response) => {
-  res.sendFile(path.join(publicDir, 'index.html'));
-});
+  app.get('/manifest.json', async (_req: Request, res: Response) => {
+    res.json(await buildManifest());
+  });
 
-app.get('/configure', (_req: Request, res: Response) => {
-  res.sendFile(path.join(publicDir, 'index.html'));
-});
+  app.get('/:config/manifest.json', async (req: Request, res: Response) => {
+    res.json(await buildManifest(req.params.config));
+  });
 
-app.get('/dashboard', (_req: Request, res: Response) => {
-  res.sendFile(path.join(publicDir, 'index.html'));
-});
+  const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const configParam = req.params.config;
+      const userConfig = await decodeUserConfigAsync(configParam);
+      const { type, id, extra } = req.params;
 
-app.get('/:config/configure', (_req: Request, res: Response) => {
-  res.sendFile(path.join(publicDir, 'index.html'));
-});
-
-app.get('/manifest.json', async (_req: Request, res: Response) => {
-  res.json(await buildManifest());
-});
-
-app.get('/:config/manifest.json', async (req: Request, res: Response) => {
-  res.json(await buildManifest(req.params.config));
-});
-
-const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const configParam = req.params.config;
-    const userConfig = await decodeUserConfigAsync(configParam);
-    const { type, id, extra } = req.params;
-    const baseUrl = getBaseUrl(req);
-
-    // Îmbină query string-ul cu argumentele primite prin ruta Stremio (:extra)
-    const extraArgs: Record<string, string> = { ...(req.query as Record<string, string>) };
-    if (extra) {
-      try {
-        const searchParams = new URLSearchParams(extra);
-        for (const [key, value] of searchParams.entries()) {
+      // Merge the query string with the arguments Stremio puts in the path (":extra", e.g. filename=...&videoHash=...)
+      const extraArgs: Record<string, string> = { ...(req.query as Record<string, string>) };
+      if (extra) {
+        for (const [key, value] of new URLSearchParams(extra).entries()) {
           extraArgs[key] = value;
         }
-      } catch {
-        // Fallback silențios dacă parametrul nu necesită decodare
       }
+
+      const query = parseSubtitleQuery(type, id, extraArgs);
+      const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
+      const response = await getAggregatedSubtitles(query, userConfig, getBaseUrl(req), debugKey);
+
+      res.setHeader('Cache-Control', 'max-age=1800, public');
+      res.json(response);
+    } catch (err: unknown) {
+      Logger.error('Failed to handle subtitles request', err);
+      res.json({ subtitles: [] });
     }
+  };
 
-    const query = parseSubtitleQuery(type, id, extraArgs);
-    const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
-    const response = await getAggregatedSubtitles(query, userConfig, baseUrl, debugKey);
+  app.get(['/:config/subtitles/:type/:id.json', '/subtitles/:type/:id.json'], subtitlesLimiter, handleSubtitles);
+  app.get(['/:config/subtitles/:type/:id/:extra.json', '/subtitles/:type/:id/:extra.json'], subtitlesLimiter, handleSubtitles);
 
-    res.setHeader('Cache-Control', 'max-age=1800, public');
-    res.json(response);
-  } catch (err: unknown) {
-    Logger.error('Failed to handle subtitles request', err);
-    res.json({ subtitles: [] });
-  }
-};
+  // ---- Diagnostics: only reachable with the UUID of a stored configuration (which is already the addon's credential) ----
+  const requireStoredConfig = async (req: Request, res: Response): Promise<string | null> => {
+    const key = req.params.config;
+    if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
+      res.status(404).json({ error: 'not found' });
+      return null;
+    }
+    return key;
+  };
 
-
-// Latest requests + scores for this configuration (only reachable with its UUID, which is already the addon's credential)
-app.get('/:config/debug/recent.json', async (req: Request, res: Response): Promise<void> => {
-  const key = req.params.config;
-  if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
-    res.status(404).json({ error: 'not found' });
-    return;
-  }
-  res.setHeader('Cache-Control', 'no-store');
-  res.json({ entries: getDebug(key) });
-});
-
-// Diagnostic: which OpenSubtitles subtitles exist for an exact file hash, in ALL languages (reference candidates)
-app.get('/:config/debug/hash.json', async (req: Request, res: Response): Promise<void> => {
-  const key = req.params.config;
-  if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
-    res.status(404).json({ error: 'not found' });
-    return;
-  }
-  const hash = String(req.query.hash || '').toLowerCase();
-  if (!/^[0-9a-f]{16}$/.test(hash)) {
-    res.status(400).json({ error: 'hash must be 16 hex characters' });
-    return;
-  }
-  const cfg = await decodeUserConfigAsync(key);
-  const apiKey = cfg.providers.opensubtitles?.apiKey;
-  if (!apiKey) {
-    res.status(400).json({ error: 'OpenSubtitles key not configured' });
-    return;
-  }
-  try {
-    const params: Record<string, string | number> = { moviehash: hash };
-    if (req.query.imdb) params.imdb_id = String(req.query.imdb).replace(/^tt/i, '');
-    const r = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
-      params,
-      headers: { 'Api-Key': apiKey, 'User-Agent': 'AIOSubs v1.0.0', 'Content-Type': 'application/json' },
-      timeout: 10000
-    });
-    const data = Array.isArray(r.data?.data) ? r.data.data : [];
+  // Latest requests and how their subtitles were scored
+  app.get('/:config/debug/recent.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
-    res.json({
-      hash,
-      total: r.data?.total_count ?? data.length,
-      results: data.map((d: any) => ({
-        lang: d.attributes?.language,
-        release: d.attributes?.release,
-        moviehash_match: d.attributes?.moviehash_match === true,
-        fps: d.attributes?.fps,
-        hearing_impaired: d.attributes?.hearing_impaired === true,
-        downloads: d.attributes?.download_count
-      }))
-    });
-  } catch (err: any) {
-    res.status(502).json({ error: err.response?.status ? 'HTTP ' + err.response.status : String(err.message) });
-  }
-});
+    res.json({ entries: getDebug(key) });
+  });
 
-// Diagnostic: same search as the player would trigger, but for another language (used by offline sync experiments)
-app.get('/:config/debug/search.json', async (req: Request, res: Response): Promise<void> => {
-  const key = req.params.config;
-  if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
-    res.status(404).json({ error: 'not found' });
-    return;
-  }
-  const lang = String(req.query.lang || '').toLowerCase();
-  const id = String(req.query.id || '');
-  const type = String(req.query.type || 'movie');
-  if (!/^[a-z]{3}$/.test(lang) || !id) {
-    res.status(400).json({ error: 'lang (3 letters) and id are required' });
-    return;
-  }
-  const extra: Record<string, string> = {};
-  for (const name of ['filename', 'videoHash', 'videoSize']) {
-    if (typeof req.query[name] === 'string') extra[name] = req.query[name] as string;
-  }
-  const baseConfig = await decodeUserConfigAsync(key);
-  const overridden = { ...baseConfig, languages: [lang], language_remapping: {}, languageRemap: {} };
-  const response = await getAggregatedSubtitles(parseSubtitleQuery(type, id, extra), overridden, getBaseUrl(req));
-  res.setHeader('Cache-Control', 'no-store');
-  res.json(response);
-});
+  // Which OpenSubtitles subtitles exist for an exact file hash, in ALL languages
+  app.get('/:config/debug/hash.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
 
-app.get('/:config/subtitles/:type/:id.json', handleSubtitles);
-app.get('/:config/subtitles/:type/:id/:extra.json', handleSubtitles);
-app.get('/subtitles/:type/:id.json', handleSubtitles);
-app.get('/subtitles/:type/:id/:extra.json', handleSubtitles);
+    const hash = String(req.query.hash || '').toLowerCase();
+    if (!/^[0-9a-f]{16}$/.test(hash)) {
+      res.status(400).json({ error: 'hash must be 16 hex characters' });
+      return;
+    }
+    const cfg = await decodeUserConfigAsync(key);
+    const apiKey = cfg.providers.opensubtitles?.apiKey;
+    if (!apiKey) {
+      res.status(400).json({ error: 'OpenSubtitles key not configured' });
+      return;
+    }
+    try {
+      const params: Record<string, string | number> = { moviehash: hash };
+      if (req.query.imdb) params.imdb_id = String(req.query.imdb).replace(/^tt/i, '');
+      const r = await axios.get('https://api.opensubtitles.com/api/v1/subtitles', {
+        params,
+        headers: { 'Api-Key': apiKey, 'User-Agent': USER_AGENT, 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+      const data = Array.isArray(r.data?.data) ? r.data.data : [];
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({
+        hash,
+        total: r.data?.total_count ?? data.length,
+        results: data.map((d: any) => ({
+          lang: d.attributes?.language,
+          release: d.attributes?.release,
+          moviehash_match: d.attributes?.moviehash_match === true,
+          fps: d.attributes?.fps,
+          hearing_impaired: d.attributes?.hearing_impaired === true,
+          downloads: d.attributes?.download_count
+        }))
+      });
+    } catch (err: any) {
+      res.status(502).json({ error: err.response?.status ? 'HTTP ' + err.response.status : String(err.message) });
+    }
+  });
 
-// Unified and legacy subtitle proxy delivery endpoints
-app.get('/sub/proxy', handleUnifiedSubtitleProxy);
-app.get('/sub/proxy/:data', handleSubtitleProxy);
-app.get('/sub/download', handleUnifiedSubtitleProxy);
-app.get('/proxy/download', handleUnifiedSubtitleProxy);
-app.get('/proxy/download/subdl', handleUnifiedSubtitleProxy);
-app.get('/proxy/download/subsource', handleUnifiedSubtitleProxy);
-app.get('/proxy/subtitle/:data', handleSubtitleProxy);
-app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
-app.get('/proxy/download/subsro/:id', handleSubsRoDownload);
+  // The same search a player would trigger, for another language (used by offline sync experiments)
+  app.get('/:config/debug/search.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
 
-// Direct subtitle download endpoints
-app.get('/download/:id', handleShortIdDownload);
-app.get('/download/:id/:filename', handleShortIdDownload);
-app.get('/sub/:id', handleShortIdDownload);
-app.get('/sub/:id/:filename', handleShortIdDownload);
+    const lang = String(req.query.lang || '').toLowerCase();
+    const id = String(req.query.id || '');
+    const type = String(req.query.type || 'movie');
+    if (!/^[a-z]{3}$/.test(lang) || !id) {
+      res.status(400).json({ error: 'lang (3 letters) and id are required' });
+      return;
+    }
+    const extra: Record<string, string> = {};
+    for (const name of ['filename', 'videoHash', 'videoSize']) {
+      if (typeof req.query[name] === 'string') extra[name] = req.query[name] as string;
+    }
+    const baseConfig = await decodeUserConfigAsync(key);
+    const overridden = { ...baseConfig, languages: [lang], language_remapping: {}, languageRemap: {}, maxSubtitles: 0 };
+    const response = await getAggregatedSubtitles(parseSubtitleQuery(type, id, extra), overridden, getBaseUrl(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(response);
+  });
 
-app.use((req: Request, res: Response) => {
-  res.status(404).json({ error: 'Endpoint not found', path: req.path });
-});
+  // ---- Subtitle download endpoints (the URLs handed to the player) ----
+  // /sub/proxy?url=...  generic proxy for SubDL / Subsource (allowed sites only)
+  // /sub/proxy/:data and /proxy/subtitle/:data  legacy links with a base64 URL
+  app.get(['/sub/proxy', '/sub/proxy/:data', '/proxy/subtitle/:data'], handleUnifiedSubtitleProxy);
+  app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
+  app.get('/proxy/download/subsro/:id', handleSubsRoDownload);
 
-app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  Logger.error('Unhandled server exception', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+  app.use((req: Request, res: Response) => {
+    res.status(404).json({ error: 'Endpoint not found', path: req.path });
+  });
 
-return app;
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    Logger.error('Unhandled server exception', err);
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
+  return app;
 }

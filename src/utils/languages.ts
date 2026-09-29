@@ -413,7 +413,7 @@ export function isValidIso639_2(code: string | undefined | null): boolean {
 export function normalizeLanguageCode(raw: string | undefined | null): string | null {
   if (!raw || typeof raw !== 'string') return null;
   const clean = raw.trim().toLowerCase().replace(/_/g, '-');
-  if (clean === '' || clean === 'unknown' || clean === 'desconhecido') return null;
+  if (clean === '' || clean === 'unknown') return null;
 
   // 1. Direct match in lookup map
   const found = LOOKUP_MAP.get(clean);
@@ -445,21 +445,22 @@ export function normalizeLanguageCode(raw: string | undefined | null): string | 
 }
 
 /**
- * Maps ISO 639-2 whitelist languages to OpenSubtitles v1 codes (e.g. 'pob' -> 'pt-br,pob', 'eng' -> 'en,eng').
- * Also includes source languages from remapRules if their target is in the whitelist.
+ * Expands the language whitelist into provider language codes. `variants` receives each normalized
+ * ISO 639-2 code and returns the provider-specific spellings for it. Source languages of remap rules
+ * whose target is in the whitelist are included too.
  */
-export function mapWhitelistToOpenSubtitles(
+function expandWhitelist(
   languages: string[],
-  remapRules?: Record<string, string>
+  remapRules: Record<string, string> | undefined,
+  variants: (norm: string) => string[]
 ): string[] {
   const effectiveLanguages = new Set(languages.map(l => normalizeLanguageCode(l) || l.trim().toLowerCase()));
 
-  if (remapRules && Object.keys(remapRules).length > 0) {
+  if (remapRules) {
     for (const [from, to] of Object.entries(remapRules)) {
       const normTo = normalizeLanguageCode(to) || to.trim().toLowerCase();
       if (effectiveLanguages.has(normTo)) {
-        const normFrom = normalizeLanguageCode(from) || from.trim().toLowerCase();
-        effectiveLanguages.add(normFrom);
+        effectiveLanguages.add(normalizeLanguageCode(from) || from.trim().toLowerCase());
       }
     }
   }
@@ -467,61 +468,33 @@ export function mapWhitelistToOpenSubtitles(
   const result = new Set<string>();
   for (const lang of effectiveLanguages) {
     const norm = normalizeLanguageCode(lang) || lang.trim().toLowerCase();
-    if (norm === 'pob') {
-      result.add('pt-br');
-      result.add('pob');
-    } else if (norm === 'por') {
-      result.add('pt-pt');
-      result.add('por');
-      result.add('pt');
-    } else {
-      const info = LOOKUP_MAP.get(norm);
-      if (info?.iso639_1) {
-        result.add(info.iso639_1);
-      }
-      result.add(norm);
-    }
+    variants(norm).forEach(v => result.add(v));
   }
   return Array.from(result);
 }
 
-/**
- * Maps ISO 639-2 whitelist languages to SubDL compatible codes (e.g. 'pob' -> 'PT-BR', 'eng' -> 'EN').
- * Also includes source languages from remapRules if their target is in the whitelist.
- */
+/** OpenSubtitles v1 codes (e.g. 'pob' -> 'pt-br,pob', 'eng' -> 'en,eng') */
+export function mapWhitelistToOpenSubtitles(
+  languages: string[],
+  remapRules?: Record<string, string>
+): string[] {
+  return expandWhitelist(languages, remapRules, norm => {
+    if (norm === 'pob') return ['pt-br', 'pob'];
+    if (norm === 'por') return ['pt-pt', 'por', 'pt'];
+    const info = LOOKUP_MAP.get(norm);
+    return info?.iso639_1 ? [info.iso639_1, norm] : [norm];
+  });
+}
+
+/** SubDL codes (e.g. 'pob' -> 'PT-BR,POB', 'eng' -> 'EN,ENG') */
 export function mapWhitelistToSubDL(
   languages: string[],
   remapRules?: Record<string, string>
 ): string[] {
-  const effectiveLanguages = new Set(languages.map(l => normalizeLanguageCode(l) || l.trim().toLowerCase()));
-
-  if (remapRules && Object.keys(remapRules).length > 0) {
-    for (const [from, to] of Object.entries(remapRules)) {
-      const normTo = normalizeLanguageCode(to) || to.trim().toLowerCase();
-      if (effectiveLanguages.has(normTo)) {
-        const normFrom = normalizeLanguageCode(from) || from.trim().toLowerCase();
-        effectiveLanguages.add(normFrom);
-      }
-    }
-  }
-
-  const result = new Set<string>();
-  for (const lang of effectiveLanguages) {
-    const norm = normalizeLanguageCode(lang) || lang.trim().toLowerCase();
-    if (norm === 'pob') {
-      result.add('PT-BR');
-      result.add('POB');
-    } else if (norm === 'por') {
-      result.add('PT-PT');
-      result.add('POR');
-      result.add('PT');
-    } else {
-      const info = LOOKUP_MAP.get(norm);
-      if (info?.iso639_1) {
-        result.add(info.iso639_1.toUpperCase());
-      }
-      result.add(norm.toUpperCase());
-    }
-  }
-  return Array.from(result);
+  return expandWhitelist(languages, remapRules, norm => {
+    if (norm === 'pob') return ['PT-BR', 'POB'];
+    if (norm === 'por') return ['PT-PT', 'POR', 'PT'];
+    const info = LOOKUP_MAP.get(norm);
+    return info?.iso639_1 ? [info.iso639_1.toUpperCase(), norm.toUpperCase()] : [norm.toUpperCase()];
+  });
 }

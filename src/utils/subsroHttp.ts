@@ -1,18 +1,19 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { Logger } from './logger';
 import { ENV } from '../config/env';
+import { USER_AGENT } from '../config/version';
 
 // Subs.ro sits behind Cloudflare, which may challenge some clients. We try a few
 // User-Agents (the official example script's first) and remember the one that works.
 const USER_AGENTS = [
   'Subs.ro API Test Script',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'AIOSubs/1.0.0'
+  USER_AGENT
 ];
 
 let workingIndex = 0;
 
-export function isCloudflareChallenge(res: { data?: unknown; headers?: Record<string, unknown> }): boolean {
+function isCloudflareChallenge(res: { data?: unknown; headers?: Record<string, unknown> }): boolean {
   const ct = String(res.headers?.['content-type'] || '').toLowerCase();
   if (ct.includes('text/html')) return true;
   if (typeof res.data === 'string' && /just a moment|cf-chl|cloudflare/i.test(res.data.slice(0, 500))) return true;

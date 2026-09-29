@@ -10,3 +10,4 @@ yarn-error.log*
 .vscode/
 data/*.json
 !data/.gitkeep
+.claude/

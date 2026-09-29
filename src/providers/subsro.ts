@@ -1,17 +1,12 @@
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
-import { ENV } from '../config/env';
-import { Logger } from '../utils/logger';
 import { subsroGet } from '../utils/subsroHttp';
 
 interface SubsRoItem {
   id: number | string;
   title?: string;
   description?: string;
-  release?: string;
-  translator?: string;
   language?: string;
-  [key: string]: unknown;
 }
 
 interface SubsRoSearchResponse {
@@ -31,8 +26,6 @@ const SUBSRO_LANGUAGE_MAP: Record<string, string> = {
   spa: 'spa',
   alt: 'und'
 };
-
-let rawItemLogged = false;
 
 /**
  * Extracts season/episode hints from a title (e.g. "S03E09", "3x09", "Sezon 3").
@@ -58,7 +51,7 @@ export class SubsRoProvider extends BaseSubtitleProvider {
     context: ProviderContext,
     signal: AbortSignal
   ): Promise<RawSubtitleItem[]> {
-    const apiKey = context.providerConfig?.apiKey || ENV.DEFAULT_SUBSRO_API_KEY;
+    const apiKey = context.providerConfig?.apiKey;
     if (!apiKey || !query.imdbId) {
       return [];
     }
@@ -73,11 +66,6 @@ export class SubsRoProvider extends BaseSubtitleProvider {
     );
 
     const list = Array.isArray(response.data?.items) ? response.data.items : [];
-
-    if (!rawItemLogged && list.length > 0) {
-      rawItemLogged = true;
-      Logger.info('[SUBSRO] Example raw item from API', { item: list[0] });
-    }
 
     const items: RawSubtitleItem[] = [];
 
@@ -110,8 +98,7 @@ export class SubsRoProvider extends BaseSubtitleProvider {
         url: `/proxy/download/subsro/${encodeURIComponent(String(sub.id))}?${params.toString()}`,
         lang,
         release,
-        format: 'srt',
-        rawMetadata: { translator: sub.translator }
+        format: 'srt'
       });
     }
 

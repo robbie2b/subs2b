@@ -1,9 +1,6 @@
 export interface ProviderConfigItem {
   enabled: boolean;
   apiKey?: string;
-  username?: string;
-  password?: string;
-  customEndpoint?: string;
 }
 
 export interface CustomAddonConfig {
@@ -28,7 +25,6 @@ export interface UserConfig {
 
   providers: Record<string, ProviderConfigItem>;
   customAddons: CustomAddonConfig[];
-  addonFetchingStrategy?: 'default' | 'fastest';
 
   providerPriority: string[];
   languages: string[];
@@ -38,6 +34,9 @@ export interface UserConfig {
   providerTimeoutMs: number;
   deduplication: boolean;
   deduplicationStrategy?: 'both' | 'hash' | 'fuzzy';
+
+  /** Maximum number of subtitles shown to the player (0 = show all). Everything is still searched and scored. */
+  maxSubtitles: number;
 
   cacheTtlMinutes: number;
 }

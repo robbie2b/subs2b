@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { SubtitleProvider, SubtitleQuery, ProviderContext, RawSubtitleItem, ProviderLogEntry, SearchOutcome } from '../types/provider';
 import { Logger } from '../utils/logger';
+import { USER_AGENT } from '../config/version';
 
 export abstract class BaseSubtitleProvider implements SubtitleProvider {
   abstract readonly id: string;
@@ -69,7 +70,7 @@ export abstract class BaseSubtitleProvider implements SubtitleProvider {
       ...options,
       signal,
       headers: {
-        'User-Agent': 'AIOSubtitles/1.0.0 (Stremio Addon)',
+        'User-Agent': `${USER_AGENT} (Stremio Addon)`,
         ...(options.headers || {})
       }
     });

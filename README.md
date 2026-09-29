@@ -1,236 +1,160 @@
 <div align="center">
 
-<img src="src/web/public/assets/AIOsubs_logo_wordmark.png" width="220" height="220" alt="AIOSubs logo">
+<img src="src/web/public/assets/subs2b_logo.png" width="160" height="160" alt="subs2b logo">
 
-# AIOSubs
+# subs2b
 
-**Universal subtitle aggregator for Stremio & Nuvio**
-
-![My Skills](https://skillicons.dev/icons?i=ts,nodejs,js,html,css,docker)
-[![Supabase](https://skillicons.dev/icons?i=supabase)](https://supabase.com/)
+**Subtitles for Stremio & Nuvio, matched automatically to the file you are playing**
 
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Render Deploy](https://img.shields.io/badge/deploy-Render-46E3B7.svg)](https://render.com/)
-
-<p align="center">
-    <a href="https://github.com/Augustofabg/AIOsubs/actions/workflows/docker-build.yml">
-        <img src="https://img.shields.io/github/actions/workflow/status/Augustofabg/AIOsubs/docker-build.yml?style=for-the-badge&logo=github" alt="Build Status">
-    </a>
-   <a href="https://github.com/Augustofabg/AIOsubs/releases/latest">
-        <img src="https://img.shields.io/github/v/release/Augustofabg/AIOsubs?style=for-the-badge&logo=github" alt="Latest Release">
-    </a>
-    <a href="https://github.com/Augustofabg/AIOsubs/stargazers">
-        <img src="https://img.shields.io/github/stars/Augustofabg/AIOsubs?style=for-the-badge&logo=github" alt="GitHub Stars">
-    </a>
-    <a href="https://github.com/Augustofabg/AIOsubs/network/members">
-        <img src="https://img.shields.io/github/forks/Augustofabg/AIOsubs?style=for-the-badge&logo=github" alt="GitHub Forks">
-    </a>
-</p>
+[![CI](https://github.com/robbie2b/subs2b/actions/workflows/ci.yml/badge.svg)](https://github.com/robbie2b/subs2b/actions/workflows/ci.yml)
 
 </div>
 
-## What is AIOSubs?
+## What is subs2b?
 
-AIOSubs was built to give you total control over subtitles in Stremio or Nuvio. Instead of juggling multiple subtitle addons, each with its own configuration and limitations, AIOSubs works as a central hub. It pulls results from all your configured sources, then deduplicates, filters, remaps languages, and formats everything according to your rules, delivering a single clean list right inside the player.
+subs2b is a Stremio/Nuvio subtitle addon that searches several sources at once, scores every subtitle
+against the file you are actually playing and puts the best match **first** in the list, so the player picks
+it on its own. There is nothing to choose by hand in the common case.
 
-Whether you're a casual user who just wants a tidy subtitle list, or someone who likes fine-tuning every detail, AIOSubs adapts to you.
+It is a fork of [AIOsubs](https://github.com/Augustofabg/AIOsubs), extended with the automatic scoring,
+Subs.ro, exact file-hash matching and a lot of clean-up. It does not host or distribute any subtitle files:
+it only asks the providers you configure and passes their results to your player.
 
-The configuration interface follows the same dark theme with purple accents made popular by **AIOStreams**. If you already use AIOStreams, the workflow will feel familiar.
+## How the best subtitle is chosen
 
-<img src="src/web/public/assets/readme/aiosubs_landing.png" alt="AIOSubs landing">
+When you press Play, the player (Stremio) tells the addon the **file name**, **size** and **hash** of the video.
+Every subtitle found is then compared with that file, in the spirit of Bazarr:
 
-
-## 📑 Table of Contents
-
-- [Features](#-features)
-- [How to run](#-how-to-run)
-- [Deploy on Render](#-deploy-on-render)
-- [Environment variables](#️-environment-variables)
-- [Tests](#-tests)
-<br>
-
-## ✨ Features
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-**- AIOStreams-style interface**
-Home screen with two paths: `Configure`, to start from scratch, or `Dashboard`, to load a saved configuration via UUID + password. A step-by-step wizard guides the whole setup, with no visual clutter.
-
-**- Native providers with real-time validation**
-Official support for **OpenSubtitles.com** (API v1), **SubDL**, and **Subsource**, each with its own field for the API key. The OpenSubtitles key is validated live (`✓ / ✗`), testing the actual connection to the service before proceeding.
-
-**- Free-form addon import**
-Paste the URL of any Stremio subtitle addon's `manifest.json` and AIOSubs imports it automatically. It detects the name and icon, and checks whether the addon actually exposes the `subtitles` resource. Each one can be enabled/disabled individually, with an option for parallel search across all of them.
-
-</td>
-<td width="50%" valign="top">
-
-**- No more "Unknown" subtitles**
-Language whitelist with flags (🇧🇷 `pob`, 🇵🇹 `por`, 🇺🇸 `eng`...). Remapping rules automatically unify regional variants (`pt-br` → `pob`, `pt` → `por`), and everything is canonicalized to **ISO 639-2** — no more broken tabs in the player.
-
-**- Smart deduplication**
-Compare by content hash, fuzzy release-name similarity (85%+), or both combined. Then simply reorder providers and addons by priority by dragging them in the list.
-
-**- Secure persistence**
-Configurations are saved in **Supabase**, with fallback to traditional PostgreSQL or a local file in development. Passwords are never stored in plain text — everything goes through **bcrypt** hashing before being saved.
-
-</td>
-</tr>
-</table>
-
-**📱 Install in seconds:** direct buttons for Stremio Desktop and Web, plus a QR Code generated on the spot to install on Nuvio or Stremio mobile without typing anything.
-
----
-
-## 🚀 How to run
-
-### Locally, with Node.js
-
-Prerequisites: **Node.js 20+** and **Git**.
-
-```bash
-# Clone the repository
-git clone https://github.com/Augustofabg/AIOsubs.git
-cd AIOsubs
-
-# Install dependencies
-npm install
-
-# (Optional) set up environment variables
-cp .env.example .env
-
-# Build the project
-npm run build
-
-# Development mode (with auto-reload)
-npm run dev
-
-# Or production
-npm start
-```
-
-Addresses available after starting:
-
-| Resource | URL |
+| Signal | Effect |
 | :--- | :--- |
-| Configuration interface | `http://localhost:7000/configure` |
-| Default manifest | `http://localhost:7000/manifest.json` |
-| Health check | `http://localhost:7000/health` |
+| Exact file-hash match (OpenSubtitles) | Always first: the subtitle was made for this exact file |
+| Same release group (`...-FLUX`) | Strong bonus |
+| Same source (WEB-DL, BluRay, REMUX, HDTV...) | Bonus; BluRay ↔ REMUX and WEB-DL ↔ WEBRip count as close |
+| Same resolution, streaming service (NF, AMZN, DSNP...), codec, edition (IMAX, Extended...) | Smaller bonuses |
+| Another title, another year, another season or episode | Removed from the list |
+| CAM / TS / HDTC recordings | Pushed to the end |
+| Subs.ro | Small bonus (it is the reference source for Romanian) |
 
-### With Docker
+If the player does not send the file name (see the Nuvio note below), subtitles are ranked by general
+quality instead (good source and resolution, exact year, popularity) and wrong titles/episodes are still removed.
+The scoring never returns an empty list: if everything would be rejected, the original order is kept.
 
-The repository includes a multi-stage `Dockerfile` based on Alpine, running with a non-privileged user.
+Everything is always searched and scored. The **Results** setting (Filters & Ordering → Results) only limits how many
+subtitles are *shown* to the player, best first.
+
+## Features
+
+- **Sources:** OpenSubtitles.com (API v1), SubDL, Subsource and Subs.ro, each with its own API key that is
+  validated live, plus any Stremio subtitle addon imported by its `manifest.json` URL.
+- **Language whitelist and remapping:** everything is normalized to ISO 639-2; free rules such as `pt-br → pob`.
+- **Deduplication** by download URL and release-name similarity, with provider priority.
+- **Results limit** to show only the best *N* subtitles.
+- **Configuration page** with UUID + password (bcrypt), install links and a QR code for mobile.
+- **Diagnostics** page with the last requests and how each subtitle was scored (see below).
+
+## Requirements
+
+- **API keys** (each user enters their own in the *Services* tab): [OpenSubtitles](https://www.opensubtitles.com/api)
+  (enable *Under development* for the key), [SubDL](https://subdl.com), [Subsource](https://subsource.net),
+  [Subs.ro](https://subs.ro/api). Use only the providers you want.
+- **Stremio** sends the file name and hash to subtitle addons. **Nuvio currently does not**
+  ([NuvioMobile#1979](https://github.com/NuvioMedia/NuvioMobile/issues/1979),
+  [NuvioDesktop#765](https://github.com/NuvioMedia/NuvioDesktop/issues/765)), so with Nuvio the ranking falls back to
+  general quality and the exact-file signals are unavailable.
+
+## Run it
+
+### Locally
+
+Node.js 20+ is required.
 
 ```bash
-docker build -t aiosubs .
-
-docker run -d \
-  -p 7000:7000 \
-  --name aiosubs \
-  --restart unless-stopped \
-  aiosubs
+git clone https://github.com/robbie2b/subs2b.git
+cd subs2b
+npm install
+cp .env.example .env      # optional
+npm run build
+npm start                 # or: npm run dev
 ```
 
-### With Docker Compose
+Open `http://localhost:7000/configure`, create a configuration, and install the addon in Stremio.
+
+### Docker
 
 ```bash
 docker compose up -d
-
-# Follow the logs
-docker compose logs -f
 ```
 
----
+Configurations are stored in `./data` unless `DATABASE_URL` points to a PostgreSQL database.
 
-## 🌐 Deploy on Render
+### Render (free plan)
 
-> [!TIP]
-> **Why Render?**
-> - **Automatic HTTPS** — Stremio Web and modern apps require a secure connection, and Render provides this for free.
-> - **Always online** — no need to keep your own computer running 24/7.
-> - **Zero network configuration** — no port forwarding, NAT, or DDNS required.
-> - **Direct Supabase integration** — configurations persist across deploys.
-> - **Continuous deployment** — every push to the `main` branch automatically ships a new version.
+1. Create a **Web Service** from this repository (runtime **Docker**, branch `main`). Every push to `main` redeploys.
+2. Add a PostgreSQL database (Render, Supabase, Neon...) and set its connection string as `DATABASE_URL`.
+   Without it, saved configurations are lost on every redeploy because the free plan has no persistent disk.
+3. Open `https://<your-service>.onrender.com/configure`.
 
-**1. Create the database on Supabase**
-1. Create a free account at [supabase.com](https://supabase.com/).
-2. Create a new project (e.g., `aiosubs-db`).
-3. In **Project Settings → API**, copy the **Project URL** and the **anon/service_role key**.
+The free plan sleeps after inactivity; the first request after a pause takes about a minute.
 
-**2. Create the web service on Render**
-1. Create an account at [render.com](https://render.com/).
-2. From the dashboard, click **New + → Web Service** and connect the `AIOsubs` repository (branch `main`).
-3. Fill in:
-
-   | Field | Value |
-   | :--- | :--- |
-   | Name | `AIOsubs` (or a name of your choice) |
-   | Region | The one closest to you |
-   | Branch | `main` |
-   | Runtime | `Node` |
-   | Build Command | `npm run render-build` |
-   | Start Command | `npm start` |
-   | Instance Type | `Free` |
-
-**3. Set the environment variables**
-
-| Variable | Value | Description |
-| :--- | :--- | :--- |
-| `PORT` | `7000` | Internal port the server listens on |
-| `NODE_ENV` | `production` | Runtime environment |
-| `BASE_URL` | `https://your-app.onrender.com` | Public URL generated by Render |
-| `SUPABASE_URL` | `https://xxxxxxxxxxxx.supabase.co` | URL of your Supabase project |
-| `SUPABASE_KEY` | `your-key-here` | Supabase API key |
-| `CACHE_TTL_MINUTES` | `30` | Cache duration for searches |
-
-> [!NOTE]
-> Want to offer default keys for users who don't want to set up their own? Also add `OPENSUBTITLES_API_KEY` and `SUBDL_API_KEY`.
-
-**4. Deploy**
-Click **Deploy Web Service** and wait for the build to finish — the log will show `🚀 AIOSubtitles Stremio Addon listening...`. Go to the generated URL at `/configure`, set things up through the interface, copy the link or scan the QR Code. Subtitles ready anywhere. 🎉
-
----
-
-## ⚙️ Environment variables
+## Environment variables
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `PORT` | `7000` | Port the HTTP server listens on |
-| `HOST` | `0.0.0.0` | Network listening host |
-| `BASE_URL` | `""` | Public absolute URL of the application |
-| `SUPABASE_URL` | `""` | URL of the Supabase instance |
-| `SUPABASE_KEY` | `""` | Public/secret Supabase API key |
-| `DATABASE_URL` | `""` | Alternative connection string for PostgreSQL |
-| `OPENSUBTITLES_API_KEY` | `""` | Server-level fallback OpenSubtitles key |
-| `SUBDL_API_KEY` | `""` | Server-level fallback SubDL key |
-| `CACHE_TTL_MINUTES` | `30` | Duration of the results LRU cache |
-| `RATE_LIMIT_MAX` | `150` | Maximum requests per minute |
-| `NODE_ENV` | `development` | Runtime environment |
+| `PORT` | `7000` | HTTP port |
+| `HOST` | `0.0.0.0` | Listening address |
+| `BASE_URL` | *(detected)* | Public URL of the addon, if it cannot be detected from the request |
+| `DATABASE_URL` | *(empty)* | PostgreSQL connection string. Empty: configurations go to `./data/configurations.json` |
+| `DATA_DIR` | `./data` | Folder for the local configuration file |
+| `OPENSUBTITLES_ADDON_MODE` | `parallel` | `parallel`: OpenSubtitles addons imported in the UI run together with the direct integration. `fallback`: only if the direct integration fails |
+| `SUBSRO_PROXY_URL`, `SUBSRO_PROXY_TOKEN` | *(empty)* | Optional relay for the Subs.ro API (see below) |
+| `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | `60000`, `150` | Rate limit of the subtitles endpoint |
 
----
+## Subs.ro and Cloudflare
 
-## 🧪 Tests
+The Subs.ro API sits behind Cloudflare, which challenges many datacenter IPs (Render included) with a
+"Just a moment" page, so the direct Subs.ro provider may report "blocked by Cloudflare". Options:
 
-Test suite covering the entire pipeline, from provider to final subtitle delivery:
+- Import the community **Subs.ro** Stremio addon in the *Addons* tab. Its results work with subs2b: the real file
+  names hidden in its links are decoded and scored like any other source.
+- Run the relay in [`scripts/cloudflare-subsro-relay.js`](scripts/cloudflare-subsro-relay.js) as a free Cloudflare
+  Worker and set `SUBSRO_PROXY_URL` / `SUBSRO_PROXY_TOKEN`. This helps only while Cloudflare accepts the Worker's traffic.
+- Ask Subs.ro to allow your server.
+
+## Diagnostics
+
+`https://<your-service>/<configuration-uuid>/debug/recent.json` lists the last requests: the file name and hash the
+player sent, how many subtitles each provider returned, what was filtered, and the top of the ranking with the reason
+for every score. It is kept in memory only (reset on restart) and needs the UUID of your configuration, which is
+already the credential of your addon, so do not share it.
+
+Render logs show the same information: lines starting with `Request`, `Scoring` and `[SCORE]`.
+
+## Security notes
+
+- The **configuration UUID is a secret**: it identifies your addon and unlocks your diagnostics. Do not post the addon URL.
+- Some subtitle links handed to the player contain the provider API key (OpenSubtitles direct, Subsource, Subs.ro
+  direct) because the player downloads through this server. Treat the links as private too.
+- The download proxy only fetches from subtitle sites (SubDL, Subsource, OpenSubtitles, Stremio's mirror) and ignores
+  files bigger than 10 MB inside archives.
+- Passwords are stored as bcrypt hashes and never logged.
+
+## Tests
 
 ```bash
-npm test                    # Run everything at once
-
-npm run test:providers      # Native providers and ISO 639-2 normalization
-npm run test:formatter      # Formatting and cleanup for players (Nuvio)
-npm run test:alignment      # Alignment/sync with fallback
-npm run test:supabase       # Cloud persistence and bcrypt security
-npm run test:validation     # Interface flow and OpenSubtitles headers
+npm test         # providers, pipeline, storage, scoring, fallback, HTTP endpoints (no network, no server needed)
+npm run lint     # type check
 ```
 
----
+`experiments/subsync/` holds offline tools used to study subtitle timing (not part of the addon).
 
-## ⚠️ Disclaimer
+## Disclaimer
 
-AIOSubs is a tool for aggregating and managing data from other Stremio subtitle addons. It does not host, store, or distribute any content. The developer does not endorse or promote access to copyrighted content. Users are solely responsible for complying with all applicable laws and the terms of service of any addons or services they use with AIOSubs.
+subs2b aggregates results from third-party subtitle services. It does not host, store or distribute any content.
+You are responsible for complying with the laws and the terms of service of the services you use.
 
-## 🙏 Credits
+## Credits
 
-This project wouldn't be possible without the foundational work of many others in the community, especially those who develop the addons that AIOSubs integrates. Special thanks to **[AIOStreams](https://github.com/Viren070/AIOStreams)**, the project that served as a direct inspiration for AIOSubs' interface and aggregation philosophy, to the developers of all integrated addons, and to the open-source projects that inspired parts of AIOSubs' design.
+Fork of [AIOsubs](https://github.com/Augustofabg/AIOsubs) by Augustofabg. The configuration interface follows the visual
+style of [AIOStreams](https://github.com/Viren070/AIOStreams). Thanks to the OpenSubtitles, SubDL, Subsource and Subs.ro
+teams and to the authors of the community Stremio subtitle addons.

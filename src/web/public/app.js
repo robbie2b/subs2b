@@ -1,7 +1,24 @@
 /**
- * AIOSubtitles — Frontend Application SPA
- * Following AIOStreams Visual and Logical Standards
+ * subs2b — configuration UI (single page application)
  */
+
+// Browser sessions saved under the previous name (aiosubtitles_*) are moved to the new keys,
+// so nobody is signed out by the rename
+(function migrateLegacyStorage() {
+  try {
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('aiosubtitles_')) {
+        const newKey = 'subs2b_' + key.slice('aiosubtitles_'.length);
+        if (localStorage.getItem(newKey) === null) {
+          localStorage.setItem(newKey, localStorage.getItem(key));
+        }
+        localStorage.removeItem(key);
+      }
+    });
+  } catch {
+    // storage unavailable: nothing to migrate
+  }
+})();
 
 const MDI_ICONS = {
   check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/></svg>',
@@ -18,14 +35,13 @@ const MDI_ICONS = {
   drag: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9,3H11V5H9V3M13,3H15V5H13V3M9,7H11V9H9V7M13,7H15V9H13V7M9,11H11V13H9V11M13,11H15V13H13V11M9,15H11V17H9V15M13,15H15V17H13V15M9,19H11V21H9V19M13,19H15V21H13V19Z"/></svg>',
   arrowUp: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"/></svg>',
   arrowDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11,4H13V16L18.5,10.5L19.92,11.92L12,19.84L4.08,11.92L5.5,10.5L11,16V4Z"/></svg>',
-  arrowRight: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"/></svg>',
   puzzle: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5,11H19V7C19,5.89 18.1,5 17,5H13V3.5A2.5,2.5 0 0,0 10.5,1A2.5,2.5 0 0,0 8,3.5V5H4A2,2 0 0,0 2,7V10.8H3.5C5,10.8 6.2,12 6.2,13.5C6.2,15 5,16.2 3.5,16.2H2V20A2,2 0 0,0 4,22H7.8V20.5C7.8,19 9,17.8 10.5,17.8C12,17.8 13.2,19 13.2,20.5V22H17A2,2 0 0,0 19,20V16H20.5A2.5,2.5 0 0,0 23,13.5A2.5,2.5 0 0,0 20.5,11Z"/></svg>'
 };
 
 const DEFAULT_CONFIG = {
-  instanceName: 'AIOSubs',
+  instanceName: 'subs2b',
   instanceDesc: 'Subtitle aggregator and organizer',
-  instanceLogo: '/assets/AIOsubs_logo_wordmark.png',
+  instanceLogo: '/assets/subs2b_logo.png',
   instanceVersion: 'v1.0.0',
   providers: {
     'opensubtitles': { enabled: false, apiKey: '' },
@@ -34,7 +50,6 @@ const DEFAULT_CONFIG = {
     'subsro': { enabled: false, apiKey: '' }
   },
   customAddons: [],
-  addonFetchingStrategy: 'default',
   providerPriority: [
     'opensubtitles',
     'subsro',
@@ -58,6 +73,7 @@ const DEFAULT_CONFIG = {
   providerTimeoutMs: 6000,
   deduplication: true,
   deduplicationStrategy: 'both',
+  maxSubtitles: 0,
   cacheTtlMinutes: 30
 };
 
@@ -70,7 +86,7 @@ const SERVICES_META = {
   subsro: {
     id: 'subsro',
     name: 'Subs.ro',
-    helpText: 'Nu ai o cheie? <a href="https://subs.ro/api" target="_blank" rel="noopener noreferrer">Creează un cont pe Subs.ro</a> și generează cheia API din profilul tău.'
+    helpText: 'Don\'t have a key? <a href="https://subs.ro/api" target="_blank" rel="noopener noreferrer">Create a free account on Subs.ro</a> and generate your API key from your profile.'
   },
   subdl: {
     id: 'subdl',
@@ -144,7 +160,7 @@ function showWizardView() {
 }
 
 function getNoDraftsSetting() {
-  return localStorage.getItem('aiosubtitles_no_drafts') === 'true';
+  return localStorage.getItem('subs2b_no_drafts') === 'true';
 }
 
 function notifyConfigChanged() {
@@ -152,11 +168,11 @@ function notifyConfigChanged() {
 
   if (isDirty) {
     if (!getNoDraftsSetting() && state.uuid) {
-      localStorage.setItem(`aiosubtitles_draft_${state.uuid}`, JSON.stringify(state.config));
+      localStorage.setItem(`subs2b_draft_${state.uuid}`, JSON.stringify(state.config));
     }
   } else {
     if (state.uuid) {
-      localStorage.removeItem(`aiosubtitles_draft_${state.uuid}`);
+      localStorage.removeItem(`subs2b_draft_${state.uuid}`);
     }
   }
 }
@@ -204,15 +220,6 @@ function generateUuid() {
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
-}
-
-function generateSecurePassword() {
-  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$';
-  let pass = '';
-  for (let i = 0; i < 16; i++) {
-    pass += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return pass;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -264,8 +271,8 @@ async function loadInitialConfiguration() {
 
   if (firstPart && isUuid(firstPart)) {
     state.uuid = firstPart;
-    localStorage.setItem('aiosubtitles_current_uuid', state.uuid);
-    const storedPass = localStorage.getItem(`aiosubtitles_pass_${state.uuid}`) || '';
+    localStorage.setItem('subs2b_current_uuid', state.uuid);
+    const storedPass = localStorage.getItem(`subs2b_pass_${state.uuid}`) || '';
     if (storedPass) {
       state.password = storedPass;
       try {
@@ -297,9 +304,9 @@ async function loadInitialConfiguration() {
   }
 
   if (firstPart === 'configure') {
-    const sessionUuid = localStorage.getItem('aiosubtitles_current_uuid');
+    const sessionUuid = localStorage.getItem('subs2b_current_uuid');
     if (sessionUuid && isUuid(sessionUuid)) {
-      const storedPass = localStorage.getItem(`aiosubtitles_pass_${sessionUuid}`) || '';
+      const storedPass = localStorage.getItem(`subs2b_pass_${sessionUuid}`) || '';
       if (storedPass) {
         try {
           const res = await fetch('/api/config/load', {
@@ -342,8 +349,8 @@ async function loadInitialConfiguration() {
     return;
   }
 
-  const sessionUuid = localStorage.getItem('aiosubtitles_current_uuid');
-  const storedPass = sessionUuid ? (localStorage.getItem(`aiosubtitles_pass_${sessionUuid}`) || '') : '';
+  const sessionUuid = localStorage.getItem('subs2b_current_uuid');
+  const storedPass = sessionUuid ? (localStorage.getItem(`subs2b_pass_${sessionUuid}`) || '') : '';
   if (sessionUuid && isUuid(sessionUuid)) {
     state.uuid = sessionUuid;
     state.password = storedPass;
@@ -360,7 +367,7 @@ async function loadInitialConfiguration() {
 
 function checkSavedDraft() {
   if (!getNoDraftsSetting() && state.uuid) {
-    const draft = localStorage.getItem(`aiosubtitles_draft_${state.uuid}`);
+    const draft = localStorage.getItem(`subs2b_draft_${state.uuid}`);
     if (draft && draft !== state.lastSavedConfigJson) {
       notifyConfigChanged();
     }
@@ -468,8 +475,8 @@ function applyConfigWithMigration(parsed) {
     merged.cacheTtlMinutes = parsed.cacheTtlMinutes;
   }
 
-  if (parsed.addonFetchingStrategy) {
-    merged.addonFetchingStrategy = parsed.addonFetchingStrategy;
+  if (typeof parsed.maxSubtitles === 'number') {
+    merged.maxSubtitles = parsed.maxSubtitles;
   }
 
   state.config = merged;
@@ -477,8 +484,8 @@ function applyConfigWithMigration(parsed) {
 
 function setupLandingActions() {
   document.getElementById('btn-landing-configure')?.addEventListener('click', async () => {
-    const sessionUuid = state.uuid || localStorage.getItem('aiosubtitles_current_uuid');
-    const storedPass = sessionUuid ? (state.password || localStorage.getItem(`aiosubtitles_pass_${sessionUuid}`) || '') : '';
+    const sessionUuid = state.uuid || localStorage.getItem('subs2b_current_uuid');
+    const storedPass = sessionUuid ? (state.password || localStorage.getItem(`subs2b_pass_${sessionUuid}`) || '') : '';
 
     if (sessionUuid && isUuid(sessionUuid)) {
       state.uuid = sessionUuid;
@@ -559,6 +566,10 @@ function setupNavigation() {
 
   document.getElementById('btn-continue-setup')?.addEventListener('click', () => {
     navigateToPage('services');
+  });
+
+  document.getElementById('btn-home-save-install')?.addEventListener('click', () => {
+    saveCurrentConfiguration(true);
   });
 }
 
@@ -710,14 +721,14 @@ function setupSignOutModal() {
     const allDevices = document.getElementById('check-signout-all-devices')?.checked;
 
     if (state.uuid) {
-      localStorage.removeItem(`aiosubtitles_pass_${state.uuid}`);
-      localStorage.removeItem(`aiosubtitles_draft_${state.uuid}`);
+      localStorage.removeItem(`subs2b_pass_${state.uuid}`);
+      localStorage.removeItem(`subs2b_draft_${state.uuid}`);
     }
-    localStorage.removeItem('aiosubtitles_current_uuid');
+    localStorage.removeItem('subs2b_current_uuid');
 
     if (allDevices) {
       Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('aiosubtitles_')) {
+        if (key.startsWith('subs2b_')) {
           localStorage.removeItem(key);
         }
       });
@@ -755,9 +766,9 @@ function renderHomeBranding() {
   const verEl = document.getElementById('home-instance-version');
   const imgEl = document.getElementById('home-logo-img');
   const sidebarImgEl = document.getElementById('sidebar-brand-img');
-  const defaultLogo = '/assets/AIOsubs_logo_wordmark.png';
+  const defaultLogo = '/assets/subs2b_logo.png';
 
-  if (nameEl) nameEl.textContent = state.config.instanceName || 'AIOSubs';
+  if (nameEl) nameEl.textContent = state.config.instanceName || 'subs2b';
   if (descEl) descEl.textContent = state.config.instanceDesc || 'Subtitle aggregator and organizer';
   if (verEl) verEl.textContent = state.config.instanceVersion || 'v1.0.0';
 
@@ -1120,16 +1131,6 @@ function setupAddonsActions() {
     }
   });
 
-    const selectFetching = document.getElementById('select-fetching-strategy');
-  if (selectFetching) {
-    selectFetching.value = state.config.addonFetchingStrategy || 'default';
-    setupCustomSelect('wrap-fetching-strategy', 'select-fetching-strategy', (val) => {
-      state.config.addonFetchingStrategy = val;
-      notifyConfigChanged();
-      showToast(`Strategy changed to: ${val === 'sequential' ? 'Sequential (Priority)' : 'Default (Parallel)'}`);
-    });
-  }
-
   document.getElementById('btn-save-edit-addon')?.addEventListener('click', () => {
     const id = document.getElementById('edit-addon-id').value;
     const name = document.getElementById('edit-addon-name').value.trim();
@@ -1384,6 +1385,60 @@ function setupFiltersActions() {
     });
   }
 
+  setupMaxSubtitlesUI();
+}
+
+const MAX_SUBTITLES_LIMIT = 200;
+
+/** Clamps the subtitle limit to 0 (show all) .. 200 and stores it in the configuration */
+function syncMaxSubtitles(newVal) {
+  let val = parseInt(newVal, 10);
+  if (isNaN(val) || val < 0) val = 0;
+  if (val > MAX_SUBTITLES_LIMIT) val = MAX_SUBTITLES_LIMIT;
+  state.config.maxSubtitles = val;
+  renderMaxSubtitles();
+  updateStats();
+  notifyConfigChanged();
+}
+
+function renderMaxSubtitles() {
+  const val = Number.isFinite(state.config.maxSubtitles) ? state.config.maxSubtitles : 0;
+  const input = document.getElementById('input-max-subtitles');
+  if (input && document.activeElement !== input) input.value = val;
+
+  const hint = document.getElementById('max-subtitles-hint');
+  if (hint) {
+    hint.textContent = val === 0
+      ? 'All subtitles found are shown, best match first.'
+      : `Only the best ${val} subtitle${val === 1 ? '' : 's'} will be shown, best match first.`;
+  }
+
+  document.querySelectorAll('[data-max-subtitles]').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.maxSubtitles, 10) === val);
+  });
+}
+
+function setupMaxSubtitlesUI() {
+  const input = document.getElementById('input-max-subtitles');
+  if (input) {
+    input.addEventListener('input', () => {
+      const val = parseInt(input.value, 10);
+      if (!isNaN(val) && val >= 0 && val <= MAX_SUBTITLES_LIMIT) syncMaxSubtitles(val);
+    });
+    input.addEventListener('change', () => syncMaxSubtitles(input.value));
+  }
+
+  document.getElementById('btn-max-subtitles-up')?.addEventListener('click', () => {
+    syncMaxSubtitles((state.config.maxSubtitles || 0) + 1);
+  });
+  document.getElementById('btn-max-subtitles-down')?.addEventListener('click', () => {
+    syncMaxSubtitles((state.config.maxSubtitles || 0) - 1);
+  });
+  document.querySelectorAll('[data-max-subtitles]').forEach(btn => {
+    btn.addEventListener('click', () => syncMaxSubtitles(btn.dataset.maxSubtitles));
+  });
+
+  renderMaxSubtitles();
 }
 
 function setupCustomSelect(wrapId, hiddenInputId, onChange) {
@@ -2078,7 +2133,7 @@ function setupInstallPageActions() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `aiosubtitles-backup-${(state.uuid || 'config').slice(0, 8)}.json`;
+    a.download = `subs2b-backup-${(state.uuid || 'config').slice(0, 8)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -2215,9 +2270,9 @@ function setupInstallPageActions() {
       state.isConfigCreated = true;
       state.lastSavedConfigJson = JSON.stringify(state.config);
 
-      localStorage.setItem('aiosubtitles_current_uuid', state.uuid);
+      localStorage.setItem('subs2b_current_uuid', state.uuid);
       if (remember) {
-        localStorage.setItem(`aiosubtitles_pass_${state.uuid}`, state.password);
+        localStorage.setItem(`subs2b_pass_${state.uuid}`, state.password);
       }
 
       window.history.replaceState(null, '', `/${state.uuid}/configure`);
@@ -2248,7 +2303,7 @@ function setupInstallPageActions() {
     (val) => {
       state.password = val.trim();
       if (state.uuid && state.isConfigCreated) {
-        localStorage.setItem(`aiosubtitles_pass_${state.uuid}`, state.password);
+        localStorage.setItem(`subs2b_pass_${state.uuid}`, state.password);
       }
     }
   );
@@ -2339,7 +2394,7 @@ async function saveCurrentConfiguration(andShowInstall = false) {
   }
 
   if (!state.password && state.uuid) {
-    state.password = localStorage.getItem(`aiosubtitles_pass_${state.uuid}`) || '';
+    state.password = localStorage.getItem(`subs2b_pass_${state.uuid}`) || '';
   }
 
   if (!state.password) {
@@ -2390,9 +2445,9 @@ async function saveCurrentConfiguration(andShowInstall = false) {
     state.isConfigCreated = true;
     state.lastSavedConfigJson = JSON.stringify(state.config);
     if (state.uuid) {
-      localStorage.setItem('aiosubtitles_current_uuid', state.uuid);
-      localStorage.setItem(`aiosubtitles_pass_${state.uuid}`, state.password);
-      localStorage.removeItem(`aiosubtitles_draft_${state.uuid}`);
+      localStorage.setItem('subs2b_current_uuid', state.uuid);
+      localStorage.setItem(`subs2b_pass_${state.uuid}`, state.password);
+      localStorage.removeItem(`subs2b_draft_${state.uuid}`);
     }
     notifyConfigChanged();
 
@@ -2418,7 +2473,7 @@ function renderInstallPageDetails(animateTransition = false) {
   const loadExistingBtn = document.getElementById('btn-trigger-load-config');
 
   if (state.uuid && !state.password) {
-    state.password = localStorage.getItem(`aiosubtitles_pass_${state.uuid}`) || '';
+    state.password = localStorage.getItem(`subs2b_pass_${state.uuid}`) || '';
   }
   const isAuthenticated = Boolean(state.isConfigCreated && state.uuid && state.password);
 
@@ -2525,7 +2580,7 @@ function openDashboardLoginModal(prefillUuid = '') {
   if (errBox) errBox.style.display = 'none';
 
   if (uuidInput) {
-    uuidInput.value = prefillUuid || localStorage.getItem('aiosubtitles_current_uuid') || '';
+    uuidInput.value = prefillUuid || localStorage.getItem('subs2b_current_uuid') || '';
   }
   if (passInput) {
     passInput.value = '';
@@ -2595,8 +2650,8 @@ function setupDashboardLoginModal() {
       state.uuid = data.uuid;
       state.password = pass;
       state.isConfigCreated = true;
-      localStorage.setItem('aiosubtitles_current_uuid', state.uuid);
-      localStorage.setItem(`aiosubtitles_pass_${state.uuid}`, state.password);
+      localStorage.setItem('subs2b_current_uuid', state.uuid);
+      localStorage.setItem(`subs2b_pass_${state.uuid}`, state.password);
 
       applyConfigWithMigration(data.config);
       state.lastSavedConfigJson = JSON.stringify(state.config);
@@ -2674,8 +2729,8 @@ function setupModals() {
 
       state.uuid = data.uuid;
       state.password = pass;
-      localStorage.setItem('aiosubtitles_current_uuid', state.uuid);
-      localStorage.setItem(`aiosubtitles_pass_${state.uuid}`, state.password);
+      localStorage.setItem('subs2b_current_uuid', state.uuid);
+      localStorage.setItem(`subs2b_pass_${state.uuid}`, state.password);
 
       applyConfigWithMigration(data.config);
       renderAll();
@@ -2721,7 +2776,7 @@ async function openNuvioModal() {
         if (data.dataUrl) {
           qrBox.innerHTML = `<img src="${data.dataUrl}" alt="Installation QR Code" width="180" height="180" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: block; margin: 0 auto; background: #fff; padding: 4px;">`;
         } else {
-          throw new Error('Sem dataUrl');
+          throw new Error('No dataUrl in the response');
         }
       } else {
         throw new Error('HTTP error');
@@ -2740,7 +2795,7 @@ async function openNuvioModal() {
           }
         });
       } else {
-        qrBox.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(manifestUrl)}" alt="QR Code" width="180" height="180" style="border-radius: 8px; display: block; margin: 0 auto; background: #fff; padding: 4px;">`;
+        qrBox.textContent = 'Could not generate the QR code. Use the install link instead.';
       }
     }
   }
@@ -2761,7 +2816,12 @@ function updateStats() {
   const statAddon = document.getElementById('stat-active-addons');
   const statLangs = document.getElementById('stat-active-langs');
   const statDedup = document.getElementById('stat-dedup-status');
+  const statLimit = document.getElementById('stat-max-subtitles');
 
+  if (statLimit) {
+    const limit = state.config.maxSubtitles || 0;
+    statLimit.textContent = limit > 0 ? `Best ${limit}` : 'All';
+  }
   if (statSvc) statSvc.textContent = `${activeSvcCount} Active`;
   if (statAddon) statAddon.textContent = `${activeAddonCount} Installed`;
   if (statLangs) {
@@ -2773,7 +2833,7 @@ function updateStats() {
       statDedup.textContent = 'Disabled';
       statDedup.className = 'stat-value';
     } else {
-      const strat = state.config.deduplicationStrategy === 'hash' ? 'Hash' : (state.config.deduplicationStrategy === 'fuzzy' ? 'Fuzzy' : 'Both');
+      const strat = state.config.deduplicationStrategy === 'hash' ? 'Same URL' : (state.config.deduplicationStrategy === 'fuzzy' ? 'Similar release' : 'Both');
       statDedup.textContent = `Enabled (${strat})`;
       statDedup.className = 'stat-value highlight';
     }
@@ -2789,6 +2849,7 @@ function renderAll() {
   renderRemapList();
   renderFiltersPriority();
   renderInstallPageDetails();
+  renderMaxSubtitles();
   updateStats();
 }
 

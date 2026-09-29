@@ -1,10 +1,12 @@
 import { UserConfig, PartialUserConfig, CustomAddonConfig } from '../types/config';
 import { isUuid, configStorage } from '../storage/configStore';
 
+export const DEFAULT_LOGO = '/assets/subs2b_logo.png';
+
 export const DEFAULT_USER_CONFIG: UserConfig = {
-  instanceName: 'AIOSubs',
+  instanceName: 'subs2b',
   instanceDesc: 'Subtitle aggregator and organizer',
-  instanceLogo: '/assets/AIOsubs_logo_wordmark.png',
+  instanceLogo: DEFAULT_LOGO,
   instanceVersion: 'v1.0.0',
   providers: {
     'opensubtitles': { enabled: false, apiKey: '' },
@@ -13,7 +15,6 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'subsro': { enabled: false, apiKey: '' }
   },
   customAddons: [],
-  addonFetchingStrategy: 'default',
   providerPriority: [
     'opensubtitles',
     'subsro',
@@ -37,28 +38,21 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   providerTimeoutMs: 6000,
   deduplication: true,
   deduplicationStrategy: 'both',
+  maxSubtitles: 0,
   cacheTtlMinutes: 30
 };
 
-export function encodeUserConfig(config: UserConfig): string {
-  const json = JSON.stringify(config);
-  return Buffer.from(json, 'utf8')
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
+/** Values saved by earlier versions (when the project was called AIOsubs) that are upgraded automatically */
+const LEGACY_NAMES = new Set(['aiosubs', 'aiosubtitles']);
+const LEGACY_LOGO = '/assets/AIOsubs_logo_wordmark.png';
 
+/**
+ * Decodes a configuration passed directly in the URL (base64 JSON). Kept for old install links;
+ * configurations saved from the UI are looked up by UUID instead (see decodeUserConfigAsync).
+ */
 export function decodeUserConfig(encodedStr?: string | null): UserConfig {
   if (!encodedStr || encodedStr.trim() === '' || encodedStr === 'default') {
     return { ...DEFAULT_USER_CONFIG };
-  }
-
-  if (isUuid(encodedStr)) {
-    const stored = configStorage.getConfigByUuid(encodedStr);
-    if (stored) {
-      return mergeWithDefaults(stored);
-    }
   }
 
   try {
@@ -102,6 +96,10 @@ export async function decodeUserConfigAsync(encodedStr?: string | null): Promise
   return decodeUserConfig(encodedStr);
 }
 
+function cleanText(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback;
+}
+
 export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
   const customAddons: CustomAddonConfig[] = Array.isArray(partial.customAddons)
     ? partial.customAddons
@@ -130,39 +128,41 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
         })
     : [];
 
-  // Migration for legacy provider ids: map opensubtitles-rest / opensubtitles-v3 -> opensubtitles, drop deprecated addic7ed
-  let rawPriority: string[] = [];
-  if (Array.isArray(partial.providerPriority) && partial.providerPriority.length > 0) {
+  // Migration of provider ids used by older versions: opensubtitles-rest / opensubtitles-v3 -> opensubtitles,
+  // and the removed addic7ed provider is dropped
+  const providerPriority: string[] = [];
+  if (Array.isArray(partial.providerPriority)) {
     for (const item of partial.providerPriority) {
-      let mapped = item;
-      if (item === 'opensubtitles-rest' || item === 'opensubtitles-v3') {
-        mapped = 'opensubtitles';
-      }
-      if (mapped === 'addic7ed') {
-        continue;
-      }
-      if (!rawPriority.includes(mapped)) {
-        rawPriority.push(mapped);
+      const mapped = item === 'opensubtitles-rest' || item === 'opensubtitles-v3' ? 'opensubtitles' : item;
+      if (mapped !== 'addic7ed' && !providerPriority.includes(mapped)) {
+        providerPriority.push(mapped);
       }
     }
   }
-  if (rawPriority.length === 0) {
-    rawPriority = [...DEFAULT_USER_CONFIG.providerPriority];
+  if (providerPriority.length === 0) {
+    providerPriority.push(...DEFAULT_USER_CONFIG.providerPriority);
   }
 
+  const rawRemap = (partial.language_remapping && typeof partial.language_remapping === 'object')
+    ? partial.language_remapping
+    : ((partial.languageRemap && typeof partial.languageRemap === 'object')
+      ? partial.languageRemap
+      : DEFAULT_USER_CONFIG.languageRemap);
+  const cleanRemap: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawRemap)) {
+    if (typeof v === 'string' && k.trim() && v.trim()) {
+      cleanRemap[k.trim().toLowerCase()] = v.trim().toLowerCase();
+    }
+  }
+
+  const name = cleanText(partial.instanceName, DEFAULT_USER_CONFIG.instanceName as string);
+  const logo = cleanText(partial.instanceLogo, DEFAULT_LOGO);
+
   const result: UserConfig = {
-    instanceName: typeof partial.instanceName === 'string' && partial.instanceName.trim() !== ''
-      ? partial.instanceName.trim()
-      : DEFAULT_USER_CONFIG.instanceName,
-    instanceDesc: typeof partial.instanceDesc === 'string' && partial.instanceDesc.trim() !== ''
-      ? partial.instanceDesc.trim()
-      : DEFAULT_USER_CONFIG.instanceDesc,
-    instanceLogo: typeof partial.instanceLogo === 'string' && partial.instanceLogo.trim() !== ''
-      ? partial.instanceLogo.trim()
-      : DEFAULT_USER_CONFIG.instanceLogo,
-    instanceVersion: typeof partial.instanceVersion === 'string' && partial.instanceVersion.trim() !== ''
-      ? partial.instanceVersion.trim()
-      : DEFAULT_USER_CONFIG.instanceVersion,
+    instanceName: LEGACY_NAMES.has(name.toLowerCase()) ? (DEFAULT_USER_CONFIG.instanceName as string) : name,
+    instanceDesc: cleanText(partial.instanceDesc, DEFAULT_USER_CONFIG.instanceDesc as string),
+    instanceLogo: logo === LEGACY_LOGO ? DEFAULT_LOGO : logo,
+    instanceVersion: cleanText(partial.instanceVersion, DEFAULT_USER_CONFIG.instanceVersion as string),
     providers: {
       'opensubtitles': { enabled: false, apiKey: '' },
       'subdl': { enabled: false, apiKey: '' },
@@ -170,32 +170,15 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
       'subsro': { enabled: false, apiKey: '' }
     },
     customAddons,
-    addonFetchingStrategy: partial.addonFetchingStrategy === 'fastest' ? 'fastest' : 'default',
-    providerPriority: rawPriority,
+    providerPriority,
     languages: Array.isArray(partial.languages) && partial.languages.length > 0
       ? partial.languages.map(l => l.trim().toLowerCase())
       : [...DEFAULT_USER_CONFIG.languages],
     allowUnknownLanguages: typeof partial.allowUnknownLanguages === 'boolean'
       ? partial.allowUnknownLanguages
       : DEFAULT_USER_CONFIG.allowUnknownLanguages,
-    ...(() => {
-      const rawRemap = (partial.language_remapping && typeof partial.language_remapping === 'object')
-        ? partial.language_remapping
-        : ((partial.languageRemap && typeof partial.languageRemap === 'object')
-          ? partial.languageRemap
-          : DEFAULT_USER_CONFIG.languageRemap);
-
-      const cleanRemap: Record<string, string> = {};
-      for (const [k, v] of Object.entries(rawRemap)) {
-        if (typeof k === 'string' && typeof v === 'string' && k.trim() && v.trim()) {
-          cleanRemap[k.trim().toLowerCase()] = v.trim().toLowerCase();
-        }
-      }
-      return {
-        languageRemap: cleanRemap,
-        language_remapping: cleanRemap
-      };
-    })(),
+    languageRemap: cleanRemap,
+    language_remapping: cleanRemap,
     providerTimeoutMs: typeof partial.providerTimeoutMs === 'number'
       ? Math.max(2000, Math.min(15000, partial.providerTimeoutMs))
       : DEFAULT_USER_CONFIG.providerTimeoutMs,
@@ -205,6 +188,9 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
     deduplicationStrategy: (partial.deduplicationStrategy === 'hash' || partial.deduplicationStrategy === 'fuzzy')
       ? partial.deduplicationStrategy
       : 'both',
+    maxSubtitles: typeof partial.maxSubtitles === 'number' && isFinite(partial.maxSubtitles)
+      ? Math.max(0, Math.min(200, Math.round(partial.maxSubtitles)))
+      : DEFAULT_USER_CONFIG.maxSubtitles,
     cacheTtlMinutes: typeof partial.cacheTtlMinutes === 'number'
       ? Math.max(1, Math.min(1440, partial.cacheTtlMinutes))
       : DEFAULT_USER_CONFIG.cacheTtlMinutes
@@ -214,26 +200,15 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
     for (const [key, val] of Object.entries(partial.providers)) {
       if (!val || typeof val !== 'object') continue;
 
-      let targetKey = key;
-      if (key === 'opensubtitles-rest' || key === 'opensubtitles-v3') {
-        targetKey = 'opensubtitles';
-      } else if (key === 'addic7ed') {
-        continue;
-      }
+      const targetKey = key === 'opensubtitles-rest' || key === 'opensubtitles-v3' ? 'opensubtitles' : key;
+      if (!result.providers[targetKey]) continue;
 
-      if (result.providers[targetKey]) {
-        const apiKey = typeof val.apiKey === 'string' ? val.apiKey.trim() : (result.providers[targetKey]?.apiKey || '');
-        const hasApiKey = Boolean(apiKey && apiKey.trim() !== '');
-        const enabled = hasApiKey ? (typeof val.enabled === 'boolean' ? val.enabled : false) : false;
-
-        result.providers[targetKey] = {
-          enabled,
-          apiKey,
-          username: typeof val.username === 'string' ? val.username.trim() : undefined,
-          password: typeof val.password === 'string' ? val.password : undefined,
-          customEndpoint: typeof val.customEndpoint === 'string' ? val.customEndpoint.trim() : undefined
-        };
-      }
+      // A provider can only be enabled when it has an API key
+      const apiKey = typeof val.apiKey === 'string' ? val.apiKey.trim() : '';
+      result.providers[targetKey] = {
+        enabled: apiKey !== '' && val.enabled === true,
+        apiKey
+      };
     }
   }
 

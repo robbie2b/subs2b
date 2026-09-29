@@ -1,303 +1,169 @@
-import { getAllProviders } from '../src/providers';
-import { GenericStremioAddonProvider } from '../src/providers/genericStremioAddon';
-import { validateAndNormalizeLanguage } from '../src/utils/normalizer';
-import { RawSubtitleItem } from '../src/types/provider';
-import { getAggregatedSubtitles } from '../src/core/aggregator';
-import { DEFAULT_USER_CONFIG, mergeWithDefaults, decodeUserConfig } from '../src/config/userConfig';
-import { UserConfig } from '../src/types/config';
-import { globalSubtitleCache } from '../src/utils/cache';
-import { configStorage, isUuid } from '../src/storage/configStore';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 import AdmZip from 'adm-zip';
 import zlib from 'zlib';
 import iconv from 'iconv-lite';
-import { decompressBuffer, toCleanUtf8, validateAndFormatSubtitle } from '../src/proxy/subtitleProxy';
 
-console.log('🧪 Iniciando suíte de testes de validação do AIO Subtitles...\n');
+// Keep the test isolated: never touch a real database or the project's data directory
+process.env.DATABASE_URL = '';
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'subs2b-test-'));
 
-// 1. Validate exactly 3 registered built-in providers: OpenSubtitles, SubDL, Subsource
-console.log('--- Teste 1: Validação de Provedores Nativos Definitivos ---');
-const providers = getAllProviders();
-const expectedIds = ['opensubtitles', 'subdl', 'subsource', 'subsro'];
+import { getAllProviders } from '../src/providers';
+import { GenericStremioAddonProvider } from '../src/providers/genericStremioAddon';
+import { validateAndNormalizeLanguage } from '../src/utils/normalizer';
+import { RawSubtitleItem, SubtitleQuery } from '../src/types/provider';
+import { getAggregatedSubtitles } from '../src/core/aggregator';
+import { DEFAULT_USER_CONFIG, mergeWithDefaults, decodeUserConfigAsync } from '../src/config/userConfig';
+import { UserConfig } from '../src/types/config';
+import { globalSubtitleCache } from '../src/utils/cache';
+import { configStorage, isUuid } from '../src/storage/configStore';
+import {
+  decompressBuffer,
+  toCleanUtf8,
+  validateAndFormatSubtitle,
+  isAllowedDownloadUrl
+} from '../src/proxy/subtitleProxy';
 
-if (providers.length !== 4) {
-  console.error(`❌ Esperava exatamente 4 provedores nativos, encontrou ${providers.length}!`);
-  process.exit(1);
+let failures = 0;
+
+function check(ok: boolean, label: string, details?: unknown): void {
+  if (ok) {
+    console.log(`  ✅ ${label}`);
+  } else {
+    failures++;
+    console.error(`  ❌ FAILED: ${label}`, details !== undefined ? JSON.stringify(details) : '');
+  }
 }
 
-for (const p of providers) {
-  if (!expectedIds.includes(p.id)) {
-    console.error(`❌ Provedor não autorizado encontrado: [${p.id}] -> "${p.name}"`);
-    process.exit(1);
-  }
-  if (!p.name || p.name.trim() === '' || p.name.toLowerCase() === 'desconhecido') {
-    console.error(`❌ Provedor ${p.id} tem name inválido ou "Desconhecido": "${p.name}"`);
-    process.exit(1);
-  }
-  if (p.requiresApiKey !== true) {
-    console.error(`❌ Provedor ${p.id} deve ter requiresApiKey === true!`);
-    process.exit(1);
-  }
-  console.log(`  ✅ Provedor nativo verificado: [${p.id}] -> "${p.name}" (requiresApiKey: true)`);
+function section(title: string): void {
+  console.log(`\n--- ${title} ---`);
 }
 
-// 2. Validate GenericStremioAddonProvider with custom imported manifests
-console.log('\n--- Teste 2: Provedores Genéricos Importados por Manifest URL ---');
-const testCustomAddons = [
-  { id: 'community-subtitles', name: 'Legendas Brasil VIP', url: 'https://subs.example.com/manifest.json' },
-  { id: 'titlovi-stremio', name: 'Titlovi Official', url: 'stremio://titlovi.com/manifest.json' },
-  { id: 'auto-fallback-test', name: '', url: 'https://fallback.example.com/manifest.json' }
-];
-
-for (const custom of testCustomAddons) {
-  const genericProv = new GenericStremioAddonProvider(custom.id, custom.name, custom.url);
-
-  if (!genericProv.id) {
-    console.error(`❌ GenericStremioAddonProvider gerou ID vazio!`);
-    process.exit(1);
-  }
-
-  if (!genericProv.name || genericProv.name.trim() === '' || genericProv.name.toLowerCase() === 'desconhecido') {
-    console.error(`❌ GenericStremioAddonProvider gerou name inválido ou "Desconhecido": "${genericProv.name}"`);
-    process.exit(1);
-  }
-
-  console.log(`  ✅ Provedor genérico importado verificado: [${genericProv.id}] -> "${genericProv.name}"`);
+/** Seeds the search cache with raw provider results, as if the providers had just answered */
+function seedCache(query: SubtitleQuery, config: UserConfig, items: RawSubtitleItem[]): void {
+  const enabled = Object.keys(config.providers).filter(id => config.providers[id]?.enabled !== false);
+  globalSubtitleCache.set(
+    globalSubtitleCache.generateKey(query.id, config.languages, enabled, query.season, query.episode),
+    items
+  );
 }
 
-// 3. Test Provider ID & Subtitle Item Integrity
-console.log('\n--- Teste 3: Integridade de Provedores e Itens de Legenda ---');
-const mockItems: RawSubtitleItem[] = [
+function makeQuery(id: string, season: number, episode: number): SubtitleQuery {
+  return { type: 'series', id, imdbId: id.split(':')[0], season, episode, kitsuId: null };
+}
+
+async function main(): Promise<void> {
+  console.log('🧪 Running the subs2b validation suite...');
+
+  // 1. Registered built-in providers
+  section('Test 1: built-in providers');
+  const providers = getAllProviders();
+  const expectedIds = ['opensubtitles', 'subdl', 'subsource', 'subsro'];
+  check(providers.length === expectedIds.length, `exactly ${expectedIds.length} built-in providers`, providers.map(p => p.id));
+  for (const p of providers) {
+    check(expectedIds.includes(p.id), `provider [${p.id}] is expected`);
+    check(Boolean(p.name && p.name.trim()), `provider [${p.id}] has a name ("${p.name}")`);
+    check(p.requiresApiKey === true, `provider [${p.id}] requires an API key`);
+  }
+
+  // 2. Imported Stremio addons
+  section('Test 2: generic providers imported from a manifest URL');
+  const customAddons = [
+    { id: 'community-subtitles', name: 'Community Subs VIP', url: 'https://subs.example.com/manifest.json' },
+    { id: 'titlovi-stremio', name: 'Titlovi Official', url: 'stremio://titlovi.com/manifest.json' },
+    { id: 'auto-fallback-test', name: '', url: 'https://fallback.example.com/manifest.json' }
+  ];
+  for (const custom of customAddons) {
+    const prov = new GenericStremioAddonProvider(custom.id, custom.name, custom.url);
+    check(Boolean(prov.id) && Boolean(prov.name.trim()), `imported provider [${prov.id}] -> "${prov.name}"`);
+  }
+
+  // 3. Language normalization
+  section('Test 3: language normalization');
+  for (const raw of ['pt-br', 'por', 'en', 'english', 'spa', 'pob', 'fre']) {
+    const result = validateAndNormalizeLanguage(raw, false);
+    check(result.valid && Boolean(result.normalizedLang), `"${raw}" -> "${result.normalizedLang}"`);
+  }
+  for (const raw of ['xxx-broken', '', 'invalid_code_123', 'unknown']) {
+    check(!validateAndNormalizeLanguage(raw, false).valid, `invalid language "${raw}" is discarded`);
+  }
+  const unknownAllowed = validateAndNormalizeLanguage('xxx-broken', true);
+  check(unknownAllowed.valid && unknownAllowed.normalizedLang === 'und', 'unknown language maps to "und" when allowed', unknownAllowed);
+
+  // 4. Aggregation pipeline keeps the original id / url and normalizes the language
+  section('Test 4: aggregation pipeline');
   {
-    id: 'test-1',
-    provider: 'opensubtitles',
-    providerName: 'OpenSubtitles',
-    url: 'https://api.opensubtitles.com/download/sub1.srt',
-    lang: 'pob',
-    release: '1080p.BluRay-SPARKS'
-  },
-  {
-    id: 'test-2',
-    provider: 'custom-sub-addon',
-    providerName: 'Custom Community Subs',
-    url: 'https://example.com/sub2.srt',
-    lang: 'eng',
-    release: 'WEBRip-AMZN'
-  }
-];
-
-for (const item of mockItems) {
-  if (!item.provider || !item.url || !item.lang) {
-    console.error(`❌ Item inválido:`, item);
-    process.exit(1);
-  }
-  console.log(`  ✅ Item de legenda íntegro: [${item.provider}] lang=${item.lang} url=${item.url}`);
-}
-
-// 4. Test Language Normalization & Desconhecido category prevention
-console.log('\n--- Teste 4: Normalização de Idiomas & Prevenção de Categoria "Desconhecido" ---');
-const validLanguagesTest = ['pt-br', 'por', 'en', 'english', 'spa', 'pob', 'fre'];
-for (const raw of validLanguagesTest) {
-  const result = validateAndNormalizeLanguage(raw, false);
-  if (!result.valid || !result.normalizedLang) {
-    console.error(`❌ Falha: Idioma válido "${raw}" não foi reconhecido!`);
-    process.exit(1);
-  }
-  console.log(`  ✅ Idioma "${raw}" normalizado para ISO 639-2: "${result.normalizedLang}"`);
-}
-
-// Invalid languages must be discarded when allowUnknown is false
-const invalidLanguagesTest = ['xxx-broken', '', 'invalid_code_123', 'desconhecido', 'unknown'];
-for (const raw of invalidLanguagesTest) {
-  const result = validateAndNormalizeLanguage(raw, false);
-  if (result.valid) {
-    console.error(`❌ Falha crítica: Idioma inválido "${raw}" não foi descartado!`);
-    process.exit(1);
-  }
-  console.log(`  ✅ Idioma inválido "${raw}" descartado com sucesso: motivo "${result.discardedReason}"`);
-}
-
-// When allowUnknown is true, must map to standard 'und' (undetermined)
-const resultUnknown = validateAndNormalizeLanguage('xxx-broken', true);
-if (!resultUnknown.valid || resultUnknown.normalizedLang !== 'und') {
-  console.error(`❌ Falha: Idioma não identificado com allowUnknown não mapeou para 'und':`, resultUnknown);
-  process.exit(1);
-}
-console.log(`  ✅ Idioma não identificado com allowUnknown=true mapeado para "und"`);
-
-// 5. Integration Test: Pipeline returns direct original id, normalized lang, and direct url
-console.log('\n--- Teste 5: Validação do Pipeline Direto (sem templates/proxies) ---');
-
-async function runPipelineIntegrationTest(): Promise<void> {
-  const mockRawExternalSubtitles: RawSubtitleItem[] = [
-    {
+    const query = makeQuery('tt0903747:1:1', 1, 1);
+    const config: UserConfig = {
+      ...DEFAULT_USER_CONFIG,
+      languages: ['pob', 'eng'],
+      languageRemap: { 'pt-br': 'pob', 'por': 'pob' },
+      allowUnknownLanguages: false,
+      deduplication: true
+    };
+    seedCache(query, config, [{
       id: 'sub-ext-101',
       provider: 'external-addon',
       providerName: 'External Subs Addon',
       url: 'https://subs5.strem.io/en/download/file/1952160592.srt',
-      lang: 'pt-BR', // BCP-47 requiring normalization to pob
+      lang: 'pt-BR',
       release: 'Breaking.Bad.S01E01.720p.HDTV.x264'
-    }
-  ];
+    }]);
 
-  const testQuery = {
-    type: 'series',
-    id: 'tt0903747:1:1',
-    imdbId: 'tt0903747',
-    season: 1,
-    episode: 1
-  };
-
-  const testUserConfig: UserConfig = {
-    ...DEFAULT_USER_CONFIG,
-    languages: ['pob', 'eng'], // Whitelist pob
-    languageRemap: { 'pt-br': 'pob', 'por': 'pob' },
-    allowUnknownLanguages: false,
-    deduplication: true
-  };
-
-  // Seed the cache with raw subtitle to simulate connector execution
-  const enabledIds = Object.keys(testUserConfig.providers).filter(
-    id => testUserConfig.providers[id]?.enabled !== false
-  );
-  const testCacheKey = globalSubtitleCache.generateKey(
-    testQuery.id,
-    testUserConfig.languages,
-    enabledIds,
-    testQuery.season,
-    testQuery.episode
-  );
-  globalSubtitleCache.set(testCacheKey, mockRawExternalSubtitles);
-
-  // Execute pipeline
-  const testBaseUrl = 'http://localhost:7000';
-  const finalResponse = await getAggregatedSubtitles(testQuery, testUserConfig, testBaseUrl);
-
-  if (!finalResponse.subtitles || finalResponse.subtitles.length !== 1) {
-    console.error(`❌ Falha: Esperava 1 legenda na resposta final, recebeu ${finalResponse.subtitles?.length}`);
-    process.exit(1);
+    const response = await getAggregatedSubtitles(query, config, 'http://localhost:7000');
+    check(response.subtitles.length === 1, 'one subtitle in the final response', response.subtitles.length);
+    const sub = response.subtitles[0];
+    check(sub?.lang === 'pob', 'language normalized to "pob"', sub?.lang);
+    check(sub?.id === 'sub-ext-101', 'original id preserved', sub?.id);
+    check(sub?.url === 'https://subs5.strem.io/en/download/file/1952160592.srt', 'original url preserved', sub?.url);
   }
 
-  const finalSub = finalResponse.subtitles[0];
-
-  // (a) lang normalizado para pob
-  if (finalSub.lang !== 'pob') {
-    console.error(`❌ Falha no critério (a): lang esperado "pob", recebeu "${finalSub.lang}"`);
-    process.exit(1);
+  // 5. Services default state and API key rules
+  section('Test 5: services start disabled and need an API key');
+  for (const id of ['opensubtitles', 'subdl', 'subsource', 'subsro']) {
+    check(DEFAULT_USER_CONFIG.providers[id]?.enabled === false, `provider ${id} starts disabled`);
   }
-  console.log(`  ✅ (a) lang normalizado com sucesso para: "${finalSub.lang}"`);
-
-  // (b) id original preservado diretamente
-  if (finalSub.id !== 'sub-ext-101') {
-    console.error(`❌ Falha no critério (b): id esperado "sub-ext-101", recebeu "${finalSub.id}"`);
-    process.exit(1);
-  }
-  console.log(`  ✅ (b) id original preservado: "${finalSub.id}"`);
-
-  // (c) url original preservada diretamente
-  if (finalSub.url !== 'https://subs5.strem.io/en/download/file/1952160592.srt') {
-    console.error(`❌ Falha no critério (c): url esperada original, recebeu "${finalSub.url}"`);
-    process.exit(1);
-  }
-  console.log(`  ✅ (c) url original preservada diretamente: "${finalSub.url}"`);
-}
-
-async function runAllTests(): Promise<void> {
-  await runPipelineIntegrationTest();
-
-  // 6. Test Services Default State (enabled: false) and Rules
-  console.log('\n--- Teste 6: Estado Inicial dos Serviços (Todos OFF) & Regras de API Key ---');
-  for (const pId of ['opensubtitles', 'subdl', 'subsource']) {
-    const pCfg = DEFAULT_USER_CONFIG.providers[pId];
-    if (!pCfg || pCfg.enabled !== false) {
-      console.error(`❌ Provedor ${pId} não começou desativado (enabled: false) no DEFAULT_USER_CONFIG!`);
-      process.exit(1);
-    }
-    console.log(`  ✅ Provedor ${pId} inicia com enabled: false`);
-  }
-
-  // Test mergeWithDefaults enforces enabled: false if apiKey is empty
   const mergedNoKey = mergeWithDefaults({
-    providers: {
-      opensubtitles: { enabled: true, apiKey: '' },
-      subdl: { enabled: true, apiKey: '   ' }
-    }
+    providers: { opensubtitles: { enabled: true, apiKey: '' }, subdl: { enabled: true, apiKey: '   ' } }
   });
-  if (mergedNoKey.providers.opensubtitles?.enabled !== false || mergedNoKey.providers.subdl?.enabled !== false) {
-    console.error(`❌ Falha: mergeWithDefaults permitiu serviço ON sem API Key válida!`);
-    process.exit(1);
-  }
-  console.log(`  ✅ mergeWithDefaults bloqueia ativação sem apiKey (força enabled: false)`);
+  check(
+    mergedNoKey.providers.opensubtitles?.enabled === false && mergedNoKey.providers.subdl?.enabled === false,
+    'a service cannot be enabled without an API key'
+  );
+  const mergedWithKey = mergeWithDefaults({ providers: { opensubtitles: { enabled: true, apiKey: 'valid-test-key-123' } } });
+  check(mergedWithKey.providers.opensubtitles?.enabled === true, 'a service with an API key can be enabled');
 
-  const mergedWithKey = mergeWithDefaults({
-    providers: {
-      opensubtitles: { enabled: true, apiKey: 'valid-test-key-123' }
-    }
-  });
-  if (mergedWithKey.providers.opensubtitles?.enabled !== true) {
-    console.error(`❌ Falha: mergeWithDefaults não ativou serviço com apiKey informada!`);
-    process.exit(1);
-  }
-  console.log(`  ✅ mergeWithDefaults permite ativação quando apiKey é fornecida`);
-
-  // 7. Test UUID & Bcrypt Password Storage
-  console.log('\n--- Teste 7: Sistema de Persistência UUID + Senha (bcrypt) ---');
+  // 6. Configuration storage (UUID + bcrypt password)
+  section('Test 6: UUID + password storage');
   const testUuid = '51c97db4-03b7-4ec2-875d-e3a755c564b9';
   const testPassword = 'SuperSecretPassword!@#123';
+  check(isUuid(testUuid), 'isUuid recognizes a valid UUID');
 
-  if (!isUuid(testUuid)) {
-    console.error(`❌ isUuid falhou ao reconhecer UUID válido: ${testUuid}`);
-    process.exit(1);
-  }
-
-  // Save config
-  const saveRes = configStorage.saveConfig(testUuid, testPassword, {
+  const saveRes = await configStorage.saveConfigAsync(testUuid, testPassword, {
     ...DEFAULT_USER_CONFIG,
     instanceName: 'Test Instance With UUID'
   });
+  check(saveRes.success, 'configuration saved for the UUID', saveRes);
 
-  if (!saveRes.success) {
-    console.error(`❌ configStorage.saveConfig falhou:`, saveRes.error);
-    process.exit(1);
-  }
-  console.log(`  ✅ Configuração salva com sucesso associada ao UUID ${testUuid}`);
+  const retrieved = await configStorage.getConfigByUuidAsync(testUuid);
+  check(retrieved?.instanceName === 'Test Instance With UUID', 'getConfigByUuidAsync returns the stored configuration');
 
-  // Verify getConfigByUuid resolves stored config
-  const retrievedByUuid = configStorage.getConfigByUuid(testUuid);
-  if (!retrievedByUuid || retrievedByUuid.instanceName !== 'Test Instance With UUID') {
-    console.error(`❌ configStorage.getConfigByUuid falhou ao carregar a configuração.`);
-    process.exit(1);
-  }
-  console.log(`  ✅ configStorage.getConfigByUuid recuperou com sucesso a configuração`);
+  const decoded = await decodeUserConfigAsync(testUuid);
+  check(decoded.instanceName === 'Test Instance With UUID', 'decodeUserConfigAsync(uuid) resolves the stored configuration');
 
-  // Verify decodeUserConfig(uuid) resolves stored config
-  const decodedFromUuid = decodeUserConfig(testUuid);
-  if (decodedFromUuid.instanceName !== 'Test Instance With UUID') {
-    console.error(`❌ decodeUserConfig(uuid) não recuperou a configuração salva no store!`);
-    process.exit(1);
-  }
-  console.log(`  ✅ decodeUserConfig(uuid) resolveu perfeitamente a configuração armazenada`);
+  const authOk = await configStorage.authenticateAndGetConfigAsync(testUuid, testPassword);
+  check(authOk.success && Boolean(authOk.config), 'authentication with the right password works');
 
-  // Test correct password authentication
-  const authSuccess = configStorage.authenticateAndGetConfig(testUuid, testPassword);
-  if (!authSuccess.success || !authSuccess.config) {
-    console.error(`❌ configStorage.authenticateAndGetConfig falhou com senha correta!`);
-    process.exit(1);
-  }
-  console.log(`  ✅ Autenticação com senha correta funcionou com sucesso`);
+  const authFail = await configStorage.authenticateAndGetConfigAsync(testUuid, 'WrongPassword123');
+  check(!authFail.success && authFail.error === 'Invalid UUID or password.', 'wrong password gets a generic error', authFail);
 
-  // Test incorrect password authentication
-  const authFail = configStorage.authenticateAndGetConfig(testUuid, 'WrongPassword123');
-  if (authFail.success || authFail.error !== 'UUID ou senha inválidos.') {
-    console.error(`❌ configStorage.authenticateAndGetConfig não rejeitou senha incorreta com mensagem padrão!`, authFail);
-    process.exit(1);
-  }
-  console.log(`  ✅ Autenticação com senha incorreta retornou erro seguro: "${authFail.error}"`);
+  const authUnknown = await configStorage.authenticateAndGetConfigAsync('00000000-0000-4000-8000-000000000000', testPassword);
+  check(!authUnknown.success, 'unknown UUID is rejected');
 
-  // 8. Test Language Remapping on Native Services (OpenSubtitles, SubDL) & Addons + Joint Deduplication
-  console.log('\n--- Teste 8: Validação do Remapeamento Global de Idiomas em Services (OpenSubtitles, SubDL) e Addons + Deduplicação Conjunta ---');
-  
-  // 8.1 Consistency of provider language codes normalization & remapping
-  const providerLanguagesTest = [
+  // 7. Language remapping across providers + joint deduplication
+  section('Test 7: language remapping and joint deduplication');
+  const providerLanguages = [
     { raw: 'pt-pt', expected: 'pob' },
     { raw: 'pt-br', expected: 'pob' },
     { raw: 'Portuguese (Brazil)', expected: 'pob' },
@@ -309,273 +175,170 @@ async function runAllTests(): Promise<void> {
     { raw: 'por', expected: 'pob' },
     { raw: 'pob', expected: 'pob' }
   ];
-
-  const testRemapRules = { 'por': 'pob', 'pt-pt': 'pob', 'pt-br': 'pob' };
-
-  for (const { raw, expected } of providerLanguagesTest) {
-    const res = validateAndNormalizeLanguage(raw, false, testRemapRules);
-    if (!res.valid || res.normalizedLang !== expected) {
-      console.error(`❌ Falha no Teste 8.1: Idioma "${raw}" deveria ser remapeado para "${expected}", recebeu "${res.normalizedLang}"`);
-      process.exit(1);
-    }
-  }
-  console.log('  ✅ Todos os códigos de provedores (OpenSubtitles, SubDL, Addons) foram padronizados e remapeados para "pob" com sucesso');
-
-  // 8.2 End-to-end pipeline test with multi-provider results and joint deduplication
-  const multiProviderRawSubtitles: RawSubtitleItem[] = [
-    {
-      id: 'os-sub-1',
-      provider: 'opensubtitles',
-      providerName: 'OpenSubtitles',
-      url: 'https://api.opensubtitles.com/download/sub1.srt',
-      lang: 'pt-pt', // OpenSubtitles returns pt-pt
-      release: 'Stranger.Things.S01E01.720p.WEBRip.x264'
-    },
-    {
-      id: 'subdl-sub-2',
-      provider: 'subdl',
-      providerName: 'SubDL',
-      url: 'https://dl.subdl.com/sub2.srt',
-      lang: 'Portuguese (Portugal)', // SubDL returns Portuguese (Portugal)
-      release: 'Stranger Things S01E01 720p WEBRip x264' // Duplicate release of os-sub-1
-    },
-    {
-      id: 'subdl-sub-3',
-      provider: 'subdl',
-      providerName: 'SubDL',
-      url: 'https://dl.subdl.com/sub3.srt',
-      lang: 'Portuguese (BR)', // SubDL returns Portuguese (BR)
-      release: 'Stranger Things S01E01 1080p NF WEBRip'
-    },
-    {
-      id: 'addon-sub-4',
-      provider: 'community-addon',
-      providerName: 'Community Addon',
-      url: 'https://example.com/sub4.srt',
-      lang: 'por', // Addon returns por
-      release: 'Stranger Things S01E01 480p HDTV'
-    }
-  ];
-
-  const remapTestQuery = {
-    type: 'series',
-    id: 'tt4574334:1:1',
-    imdbId: 'tt4574334',
-    season: 1,
-    episode: 1
-  };
-
-  const remapUserConfig: UserConfig = {
-    ...DEFAULT_USER_CONFIG,
-    providers: {
-      'opensubtitles': { enabled: true, apiKey: 'test-os-key' },
-      'subdl': { enabled: true, apiKey: 'test-subdl-key' },
-      'subsource': { enabled: false, apiKey: '' }
-    },
-    languages: ['pob'], // Strict whitelist: pob only
-    languageRemap: { 'por': 'pob', 'pt-pt': 'pob', 'pt-br': 'pob' },
-    deduplication: true,
-    providerPriority: ['opensubtitles', 'subdl', 'community-addon']
-  };
-
-  // Seed cache to simulate provider responses
-  const enabledProviderIds = Object.keys(remapUserConfig.providers).filter(
-    id => remapUserConfig.providers[id]?.enabled !== false
-  );
-  const remapCacheKey = globalSubtitleCache.generateKey(
-    remapTestQuery.id,
-    remapUserConfig.languages,
-    enabledProviderIds,
-    remapTestQuery.season,
-    remapTestQuery.episode
-  );
-  globalSubtitleCache.set(remapCacheKey, multiProviderRawSubtitles);
-
-  const remapResponse = await getAggregatedSubtitles(remapTestQuery, remapUserConfig, 'http://localhost:7000');
-
-  // Verify all returned subtitles have lang === 'pob'
-  for (const s of remapResponse.subtitles) {
-    if (s.lang !== 'pob') {
-      console.error(`❌ Falha no Teste 8.2: Subtitle id "${s.id}" vazou lang "${s.lang}" em vez de "pob"!`);
-      process.exit(1);
-    }
-  }
-  console.log(`  ✅ 100% das legendas finais (${remapResponse.subtitles.length} itens) possuem lang: "pob"`);
-
-  // Verify deduplication merged the duplicate between OpenSubtitles and SubDL
-  if (remapResponse.subtitles.length !== 3) {
-    console.error(`❌ Falha no Teste 8.2: Deduplicação conjunta falhou. Esperava 3 legendas, recebeu ${remapResponse.subtitles.length}`);
-    process.exit(1);
-  }
-  console.log('  ✅ Deduplicação conjunta funcionou perfeitamente entre OpenSubtitles e SubDL sob a mesma linguagem remapeada');
-
-  // Verify higher priority provider was kept for the duplicated release (opensubtitles)
-  const remainingIds = remapResponse.subtitles.map(s => s.id);
-  if (!remainingIds.includes('os-sub-1') || remainingIds.includes('subdl-sub-2')) {
-    console.error('❌ Falha no Teste 8.2: Prioridade de provedores na deduplicação conjunta falhou!', remainingIds);
-    process.exit(1);
-  }
-  // 9. Subtitle Delivery Validation (ZIP Decompression, Charset sanitization, WEBVTT & SRT Index 1 rules)
-  console.log('\n--- Teste 9: Validação Crítica de Entrega de Legendas (ZIP, UTF-8, WEBVTT & SRT 1) ---');
-
-  // 9.1 Decompressão ZIP (SubDL/Subsource)
-  const zip = new AdmZip();
-  const sampleSrtContent = '1\n00:00:01,000 --> 00:00:04,000\nOlá mundo, acentuação: ação e coração\n\n';
-  zip.addFile('Breaking.Bad.S01E01.720p.srt', Buffer.from(sampleSrtContent, 'utf8'));
-  const zipBuffer = zip.toBuffer();
-
-  const decompressedZip = decompressBuffer(zipBuffer);
-  if (!decompressedZip.filename || !decompressedZip.filename.endsWith('.srt')) {
-    console.error('❌ Falha no Teste 9.1: decompressBuffer não localizou o arquivo .srt dentro do ZIP!');
-    process.exit(1);
-  }
-  const cleanZipText = toCleanUtf8(decompressedZip.buffer);
-  if (!cleanZipText.includes('ação e coração')) {
-    console.error('❌ Falha no Teste 9.1: Conteúdo extraído do ZIP está corrompido!');
-    process.exit(1);
-  }
-  console.log('  ✅ Decompressão ZIP em memória funcionou com sucesso (arquivo .srt extraído preservando diacríticos)');
-
-  // 9.2 Decompressão GZIP (OpenSubtitles)
-  const gzBuffer = zlib.gzipSync(Buffer.from('1\n00:00:01,000 --> 00:00:04,000\nLegenda OpenSubtitles Gzip', 'utf8'));
-  const decompressedGz = decompressBuffer(gzBuffer);
-  const cleanGzText = toCleanUtf8(decompressedGz.buffer);
-  if (!cleanGzText.includes('Legenda OpenSubtitles Gzip')) {
-    console.error('❌ Falha no Teste 9.2: decompressBuffer não descompactou GZIP!');
-    process.exit(1);
-  }
-  console.log('  ✅ Decompressão GZIP em memória funcionou com sucesso');
-
-  // 9.3 Sanitização de Charset: UTF-16 LE com BOM e sem BOM
-  const utf16LeWithBom = Buffer.concat([
-    Buffer.from([0xff, 0xfe]),
-    iconv.encode('1\n00:00:01,000 --> 00:00:04,000\nTexto UTF-16 LE com BOM', 'utf16le')
-  ]);
-  const decodedUtf16 = toCleanUtf8(utf16LeWithBom);
-  if (!decodedUtf16.includes('Texto UTF-16 LE com BOM') || decodedUtf16.charCodeAt(0) === 0xfeff) {
-    console.error('❌ Falha no Teste 9.3: toCleanUtf8 não decodificou UTF-16 LE com BOM corretamente!');
-    process.exit(1);
-  }
-  console.log('  ✅ UTF-16 LE com BOM decodificado para UTF-8 limpo sem BOM residual');
-
-  // 9.4 Sanitização de Charset: Windows-1252 / ISO-8859-1
-  const win1252Buf = iconv.encode('1\n00:00:01,000 --> 00:00:04,000\nNão é possível', 'win1252');
-  const decodedWin1252 = toCleanUtf8(win1252Buf);
-  if (!decodedWin1252.includes('Não é possível')) {
-    console.error('❌ Falha no Teste 9.4: toCleanUtf8 falhou ao recuperar caracteres do Windows-1252!');
-    process.exit(1);
-  }
-  console.log('  ✅ Legenda legada Windows-1252 recuperada com sucesso para UTF-8');
-
-  // 9.5 Remoção estrita de BOM UTF-8
-  const utf8WithBom = Buffer.from('\uFEFF1\n00:00:01,000 --> 00:00:04,000\nSem BOM');
-  const cleanedBom = toCleanUtf8(utf8WithBom);
-  if (cleanedBom.charCodeAt(0) === 0xfeff || !cleanedBom.startsWith('1')) {
-    console.error('❌ Falha no Teste 9.5: BOM UTF-8 não foi removido!');
-    process.exit(1);
-  }
-  console.log('  ✅ BOM UTF-8 (\\uFEFF) removido com sucesso');
-
-  // 9.6 Validação de Formato SRT: Garantir início com índice numérico 1
-  const rawSrtWithoutIndex = '00:00:01,000 --> 00:00:04,000\nFala sem índice inicial\n\n2\n00:00:05,000 --> 00:00:08,000\nSegunda fala';
-  const srtValidation = validateAndFormatSubtitle(rawSrtWithoutIndex, 'srt');
-  if (!srtValidation.valid || !srtValidation.content.startsWith('1\n')) {
-    console.error('❌ Falha no Teste 9.6: validateAndFormatSubtitle não iniciou o .srt estritamente com índice 1!');
-    process.exit(1);
-  }
-  console.log('  ✅ Arquivo .srt validado e corrigido para iniciar estritamente com índice numérico 1');
-
-  // 9.7 Validação de Formato VTT: Garantir início com WEBVTT e conversão de vírgula para ponto
-  const rawVttWithoutHeader = '1\n00:00:01,000 --> 00:00:04,000\nLegenda vtt sem header';
-  const vttValidation = validateAndFormatSubtitle(rawVttWithoutHeader, 'vtt');
-  if (!vttValidation.valid || !vttValidation.content.startsWith('WEBVTT\n\n') || !vttValidation.content.includes('00:00:01.000')) {
-    console.error('❌ Falha no Teste 9.7: validateAndFormatSubtitle não normalizou formato WebVTT corretamente!');
-    process.exit(1);
-  }
-  console.log('  ✅ Arquivo .vtt normalizado com sucesso com cabeçalho WEBVTT e timestamps com ponto (.)');
-
-  // 9.8 Rejeição de Respostas de Erro (JSON ou HTML ou Vazio)
-  const emptyValidation = validateAndFormatSubtitle('', 'srt');
-  const jsonErrValidation = validateAndFormatSubtitle('{"message": "Unauthorized", "status": 401}', 'srt');
-  const htmlErrValidation = validateAndFormatSubtitle('<!DOCTYPE html><html><body>502 Bad Gateway</body></html>', 'srt');
-  if (emptyValidation.valid || jsonErrValidation.valid || htmlErrValidation.valid) {
-    console.error('❌ Falha no Teste 9.8: Respostas inválidas/vazias não foram rejeitadas!');
-    process.exit(1);
-  }
-  console.log('  ✅ Payloads corrompidos (vazio, JSON de erro de API, HTML de proxy) rejeitados com sucesso');
-
-  // 9.9 Verificação de URLs dos Provedores Nativos e Addons
-  const subdlProvider = providers.find(p => p.id === 'subdl')!;
-  const subsourceProvider = providers.find(p => p.id === 'subsource')!;
-  if (!subdlProvider || !subsourceProvider) {
-    console.error('❌ Falha no Teste 9.9: Provedores subdl ou subsource não encontrados!');
-    process.exit(1);
-  }
-  console.log('  ✅ Provedores subdl e subsource roteiam através de /sub/proxy para descompactação transparente');
-
-  // --- Teste 10: Remapeamento Livre e Bidirecional N:N de Idiomas (language_remapping) ---
-  console.log('\n--- Teste 10: Remapeamento Livre e Bidirecional N:N de Idiomas (language_remapping) ---');
-  const arbitraryRules = {
-    'eng': 'pob',
-    'pt-br': 'eng',
-    'por': 'pob',
-    'spa': 'por'
-  };
-
-  // 10.1 Resolução direta e isolamento de regras (sem distorção de múltiplos saltos indesejados)
-  const resEng = validateAndNormalizeLanguage('eng', false, arbitraryRules);
-  const resPtBr = validateAndNormalizeLanguage('pt-br', false, arbitraryRules);
-  const resSpa = validateAndNormalizeLanguage('spa', false, arbitraryRules);
-  const resPor = validateAndNormalizeLanguage('por', false, arbitraryRules);
-  const resPtPt = validateAndNormalizeLanguage('pt-pt', false, arbitraryRules);
-  const resFra = validateAndNormalizeLanguage('fra', false, arbitraryRules);
-
-  if (resEng.normalizedLang !== 'pob') {
-    console.error(`❌ Falha no Teste 10.1: "eng" deveria mapear para "pob", mas retornou "${resEng.normalizedLang}"`);
-    process.exit(1);
-  }
-  if (resPtBr.normalizedLang !== 'eng') {
-    console.error(`❌ Falha no Teste 10.1: "pt-br" deveria mapear para "eng", mas retornou "${resPtBr.normalizedLang}"`);
-    process.exit(1);
-  }
-  if (resSpa.normalizedLang !== 'por') {
-    console.error(`❌ Falha no Teste 10.1: "spa" deveria mapear para "por", mas retornou "${resSpa.normalizedLang}"`);
-    process.exit(1);
-  }
-  if (resPor.normalizedLang !== 'pob') {
-    console.error(`❌ Falha no Teste 10.1: "por" deveria mapear para "pob", mas retornou "${resPor.normalizedLang}"`);
-    process.exit(1);
-  }
-  if (resPtPt.normalizedLang !== 'pob') {
-    console.error(`❌ Falha no Teste 10.1: "pt-pt" deveria mapear para "pob", mas retornou "${resPtPt.normalizedLang}"`);
-    process.exit(1);
-  }
-  if (resFra.normalizedLang !== 'fra') {
-    console.error(`❌ Falha no Teste 10.1: "fra" não mapeado deveria permanecer "fra", mas retornou "${resFra.normalizedLang}"`);
-    process.exit(1);
-  }
-  console.log('  ✅ Mapeamentos arbitrários resolvidos com precisão (eng -> pob, pt-br -> eng, spa -> por, por -> pob)');
-  console.log('  ✅ Regra específica "pt-br -> eng" preservada sem ser sobrescrita por "eng -> pob"');
-
-  // 10.2 Sincronização e persistência no payload de configuração
-  const configWithNewRemapping = mergeWithDefaults({
-    language_remapping: {
-      'eng': 'pob',
-      'pt-br': 'eng'
-    }
+  const remapRules = { 'por': 'pob', 'pt-pt': 'pob', 'pt-br': 'pob' };
+  const allRemapped = providerLanguages.every(({ raw, expected }) => {
+    const res = validateAndNormalizeLanguage(raw, false, remapRules);
+    return res.valid && res.normalizedLang === expected;
   });
-  if (!configWithNewRemapping.language_remapping || configWithNewRemapping.language_remapping['eng'] !== 'pob' || configWithNewRemapping.languageRemap['eng'] !== 'pob') {
-    console.error('❌ Falha no Teste 10.2: language_remapping não sincronizado com languageRemap em mergeWithDefaults!');
+  check(allRemapped, 'every Portuguese spelling from the providers is remapped to "pob"');
+
+  {
+    const query = makeQuery('tt4574334:1:1', 1, 1);
+    const config: UserConfig = {
+      ...DEFAULT_USER_CONFIG,
+      providers: {
+        'opensubtitles': { enabled: true, apiKey: 'test-os-key' },
+        'subdl': { enabled: true, apiKey: 'test-subdl-key' },
+        'subsource': { enabled: false, apiKey: '' }
+      },
+      languages: ['pob'],
+      languageRemap: remapRules,
+      deduplication: true,
+      providerPriority: ['opensubtitles', 'subdl', 'community-addon']
+    };
+    seedCache(query, config, [
+      { id: 'os-sub-1', provider: 'opensubtitles', providerName: 'OpenSubtitles', url: 'https://api.opensubtitles.com/download/sub1.srt', lang: 'pt-pt', release: 'Stranger.Things.S01E01.720p.WEBRip.x264' },
+      { id: 'subdl-sub-2', provider: 'subdl', providerName: 'SubDL', url: 'https://dl.subdl.com/sub2.srt', lang: 'Portuguese (Portugal)', release: 'Stranger Things S01E01 720p WEBRip x264' },
+      { id: 'subdl-sub-3', provider: 'subdl', providerName: 'SubDL', url: 'https://dl.subdl.com/sub3.srt', lang: 'Portuguese (BR)', release: 'Stranger Things S01E01 1080p NF WEBRip' },
+      { id: 'addon-sub-4', provider: 'community-addon', providerName: 'Community Addon', url: 'https://example.com/sub4.srt', lang: 'por', release: 'Stranger Things S01E01 480p HDTV' }
+    ]);
+
+    const response = await getAggregatedSubtitles(query, config, 'http://localhost:7000');
+    check(response.subtitles.every(s => s.lang === 'pob'), 'every final subtitle has lang "pob"');
+    check(response.subtitles.length === 3, 'the duplicate between OpenSubtitles and SubDL was merged', response.subtitles.length);
+    const ids = response.subtitles.map(s => s.id);
+    check(ids.includes('os-sub-1') && !ids.includes('subdl-sub-2'), 'the higher priority provider kept the duplicated release', ids);
+  }
+
+  // 8. Subtitle delivery: archives, charsets and format rules
+  section('Test 8: subtitle delivery (ZIP, GZIP, charsets, WEBVTT/SRT rules)');
+  {
+    const zip = new AdmZip();
+    zip.addFile('Breaking.Bad.S01E01.720p.srt', Buffer.from('1\n00:00:01,000 --> 00:00:04,000\nCafé résumé naïve, déjà vu\n\n', 'utf8'));
+    const unzipped = decompressBuffer(zip.toBuffer());
+    check(Boolean(unzipped.filename?.endsWith('.srt')), 'the .srt is found inside the ZIP', unzipped.filename);
+    check(toCleanUtf8(unzipped.buffer).includes('Café résumé naïve'), 'ZIP content keeps its diacritics');
+
+    const gz = decompressBuffer(zlib.gzipSync(Buffer.from('1\n00:00:01,000 --> 00:00:04,000\nGzip subtitle', 'utf8')));
+    check(toCleanUtf8(gz.buffer).includes('Gzip subtitle'), 'GZIP is decompressed');
+
+    const hugeZip = new AdmZip();
+    hugeZip.addFile('huge.srt', Buffer.alloc(11 * 1024 * 1024, 65));
+    check(decompressBuffer(hugeZip.toBuffer()).filename === undefined, 'an oversized file inside an archive is ignored');
+
+    const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), iconv.encode('1\n00:00:01,000 --> 00:00:04,000\nUTF-16 LE text', 'utf16le')]);
+    const decodedUtf16 = toCleanUtf8(utf16);
+    check(decodedUtf16.includes('UTF-16 LE text') && decodedUtf16.charCodeAt(0) !== 0xfeff, 'UTF-16 LE with BOM is decoded without a leftover BOM');
+
+    const win1252 = toCleanUtf8(iconv.encode('1\n00:00:01,000 --> 00:00:04,000\nCafé déjà vu', 'win1252'));
+    check(win1252.includes('Café déjà vu'), 'legacy Windows-1252 text is recovered');
+
+    const noBom = toCleanUtf8(Buffer.from('﻿1\n00:00:01,000 --> 00:00:04,000\nNo BOM'));
+    check(noBom.charCodeAt(0) !== 0xfeff && noBom.startsWith('1'), 'UTF-8 BOM is removed');
+
+    const srt = validateAndFormatSubtitle('00:00:01,000 --> 00:00:04,000\nNo index\n\n2\n00:00:05,000 --> 00:00:08,000\nSecond', 'srt');
+    check(srt.valid && srt.content.startsWith('1\n'), '.srt output starts with cue index 1');
+
+    const vtt = validateAndFormatSubtitle('1\n00:00:01,000 --> 00:00:04,000\nVTT without header', 'vtt');
+    check(vtt.valid && vtt.content.startsWith('WEBVTT\n\n') && vtt.content.includes('00:00:01.000'), '.vtt output has the WEBVTT header and dot timestamps');
+
+    check(!validateAndFormatSubtitle('', 'srt').valid, 'an empty payload is rejected');
+    check(!validateAndFormatSubtitle('{"message": "Unauthorized", "status": 401}', 'srt').valid, 'a JSON error payload is rejected');
+    check(!validateAndFormatSubtitle('<!DOCTYPE html><html><body>502 Bad Gateway</body></html>', 'srt').valid, 'an HTML error page is rejected');
+  }
+
+  // 9. Arbitrary bidirectional N:N remapping
+  section('Test 9: free bidirectional language remapping');
+  {
+    const rules = { 'eng': 'pob', 'pt-br': 'eng', 'por': 'pob', 'spa': 'por' };
+    const lang = (raw: string) => validateAndNormalizeLanguage(raw, false, rules).normalizedLang;
+    check(lang('eng') === 'pob', '"eng" -> "pob"', lang('eng'));
+    check(lang('pt-br') === 'eng', '"pt-br" -> "eng" (not overwritten by "eng" -> "pob")', lang('pt-br'));
+    check(lang('spa') === 'por', '"spa" -> "por"', lang('spa'));
+    check(lang('por') === 'pob', '"por" -> "pob"', lang('por'));
+    check(lang('pt-pt') === 'pob', '"pt-pt" -> "pob"', lang('pt-pt'));
+    check(lang('fra') === 'fra', 'an unmapped language stays as it is', lang('fra'));
+
+    const merged = mergeWithDefaults({ language_remapping: { 'eng': 'pob', 'pt-br': 'eng' } });
+    check(
+      merged.language_remapping?.['eng'] === 'pob' && merged.languageRemap['eng'] === 'pob',
+      'language_remapping and languageRemap stay in sync'
+    );
+  }
+
+  // 10. Maximum number of subtitles shown to the player
+  section('Test 10: subtitle limit');
+  {
+    const query = makeQuery('tt1000001:1:1', 1, 1);
+    const items: RawSubtitleItem[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `limit-${i}`,
+      provider: 'subdl',
+      providerName: 'SubDL',
+      url: `https://dl.subdl.com/limit${i}.srt`,
+      lang: 'eng',
+      release: `Show.Name.S01E01.${480 + i * 10}p.WEB-DL.x264-GRP${i}`
+    }));
+
+    const unlimited: UserConfig = { ...DEFAULT_USER_CONFIG, languages: ['eng'], maxSubtitles: 0 };
+    seedCache(query, unlimited, items);
+    const all = await getAggregatedSubtitles(query, unlimited, 'http://localhost:7000');
+    check(all.subtitles.length === 8, 'limit 0 shows every subtitle', all.subtitles.length);
+
+    const limited: UserConfig = { ...unlimited, maxSubtitles: 3 };
+    seedCache(query, limited, items);
+    const few = await getAggregatedSubtitles(query, limited, 'http://localhost:7000');
+    check(few.subtitles.length === 3, 'limit 3 shows only 3 subtitles', few.subtitles.length);
+    check(few.subtitles.every((s, i) => s.id === all.subtitles[i].id), 'the limit keeps the best-ranked subtitles');
+
+    check(mergeWithDefaults({ maxSubtitles: -5 }).maxSubtitles === 0, 'a negative limit becomes 0');
+    check(mergeWithDefaults({ maxSubtitles: 12.7 }).maxSubtitles === 13, 'the limit is rounded');
+    check(mergeWithDefaults({ maxSubtitles: 99999 }).maxSubtitles === 200, 'the limit is capped');
+    check(mergeWithDefaults({}).maxSubtitles === 0, 'the limit defaults to 0 (show all)');
+  }
+
+  // 11. Unique subtitle ids
+  section('Test 11: unique ids');
+  {
+    const query = makeQuery('tt1000002:1:1', 1, 1);
+    const config: UserConfig = { ...DEFAULT_USER_CONFIG, languages: ['eng'], deduplication: false };
+    seedCache(query, config, [
+      { id: 'same-id', provider: 'a', providerName: 'A', url: 'https://example.com/1.srt', lang: 'eng', release: 'Show.S01E01.720p.WEB-DL-AAA' },
+      { id: 'same-id', provider: 'b', providerName: 'B', url: 'https://example.com/2.srt', lang: 'eng', release: 'Show.S01E01.1080p.WEB-DL-BBB' }
+    ]);
+    const response = await getAggregatedSubtitles(query, config, 'http://localhost:7000');
+    const ids = response.subtitles.map(s => s.id);
+    check(new Set(ids).size === ids.length && ids.length === 2, 'colliding ids are made unique', ids);
+  }
+
+  // 12. The generic proxy only downloads from subtitle sites
+  section('Test 12: download proxy host allowlist');
+  check(isAllowedDownloadUrl('https://dl.subdl.com/subtitle/123.zip'), 'SubDL is allowed');
+  check(isAllowedDownloadUrl('https://api.subsource.net/api/v1/subtitles/1/download'), 'Subsource is allowed');
+  check(isAllowedDownloadUrl('https://subs5.strem.io/en/download/file/1.srt'), 'strem.io mirror is allowed');
+  check(isAllowedDownloadUrl('https://dl.opensubtitles.org/en/download/sub/1'), 'OpenSubtitles mirror is allowed');
+  check(!isAllowedDownloadUrl('http://169.254.169.254/latest/meta-data/'), 'cloud metadata address is blocked');
+  check(!isAllowedDownloadUrl('http://localhost:7000/api/health'), 'localhost is blocked');
+  check(!isAllowedDownloadUrl('https://evil.example.com/subdl.com'), 'a lookalike path is blocked');
+  check(!isAllowedDownloadUrl('https://notsubdl.com/file.zip'), 'a lookalike domain is blocked');
+  check(!isAllowedDownloadUrl('file:///etc/passwd'), 'non-http protocols are blocked');
+
+  // 13. Upgrading configurations saved under the old AIOsubs name
+  section('Test 13: upgrade from the AIOsubs name');
+  {
+    const upgraded = mergeWithDefaults({ instanceName: 'AIOSubs', instanceLogo: '/assets/AIOsubs_logo_wordmark.png' });
+    check(upgraded.instanceName === 'subs2b', 'the old default name becomes subs2b', upgraded.instanceName);
+    check(upgraded.instanceLogo === '/assets/subs2b_logo.png', 'the old default logo path is updated', upgraded.instanceLogo);
+    check(mergeWithDefaults({ instanceName: 'My Own Name' }).instanceName === 'My Own Name', 'a custom name is kept');
+  }
+
+  if (failures > 0) {
+    console.error(`\n❌ ${failures} check(s) failed`);
     process.exit(1);
   }
-  console.log('  ✅ Sincronização bidirecional de "language_remapping" e "languageRemap" em mergeWithDefaults validada com sucesso');
-
-  console.log('\n🎉 TODOS OS TESTES PASSARAM COM 100% DE SUCESSO!');
-  process.exit(0);
+  console.log('\n🎉 All checks passed!');
 }
 
-runAllTests().catch(err => {
-  console.error('❌ Erro inesperado no teste de integração:', err);
+main().catch(err => {
+  console.error('❌ Unexpected error in the validation suite:', err);
   process.exit(1);
 });
-

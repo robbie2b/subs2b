@@ -8,56 +8,39 @@ import { globalSubtitleCache } from '../utils/cache';
 import { Logger } from '../utils/logger';
 import { rankSubtitles } from '../utils/scorer';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
+import { isAllowedDownloadUrl } from '../proxy/subtitleProxy';
 
-// Temporary inspector helper: URL path only, first segment (may hold a key) masked, query string dropped
-function inspectorPath(rawUrl: string): string {
-  try {
-    const segs = new URL(rawUrl, 'http://x').pathname.split('/').filter(Boolean);
-    return segs.map((s, i) => (i === 0 && s.length > 16 ? s.slice(0, 4) + '...' : s.slice(0, 90))).join('/');
-  } catch {
-    return '';
-  }
+function toNumberOrNull(value: string | undefined): number | null {
+  const n = parseInt(value ?? '', 10);
+  return isNaN(n) ? null : n;
 }
 
+/** Turns a Stremio content id ("tt123", "tt123:1:2", "kitsu:99:3") into a structured query */
 export function parseSubtitleQuery(
   type: string,
   id: string,
   extra?: Record<string, string | undefined>
 ): SubtitleQuery {
+  const toImdb = (raw: string): string => (raw.startsWith('tt') ? raw : /^\d+$/.test(raw) ? `tt${raw}` : raw);
+
   let imdbId: string | null = null;
   let season: number | null = null;
   let episode: number | null = null;
   let kitsuId: string | null = null;
 
-  if (id.includes(':')) {
-    const parts = id.split(':');
-    if (parts[0].startsWith('tt')) {
-      imdbId = parts[0];
-      season = parseInt(parts[1], 10);
-      episode = parseInt(parts[2], 10);
-    } else if (parts[0] === 'kitsu') {
-      kitsuId = `${parts[0]}:${parts[1]}`;
-      episode = parseInt(parts[2], 10);
-    } else {
-      imdbId = parts[0].startsWith('tt') ? parts[0] : (parts[0].match(/^\d+$/) ? `tt${parts[0]}` : parts[0]);
-      if (parts.length >= 3) {
-        season = parseInt(parts[1], 10);
-        episode = parseInt(parts[2], 10);
-      }
-    }
+  const parts = id.split(':');
+  if (parts[0] === 'kitsu') {
+    kitsuId = `${parts[0]}:${parts[1]}`;
+    episode = toNumberOrNull(parts[2]);
   } else {
-    imdbId = id.startsWith('tt') ? id : (id.match(/^\d+$/) ? `tt${id}` : id);
+    imdbId = toImdb(parts[0]);
+    if (parts.length >= 2) {
+      season = toNumberOrNull(parts[1]);
+      episode = toNumberOrNull(parts[2]);
+    }
   }
 
-  return {
-    type,
-    id,
-    imdbId,
-    season: isNaN(Number(season)) ? null : season,
-    episode: isNaN(Number(episode)) ? null : episode,
-    kitsuId,
-    extra
-  };
+  return { type, id, imdbId, season, episode, kitsuId, extra };
 }
 
 export async function getAggregatedSubtitles(
@@ -88,56 +71,31 @@ export async function getAggregatedSubtitles(
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);
   }
 
-  // Inspector: id + extra (filename/videoHash) per request; set DEBUG_INSPECTOR=1 to also list every raw subtitle
-  try {
-    console.log('[INSPECTOR] id=' + query.id + ' extra=' + JSON.stringify(query.extra));
-    console.log('[INSPECTOR] total=' + rawSubtitles.length);
-    for (const s of (process.env.DEBUG_INSPECTOR === '1' ? rawSubtitles : [])) {
-      console.log('[INSPECTOR] ' + JSON.stringify({
-        provider: s.provider,
-        lang: s.lang,
-        release: s.release,
-        format: s.format,
-        hi: s.hearingImpaired,
-        fps: s.fps,
-        rating: s.rating,
-        downloads: s.downloads,
-        path: inspectorPath(s.url)
-      }));
-    }
-  } catch (e) {
-    console.log('[INSPECTOR] eroare la afisare:', e);
-  }
-  // ===== SFARSIT INSPECTOR =====
+  Logger.info(`Request ${query.id}`, {
+    filename: query.extra?.filename,
+    videoHash: query.extra?.videoHash,
+    found: rawSubtitles.length
+  });
 
   // Canonicalize language codes to ISO 639-2 and drop unsupported codes to avoid player issues
+  const activeRemap = config.language_remapping || config.languageRemap;
   const normalizedItems: RawSubtitleItem[] = [];
+  const unknownLanguages = new Set<string>();
 
   for (const sub of rawSubtitles) {
-    const item: RawSubtitleItem = { ...sub };
-    const activeRemap = config.language_remapping || config.languageRemap;
-    const validation = validateAndNormalizeLanguage(
-      item.lang,
-      config.allowUnknownLanguages,
-      activeRemap
-    );
-
+    const validation = validateAndNormalizeLanguage(sub.lang, config.allowUnknownLanguages, activeRemap);
     if (!validation.valid || !validation.normalizedLang) {
-      Logger.warn(`Discarded subtitle due to invalid ISO 639-2 language: "${item.lang}" from provider [${item.provider}]`, {
-        provider: item.providerName || item.provider,
-        release: item.release,
-        reason: validation.discardedReason
-      });
+      unknownLanguages.add(String(sub.lang));
       continue;
     }
-
-    item.lang = validation.normalizedLang;
-    normalizedItems.push(item);
+    normalizedItems.push({ ...sub, lang: validation.normalizedLang });
   }
 
-  Logger.info(`Language validation (ISO 639-2): ${rawSubtitles.length} -> ${normalizedItems.length} subtitles`, {
-    allowUnknown: config.allowUnknownLanguages
-  });
+  if (unknownLanguages.size > 0) {
+    Logger.info(
+      `Ignored ${rawSubtitles.length - normalizedItems.length} subtitle(s) with unrecognized language codes: ${[...unknownLanguages].join(', ')}`
+    );
+  }
 
   const effectiveWhitelist = (config.languages && config.languages.length > 0)
     ? config.languages
@@ -147,7 +105,7 @@ export async function getAggregatedSubtitles(
     isLanguageWhitelisted(item.lang, effectiveWhitelist)
   );
 
-  Logger.info(`Language whitelist filter: ${normalizedItems.length} -> ${whitelistedItems.length} subtitles`, {
+  Logger.info(`Language filter: ${rawSubtitles.length} -> ${whitelistedItems.length} subtitles`, {
     whitelist: effectiveWhitelist
   });
 
@@ -155,12 +113,13 @@ export async function getAggregatedSubtitles(
   const beforeDedupItems = orderedItems;
 
   if (config.deduplication) {
-    const beforeCount = orderedItems.length;
     // Exact file-hash matches must never be merged away as "duplicates" of a similar release
-    const hashMatched = orderedItems.filter(i => i.rawMetadata?.moviehashMatch === true);
-    const others = orderedItems.filter(i => i.rawMetadata?.moviehashMatch !== true);
+    const hashMatched = orderedItems.filter(i => i.hashMatch === true);
+    const others = orderedItems.filter(i => i.hashMatch !== true);
     orderedItems = [...hashMatched, ...deduplicateSubtitles(others, 0.85, config.deduplicationStrategy || 'both')];
-    Logger.info(`Deduplication: ${beforeCount} -> ${orderedItems.length} subtitles${hashMatched.length ? ` (${hashMatched.length} hash match)` : ''}`);
+    Logger.info(
+      `Deduplication: ${beforeDedupItems.length} -> ${orderedItems.length} subtitles${hashMatched.length ? ` (${hashMatched.length} hash match)` : ''}`
+    );
   }
 
   const afterDedupCount = orderedItems.length;
@@ -189,14 +148,7 @@ export async function getAggregatedSubtitles(
     orderedItems = ranked.items;
     debugUsedFilename = ranked.usedFilename;
     debugFallback = ranked.fallback;
-    debugTop = ranked.details.slice(0, 12).map((d, i) => ({
-      rank: i + 1,
-      score: d.score,
-      rejected: d.rejected,
-      provider: d.provider,
-      release: d.release,
-      reasons: d.reasons
-    }));
+    debugTop = ranked.details.slice(0, 12).map((d, i) => ({ rank: i + 1, ...d }));
   } catch (err) {
     Logger.error('Scoring failed, keeping provider order', err);
   }
@@ -220,7 +172,13 @@ export async function getAggregatedSubtitles(
     });
   }
 
-  // Build clean response with original IDs, normalized language codes, absolute URLs, and formatted display title
+  // All subtitles are always searched and scored; the limit only trims what is shown to the player
+  const limit = config.maxSubtitles;
+  if (limit > 0 && orderedItems.length > limit) {
+    Logger.info(`Showing the best ${limit} of ${orderedItems.length} subtitles (limit set in the configuration)`);
+    orderedItems = orderedItems.slice(0, limit);
+  }
+
   // Stremio treats the subtitle id as unique: never send the same id twice
   const usedIds = new Set<string>();
   const subtitles: StremioSubtitle[] = orderedItems.map(item => {
@@ -233,27 +191,21 @@ export async function getAggregatedSubtitles(
     let finalUrl = item.url;
     if (finalUrl.startsWith('/')) {
       finalUrl = `${baseUrl}${finalUrl}`;
-    } else if (finalUrl.startsWith('http://') || finalUrl.startsWith('https://')) {
-      // If external URL ends with .zip or is an archive, route through /sub/proxy to decompress and serve valid text
-      if (/\.zip($|\?)/i.test(finalUrl)) {
-        const ext = item.format === 'vtt' || finalUrl.toLowerCase().endsWith('.vtt') ? '.vtt' : '.srt';
-        const safeBaseName = (item.release || item.id).replace(/[^a-zA-Z0-9._-]/g, '_');
-        const safeFilename = safeBaseName.endsWith(ext) ? safeBaseName : `${safeBaseName}${ext}`;
-        finalUrl = `${baseUrl}/sub/proxy?url=${encodeURIComponent(finalUrl)}&filename=${encodeURIComponent(safeFilename)}`;
-      }
+    } else if (/\.zip($|\?)/i.test(finalUrl) && isAllowedDownloadUrl(finalUrl)) {
+      // Archives from known subtitle sites go through /sub/proxy so the player receives plain subtitle text
+      const ext = item.format === 'vtt' || finalUrl.toLowerCase().endsWith('.vtt') ? '.vtt' : '.srt';
+      const safeBaseName = (item.release || item.id).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const safeFilename = safeBaseName.endsWith(ext) ? safeBaseName : `${safeBaseName}${ext}`;
+      finalUrl = `${baseUrl}/sub/proxy?url=${encodeURIComponent(finalUrl)}&filename=${encodeURIComponent(safeFilename)}`;
     }
-
-    const displayTitle = item.release || `${item.providerName || item.provider} Subtitle`;
 
     return {
       id: uniqueId,
       lang: item.lang,
       url: finalUrl,
-      title: displayTitle
+      title: item.release || `${item.providerName || item.provider} Subtitle`
     };
   });
 
-  return {
-    subtitles
-  };
+  return { subtitles };
 }

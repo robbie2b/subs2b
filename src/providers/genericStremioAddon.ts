@@ -1,15 +1,12 @@
-import { createHash } from 'crypto';
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
+import { shortHash } from '../utils/ids';
 
 interface GenericStremioSubtitleItem {
-  id?: string;
   url: string;
   lang: string;
   file?: string;
   title?: string;
-  SubEncoding?: string;
-  [key: string]: unknown;
 }
 
 interface GenericStremioSubtitlesResponse {
@@ -108,16 +105,15 @@ export class GenericStremioAddonProvider extends BaseSubtitleProvider {
       const isHI = /(hearing\.impaired|\.hi\.|\[hi\]|\(hi\)|\[cc\]|\.cc\.)/i.test(release);
 
       items.push({
-        // upstream ids can collide (e.g. same archive id + same name prefix); the URL hash keeps them unique
-        id: `${this.id}-${sub.id || 'sub'}-${createHash('sha1').update(sub.url).digest('hex').slice(0, 10)}`,
+        // upstream ids can collide (same archive id + same name prefix), so the id comes from the URL
+        id: `${this.id}-${shortHash(sub.url)}`,
         provider: this.id,
         providerName: this.name,
         url: sub.url,
         lang: sub.lang,
         release,
         format: sub.url.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt',
-        hearingImpaired: isHI,
-        rawMetadata: sub as Record<string, unknown>
+        hearingImpaired: isHI
       });
     }
 

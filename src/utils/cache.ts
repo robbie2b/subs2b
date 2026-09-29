@@ -1,19 +1,13 @@
 import { LRUCache } from 'lru-cache';
 import { RawSubtitleItem } from '../types/provider';
 
-export interface CacheEntry {
-  subtitles: RawSubtitleItem[];
-  cachedAt: number;
-}
-
 export class SubtitleCache {
-  private cache: LRUCache<string, CacheEntry>;
+  private cache: LRUCache<string, RawSubtitleItem[]>;
 
   constructor(defaultTtlMinutes = 30, maxEntries = 500) {
-    this.cache = new LRUCache<string, CacheEntry>({
+    this.cache = new LRUCache<string, RawSubtitleItem[]>({
       max: maxEntries,
-      ttl: defaultTtlMinutes * 60 * 1000,
-      updateAgeOnGet: false
+      ttl: defaultTtlMinutes * 60 * 1000
     });
   }
 
@@ -31,17 +25,11 @@ export class SubtitleCache {
   }
 
   get(key: string): RawSubtitleItem[] | undefined {
-    const entry = this.cache.get(key);
-    return entry ? entry.subtitles : undefined;
+    return this.cache.get(key);
   }
 
   set(key: string, subtitles: RawSubtitleItem[], ttlMinutes?: number): void {
-    const ttl = (ttlMinutes || 30) * 60 * 1000;
-    this.cache.set(key, { subtitles, cachedAt: Date.now() }, { ttl });
-  }
-
-  clear(): void {
-    this.cache.clear();
+    this.cache.set(key, subtitles, { ttl: (ttlMinutes || 30) * 60 * 1000 });
   }
 
   get size(): number {

@@ -1,11 +1,9 @@
-version: '3.8'
-
 services:
-  aiosubs:
+  subs2b:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: aiosubs
+    container_name: subs2b
     restart: unless-stopped
     ports:
       - "7000:7000"
@@ -13,11 +11,11 @@ services:
       - PORT=7000
       - HOST=0.0.0.0
       - BASE_URL=http://localhost:7000
-      # Optional: set default API keys so users don't need their own
-      - OPENSUBTITLES_API_KEY=${OPENSUBTITLES_API_KEY:-}
-      - SUBDL_API_KEY=${SUBDL_API_KEY:-}
-      - CACHE_TTL_MINUTES=30
+      # Optional: PostgreSQL connection string. Without it, configurations are stored in ./data
+      - DATABASE_URL=${DATABASE_URL:-}
       - RATE_LIMIT_MAX=150
+    volumes:
+      - ./data:/app/data
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:7000/health"]
       interval: 30s

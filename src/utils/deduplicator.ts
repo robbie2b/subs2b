@@ -28,7 +28,7 @@ function similarity(tokensA: Set<string>, tokensB: Set<string>): number {
 
 /**
  * Deduplicates a list of subtitles based on:
- * 1. Exact fileHash or URL match
+ * 1. Identical download URL
  * 2. Identical language + identical hearing-impaired status + high fuzzy similarity (>0.85) on release name
  *
  * Items earlier in the array take precedence over later items.
@@ -39,21 +39,15 @@ export function deduplicateSubtitles(
   strategy: 'both' | 'hash' | 'fuzzy' = 'both'
 ): RawSubtitleItem[] {
   const result: RawSubtitleItem[] = [];
-  const seenHashes = new Set<string>();
   const seenUrls = new Set<string>();
 
   const checkHash = strategy === 'both' || strategy === 'hash';
   const checkFuzzy = strategy === 'both' || strategy === 'fuzzy';
 
   for (const item of items) {
-    // 1. Direct URL and file hash deduplication
-    if (checkHash) {
-      if (item.url && seenUrls.has(item.url)) {
-        continue;
-      }
-      if (item.fileHash && seenHashes.has(item.fileHash)) {
-        continue;
-      }
+    // 1. Identical download URL
+    if (checkHash && item.url && seenUrls.has(item.url)) {
+      continue;
     }
 
     // 2. Fuzzy release name similarity deduplication
@@ -81,7 +75,6 @@ export function deduplicateSubtitles(
 
     if (!isDuplicate) {
       if (item.url) seenUrls.add(item.url);
-      if (item.fileHash) seenHashes.add(item.fileHash);
       result.push(item);
     }
   }
@@ -117,7 +110,7 @@ export function prioritizeSubtitles(
       return priorityA - priorityB;
     }
 
-    // Secondary sort: prefer hearing impaired if requested or standard, and higher rating/downloads
+    // Same provider priority: the more downloaded subtitle first
     const downloadsA = a.downloads || 0;
     const downloadsB = b.downloads || 0;
     return downloadsB - downloadsA;

@@ -1,41 +1,33 @@
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
-import { ENV } from '../config/env';
 import { Logger } from '../utils/logger';
 import { mapWhitelistToOpenSubtitles } from '../utils/languages';
 
 interface OpenSubtitlesRestItem {
   id: string;
-  type: string;
   attributes: {
-    subtitle_id: string;
     language: string;
     download_count: number;
     hearing_impaired: boolean;
-    fps: number;
     ratings: number;
     release: string;
-    comments?: string;
-    url?: string;
+    moviehash_match?: boolean;
     legacy_subtitle_id?: number;
     files: Array<{
       file_id: number;
-      cd_number: number;
       file_name: string;
     }>;
   };
 }
 
 interface OpenSubtitlesRestResponse {
-  total_pages: number;
-  total_count: number;
   data: OpenSubtitlesRestItem[];
 }
 
 export class OpenSubtitlesProvider extends BaseSubtitleProvider {
   readonly id = 'opensubtitles';
   readonly name = 'OpenSubtitles';
-  readonly description = 'Provedor oficial OpenSubtitles.com v1 com metadados completos e alta precisão';
+  readonly description = 'Official OpenSubtitles.com v1 API with full metadata and exact file-hash matching';
   readonly requiresApiKey = true;
   readonly defaultEnabled = true;
 
@@ -44,25 +36,16 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
     context: ProviderContext,
     signal: AbortSignal
   ): Promise<RawSubtitleItem[]> {
-    const apiKey = context.providerConfig?.apiKey || ENV.DEFAULT_OPENSUBTITLES_API_KEY;
-    if (!apiKey) {
+    const apiKey = context.providerConfig?.apiKey;
+    if (!apiKey || !query.imdbId) {
       return [];
     }
 
-    if (!query.imdbId) {
-      return [];
-    }
-
-    const cleanImdb = query.imdbId.replace(/^tt/i, '');
     const params: Record<string, string | number> = {
-      imdb_id: cleanImdb
+      imdb_id: query.imdbId.replace(/^tt/i, '')
     };
 
-    if (query.type === 'series' && query.season !== null && query.episode !== null) {
-      params.season_number = query.season;
-      params.episode_number = query.episode;
-      params.type = 'episode';
-    } else if (query.season !== null && query.episode !== null) {
+    if (query.season !== null && query.episode !== null) {
       params.season_number = query.season;
       params.episode_number = query.episode;
       params.type = 'episode';
@@ -95,7 +78,7 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
           params: p,
           headers: {
             'Api-Key': apiKey,
-            'User-Agent': 'AIOSubs v1.0.0',
+            'User-Agent': 'subs2b v1.0.0',
             'Content-Type': 'application/json'
           },
           timeout: 10000
@@ -115,10 +98,10 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
     ]);
 
     Logger.info(`[OPENSUBTITLES] main=${mainList.length} hash=${hashList.length} langs=${languageParam}`, {
-      hashMatchFlags: hashList.filter(i => (i.attributes as { moviehash_match?: boolean }).moviehash_match === true).length
+      hashMatchFlags: hashList.filter(i => i.attributes.moviehash_match === true).length
     });
 
-    // Merge: hash results first; anything from the hash request that the API flags as a match is exact
+    // Merge: hash results first, without repeating anything the main search already returned
     const seen = new Set<string>();
     const rawList: OpenSubtitlesRestItem[] = [];
     for (const item of [...hashList, ...mainList]) {
@@ -150,10 +133,9 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
         release: attr.release || fileName.replace(/\.(srt|vtt)$/i, ''),
         format: fileName.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt',
         hearingImpaired: Boolean(attr.hearing_impaired),
-        fps: attr.fps,
         rating: attr.ratings,
         downloads: attr.download_count,
-        rawMetadata: { fileId, attributes: attr, moviehashMatch: Boolean((attr as { moviehash_match?: boolean }).moviehash_match) }
+        hashMatch: attr.moviehash_match === true
       });
     }
 

@@ -10,7 +10,7 @@ export interface LanguageValidationResult {
  * Resolves a language code through user remap rules.
  * Handles direct matches, canonical ISO 639-2 aliases, and arbitrary N:N custom mappings.
  */
-export function resolveLanguageRemap(
+function resolveLanguageRemap(
   lang: string,
   remapRules?: Record<string, string>
 ): string {
@@ -57,7 +57,7 @@ export function validateAndNormalizeLanguage(
     return {
       valid: false,
       normalizedLang: '',
-      discardedReason: 'Campo de idioma vazio ou ausente na resposta do provedor.'
+      discardedReason: 'Language field is empty or missing in the provider response.'
     };
   }
 
@@ -100,7 +100,7 @@ export function validateAndNormalizeLanguage(
   return {
     valid: false,
     normalizedLang: '',
-    discardedReason: `Código de idioma "${rawLang}" não é um ISO 639-2 válido reconhecido.`
+    discardedReason: `Language code "${rawLang}" is not a recognized ISO 639-2 code.`
   };
 }
 

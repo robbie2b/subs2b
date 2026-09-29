@@ -119,7 +119,7 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
 {
   const items = [
     item('Movie.2020.1080p.BluRay.x264-AAA'),
-    item('Movie.2020.480p.HDTV.x264-ZZZ', 'opensubtitles', { rawMetadata: { moviehashMatch: true } })
+    item('Movie.2020.480p.HDTV.x264-ZZZ', 'opensubtitles', { hashMatch: true })
   ];
   const r = rankSubtitles(items, { filename: 'Movie.2020.1080p.BluRay.x264-AAA.mkv' });
   check('hash match ranks first', r.items[0].provider === 'opensubtitles', r.items.map(i => i.provider));

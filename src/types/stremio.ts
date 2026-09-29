@@ -2,6 +2,8 @@ export interface StremioManifestResource {
   name: string;
   types: string[];
   idPrefixes?: string[];
+  /** Extra arguments the player may send with the request (Stremio protocol) */
+  extra?: Array<{ name: string; isRequired?: boolean }>;
 }
 
 export interface StremioManifestBehaviorHints {
@@ -26,18 +28,9 @@ export interface StremioSubtitle {
   id: string;
   url: string;
   lang: string;
-  // Optional extra fields recognized by some players (like Nuvio or Web)
-  file?: string;
   title?: string;
 }
 
 export interface StremioSubtitlesResponse {
   subtitles: StremioSubtitle[];
-}
-
-export interface StremioSubtitleExtra {
-  videoHash?: string;
-  videoSize?: string;
-  filename?: string;
-  [key: string]: string | undefined;
 }

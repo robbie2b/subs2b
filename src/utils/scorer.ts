@@ -9,7 +9,6 @@ import { RawSubtitleItem } from '../types/provider';
 export type Source = 'remux' | 'bluray' | 'webdl' | 'webrip' | 'hdtv' | 'dvd' | 'hdrip' | 'cam';
 
 export interface ParsedRelease {
-  raw: string;
   titleTokens: string[];
   year: number | null;
   season: number | null;
@@ -87,7 +86,7 @@ const EDITIONS: Array<[RegExp, string]> = [
 function normalize(raw: string): string {
   return raw
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -193,7 +192,6 @@ export function parseRelease(raw: string): ParsedRelease {
     .filter(t => t && !STOP_WORDS.has(t));
 
   return {
-    raw,
     titleTokens,
     year,
     season,
@@ -386,7 +384,7 @@ function scoreOne(
     if (sub.group) score += 2;
   }
 
-  if (item.rawMetadata && item.rawMetadata.moviehashMatch === true) {
+  if (item.hashMatch === true) {
     score += 200;
     reasons.push('HASH MATCH (exact file)');
   }

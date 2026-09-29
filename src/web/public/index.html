@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AIOSubs — Stremio & Nuvio Subtitles Aggregator</title>
+  <title>subs2b — Automatic Subtitles for Stremio & Nuvio</title>
   <meta name="description"
-    content="Dedicated universal subtitle aggregator for Stremio and Nuvio. Native providers, free addon import, language normalization, and remapping.">
+    content="Subtitle aggregator for Stremio and Nuvio: scores every subtitle against the file you play, puts the best match first, and supports native providers, imported addons and language remapping.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -23,11 +23,11 @@
   <div id="view-landing" class="landing-view">
     <div class="landing-container">
       <div class="landing-logo-wrap">
-        <img src="/assets/AIOsubs_logo_wordmark.png" alt="AIOSubs Logo" id="landing-logo-img" class="landing-logo"
-          onerror="this.src='/assets/AIOsubs_logo_wordmark.png'">
+        <img src="/assets/subs2b_logo.png" alt="subs2b logo" id="landing-logo-img" class="landing-logo"
+          onerror="this.src='/assets/subs2b_logo.png'">
       </div>
-      <h1 class="landing-title" id="landing-title">AIOSubs</h1>
-      <p class="landing-desc" id="landing-desc">The all-in-one subtitles addon for Stremio. Configure your addon or manage this instance via the dashboard.</p>
+      <h1 class="landing-title" id="landing-title">subs2b</h1>
+      <p class="landing-desc" id="landing-desc">Subtitles for Stremio and Nuvio, matched automatically to the file you are playing. Configure your addon or manage this instance via the dashboard.</p>
       <div class="landing-actions">
         <button class="btn btn-primary btn-landing-pill" id="btn-landing-configure">Configure</button>
         <button class="btn btn-secondary btn-landing-pill" id="btn-landing-dashboard">Dashboard</button>
@@ -38,13 +38,13 @@
   <!-- Application Layout (Wizard - shown during configuration) -->
   <div class="aiostreams-layout" id="app-layout" style="display: none;">
 
-    <!-- Fixed Left Sidebar (AIOStreams style) -->
+    <!-- Fixed Left Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-avatar" id="sidebar-logo-preview" title="AIOSubs">
-          <img id="sidebar-brand-img" src="/assets/AIOsubs_logo_wordmark.png" alt="AIOSubs" width="22" height="22"
+        <div class="brand-avatar" id="sidebar-logo-preview" title="subs2b">
+          <img id="sidebar-brand-img" src="/assets/subs2b_logo.png" alt="subs2b" width="22" height="22"
             style="width: 50px; height: 50px; object-fit: contain; display: block;"
-            onerror="this.src='/assets/AIOsubs_logo_wordmark.png'">
+            onerror="this.src='/assets/subs2b_logo.png'">
         </div>
       </div>
 
@@ -97,7 +97,7 @@
           </svg>
           <span class="nav-label" style="display: none;">Sign Out</span>
         </button>
-        <a href="https://github.com/Augustofabg/AIOsubs" target="_blank" class="nav-item"
+        <a href="https://github.com/robbie2b/subs2b" target="_blank" class="nav-item"
           title="GitHub Repository">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path
@@ -149,8 +149,8 @@
           <div class="card card-hero">
             <div class="hero-branding">
               <div class="avatar-uploader">
-                <img id="home-logo-img" src="/assets/AIOsubs_logo_wordmark.png" alt="AIOSubs Logo"
-                  onerror="this.src='/assets/AIOsubs_logo_wordmark.png'">
+                <img id="home-logo-img" src="/assets/subs2b_logo.png" alt="subs2b logo"
+                  onerror="this.src='/assets/subs2b_logo.png'">
                 <button class="avatar-edit-overlay" id="btn-change-logo" title="Change logo">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path
@@ -161,7 +161,7 @@
 
               <div class="hero-details">
                 <div class="hero-title-row">
-                  <span class="hero-name-editable" id="home-instance-name">AIOSubs</span>
+                  <span class="hero-name-editable" id="home-instance-name">subs2b</span>
                   <button class="icon-inline-edit" id="btn-edit-instance-name" title="Edit name">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                       <path
@@ -215,6 +215,10 @@
               <div class="stat-pill">
                 <span class="stat-label">Deduplication</span>
                 <span class="stat-value highlight" id="stat-dedup-status">Enabled (Both)</span>
+              </div>
+              <div class="stat-pill">
+                <span class="stat-label">Subtitles shown</span>
+                <span class="stat-value" id="stat-max-subtitles">All</span>
               </div>
             </div>
 
@@ -460,54 +464,6 @@
               <!-- Dynamically populated via app.js -->
             </div>
           </div>
-
-          <!-- Addon Fetching Strategy -->
-          <div class="card card-fetching-strategy" style="margin-top: 20px;">
-            <div class="card-header">
-              <div class="card-header-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path
-                    d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8Z" />
-                </svg>
-              </div>
-              <div>
-                <h2>Addon Fetching Strategy</h2>
-                <p>Search and aggregation strategy for imported subtitle addons</p>
-              </div>
-            </div>
-            <div class="strategy-selector-row"
-              style="padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">
-              <div>
-                <label for="select-fetching-strategy"
-                  style="font-size: 13px; font-weight: 500; color: #fff;">Strategy</label>
-                <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px;">Fetch from all addons concurrently and await all results</div>
-              </div>
-              <div class="custom-select-wrap" id="wrap-fetching-strategy" style="min-width: 200px;">
-                <button type="button" class="custom-select-trigger" id="trigger-fetching-strategy"
-                  aria-haspopup="listbox" aria-expanded="false">
-                  <span class="custom-select-value" id="label-fetching-strategy">Default (Parallel)</span>
-                  <svg class="custom-select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
-                  </svg>
-                </button>
-                <div class="custom-select-dropdown" id="dropdown-fetching-strategy" role="listbox">
-                  <div class="custom-select-option selected" data-value="default">
-                    <span class="option-check">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />
-                      </svg>
-                    </span>
-                    <span class="option-text">Default (Parallel)</span>
-                  </div>
-                  <div class="custom-select-option" data-value="sequential">
-                    <span class="option-check"></span>
-                    <span class="option-text">Sequential (Priority)</span>
-                  </div>
-                </div>
-                <input type="hidden" id="select-fetching-strategy" value="default">
-              </div>
-            </div>
-          </div>
         </section>
 
         <!-- Page 4: Filters -->
@@ -515,12 +471,12 @@
           <div class="view-header">
             <div>
               <h1 class="view-title">Filters &amp; Ordering</h1>
-              <p class="view-subtitle">Manage language whitelist, remapping, deduplication, and priorities</p>
+              <p class="view-subtitle">Manage language whitelist, remapping, deduplication, priorities and the number of results</p>
             </div>
           </div>
 
           <div class="filters-subnav-layout">
-            <!-- Lateral Sub-Navigation (AIOStreams style) -->
+            <!-- Lateral Sub-Navigation -->
             <nav class="filters-sidebar" aria-label="Filters and Settings">
               <div class="filters-sidebar-title">CATEGORIES</div>
               <button class="filters-nav-item active" data-filter-tab="whitelist" type="button">
@@ -543,6 +499,13 @@
                   <path d="M18 21L14 17H17V7H14L18 3L22 7H19V17H22M2 19V17H12V19M2 13V11H9V13M2 7V5H6V7H2Z" />
                 </svg>
                 <span>Priority</span>
+              </button>
+
+              <button class="filters-nav-item" data-filter-tab="limit" type="button">
+                <svg class="filters-nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3,4H21V6H3V4M3,11H15V13H3V11M3,18H9V20H3V18Z" />
+                </svg>
+                <span>Results</span>
               </button>
             </nav>
 
@@ -572,7 +535,7 @@
                     <!-- Populated dynamically via app.js -->
                   </div>
 
-                  <!-- Compact Multiselect Component (AIOStreams Dark Style) -->
+                  <!-- Compact Multiselect Component -->
                   <div class="multiselect-container">
                     <div class="multiselect-search-row">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
@@ -602,7 +565,7 @@
               <div class="filters-tab-pane" id="pane-filter-remap-dedup">
                 <div class="panel-header-row">
                   <div>
-                    <h2 class="panel-title">Remapeamento</h2>
+                    <h2 class="panel-title">Remapping &amp; Deduplication</h2>
                     <p class="panel-subtitle">Standardize language codes and prevent duplicate subtitles in players.</p>
                   </div>
                 </div>
@@ -718,7 +681,7 @@
                     <div class="custom-select-wrap" id="wrap-dedup-strategy">
                       <button type="button" class="custom-select-trigger" id="trigger-dedup-strategy"
                         aria-haspopup="listbox" aria-expanded="false">
-                        <span class="custom-select-value" id="label-dedup-strategy">Both (Content Hash + Release Similarity)</span>
+                        <span class="custom-select-value" id="label-dedup-strategy">Both (Same URL + Release Similarity)</span>
                         <svg class="custom-select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
                         </svg>
@@ -730,11 +693,11 @@
                               <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />
                             </svg>
                           </span>
-                          <span class="option-text">Both (Content Hash + Release Similarity)</span>
+                          <span class="option-text">Both (Same URL + Release Similarity)</span>
                         </div>
                         <div class="custom-select-option" data-value="hash">
                           <span class="option-check"></span>
-                          <span class="option-text">Content hash</span>
+                          <span class="option-text">Same download URL</span>
                         </div>
                         <div class="custom-select-option" data-value="fuzzy">
                           <span class="option-check"></span>
@@ -759,6 +722,53 @@
                 <div class="card card-filter-pane">
                   <div class="priority-list" id="priority-list-container">
                     <!-- Reorderable list rendered dynamically via app.js -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB 4: NUMBER OF RESULTS -->
+              <div class="filters-tab-pane" id="pane-filter-limit">
+                <div class="panel-header-row">
+                  <div>
+                    <h2 class="panel-title">Results</h2>
+                    <p class="panel-subtitle">Choose how many subtitles the player shows. Every subtitle is still searched and scored in the background, so the best match is always first.</p>
+                  </div>
+                </div>
+
+                <div class="card card-filter-pane">
+                  <div class="filter-section-header">
+                    <div>
+                      <h3>Maximum subtitles shown</h3>
+                      <p class="panel-subtitle">Use 0 to show every subtitle found.</p>
+                    </div>
+                  </div>
+
+                  <div class="timeout-field-group">
+                    <label for="input-max-subtitles" class="timeout-field-label">Subtitles</label>
+                    <div class="timeout-input-wrap">
+                      <input type="number" id="input-max-subtitles" class="form-input form-input-number" min="0"
+                        max="200" step="1" value="0">
+                      <div class="custom-stepper-btns">
+                        <button type="button" class="stepper-btn" id="btn-max-subtitles-up" aria-label="Increase limit">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" />
+                          </svg>
+                        </button>
+                        <button type="button" class="stepper-btn" id="btn-max-subtitles-down" aria-label="Decrease limit">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M7.41,8.59L12,13.17L16.59,8.59L18,10L12,16L6,10L7.41,8.59Z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <span class="timeout-field-desc" id="max-subtitles-hint">All subtitles found are shown, best match first.</span>
+                  </div>
+
+                  <div class="whitelist-quick-btns" style="margin-top: 14px;">
+                    <button class="btn btn-outline btn-sm" type="button" data-max-subtitles="0">All</button>
+                    <button class="btn btn-outline btn-sm" type="button" data-max-subtitles="5">Best 5</button>
+                    <button class="btn btn-outline btn-sm" type="button" data-max-subtitles="10">Best 10</button>
+                    <button class="btn btn-outline btn-sm" type="button" data-max-subtitles="20">Best 20</button>
                   </div>
                 </div>
               </div>
@@ -976,7 +986,7 @@
             </div>
           </div>
 
-          <!-- SECTION 3: INSTALLATION OPTIONS (AIOStreams pattern) -->
+          <!-- SECTION 3: INSTALLATION OPTIONS -->
           <div class="install-section-group">
             <div class="section-badge-header">INSTALLATION OPTIONS</div>
             <p class="section-desc-subtle">Install your addon using your preferred method. If a reinstall is necessary,
@@ -1059,7 +1069,7 @@
 
   <!-- Modals -->
 
-  <!-- Configure Service Modal (AIOStreams style compact modal) -->
+  <!-- Configure Service Modal (compact modal) -->
   <div class="modal-backdrop" id="modal-service-config">
     <div class="modal-card modal-compact">
       <div class="modal-header">
@@ -1184,7 +1194,7 @@
       <div class="modal-body">
         <div class="input-group">
           <label for="modal-input-name">Addon Name:</label>
-          <input type="text" id="modal-input-name" class="form-input" placeholder="ex: AIOSubs">
+          <input type="text" id="modal-input-name" class="form-input" placeholder="e.g. subs2b">
         </div>
         <div class="input-group">
           <label for="modal-input-desc">Short description:</label>
@@ -1207,7 +1217,7 @@
     </div>
   </div>
 
-  <!-- Edit Custom Addon Modal (AIOStreams pattern) -->
+  <!-- Edit Custom Addon Modal -->
   <div class="modal-backdrop" id="modal-edit-addon">
     <div class="modal-card">
       <div class="modal-header">
@@ -1281,7 +1291,7 @@
     </div>
   </div>
 
-  <!-- Dashboard Login Modal (AIOStreams pattern: UUID + Password) -->
+  <!-- Dashboard Login Modal (UUID + password) -->
   <div class="modal-backdrop" id="modal-dashboard-login">
     <div class="modal-card modal-compact" style="max-width: 420px;">
       <div class="modal-header">
@@ -1331,7 +1341,7 @@
     </div>
   </div>
 
-  <!-- Sign Out Confirmation Modal (AIOStreams pattern) -->
+  <!-- Sign Out Confirmation Modal -->
   <div class="modal-backdrop" id="modal-signout-confirm">
     <div class="modal-card modal-compact" style="max-width: 400px;">
       <div class="modal-header">

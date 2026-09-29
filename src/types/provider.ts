@@ -19,11 +19,10 @@ export interface RawSubtitleItem {
   release?: string;
   format?: 'srt' | 'vtt' | string;
   hearingImpaired?: boolean;
-  fps?: number | string;
   rating?: number;
   downloads?: number;
-  fileHash?: string;
-  rawMetadata?: Record<string, unknown>;
+  /** true when the provider confirmed this subtitle was made for the exact video file (file hash match) */
+  hashMatch?: boolean;
 }
 
 export interface ProviderLogEntry {
