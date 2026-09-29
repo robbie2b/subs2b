@@ -274,7 +274,7 @@ export function createServer(): express.Application {
         if (String(err.message).includes('Cloudflare')) {
           res.json({
             valid: false,
-            error: 'Subs.ro blochează serverul (verificare anti-bot Cloudflare). Nu cheia e problema.'
+            error: `Subs.ro blochează serverul (verificare anti-bot Cloudflare). Releu ${ENV.SUBSRO_PROXY_URL ? 'ACTIV (' + ENV.SUBSRO_PROXY_URL + ')' : 'INACTIV - variabilele SUBSRO_PROXY_URL/TOKEN nu sunt încă aplicate'}. Nu cheia e problema.`
           });
           return;
         }
