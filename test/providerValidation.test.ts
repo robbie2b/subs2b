@@ -328,6 +328,8 @@ async function main(): Promise<void> {
     const upgraded = mergeWithDefaults({ instanceName: 'AIOSubs', instanceLogo: '/assets/AIOsubs_logo_wordmark.png' });
     check(upgraded.instanceName === 'subs2b', 'the old default name becomes subs2b', upgraded.instanceName);
     check(upgraded.instanceLogo === '/assets/subs2b_logo.png', 'the old default logo path is updated', upgraded.instanceLogo);
+    check(mergeWithDefaults({ instanceName: 'AIOSubs (subs2b)' }).instanceName === 'subs2b', 'a transitional name "AIOSubs (subs2b)" becomes subs2b');
+    check(mergeWithDefaults({ instanceName: 'AIO Subtitles Home' }).instanceName === 'subs2b Home', 'the old name inside a custom name is replaced');
     check(mergeWithDefaults({ instanceName: 'My Own Name' }).instanceName === 'My Own Name', 'a custom name is kept');
   }
 

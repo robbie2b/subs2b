@@ -43,7 +43,15 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
 };
 
 /** Values saved by earlier versions (when the project was called AIOsubs) that are upgraded automatically */
-const LEGACY_NAMES = new Set(['aiosubs', 'aiosubtitles']);
+function upgradeLegacyName(name: string): string {
+  if (!/aio\s*sub(?:s|titles)/i.test(name)) return name;
+  return name
+    .replace(/aio\s*sub(?:s|titles)/gi, 'subs2b')
+    .replace(/\s+/g, ' ')
+    .trim()
+    // "AIOSubs (subs2b)" -> "subs2b (subs2b)" -> "subs2b"
+    .replace(/^subs2b\s*\(\s*subs2b\s*\)$/i, 'subs2b');
+}
 const LEGACY_LOGO = '/assets/AIOsubs_logo_wordmark.png';
 
 /**
@@ -159,7 +167,7 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
   const logo = cleanText(partial.instanceLogo, DEFAULT_LOGO);
 
   const result: UserConfig = {
-    instanceName: LEGACY_NAMES.has(name.toLowerCase()) ? (DEFAULT_USER_CONFIG.instanceName as string) : name,
+    instanceName: upgradeLegacyName(name),
     instanceDesc: cleanText(partial.instanceDesc, DEFAULT_USER_CONFIG.instanceDesc as string),
     instanceLogo: logo === LEGACY_LOGO ? DEFAULT_LOGO : logo,
     instanceVersion: cleanText(partial.instanceVersion, DEFAULT_USER_CONFIG.instanceVersion as string),
