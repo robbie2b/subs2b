@@ -27,8 +27,15 @@ export function decodeReleaseFromUrl(rawUrl: string): string | null {
       const decoded = Buffer.from(seg, 'base64url').toString('utf8');
       if (decoded.includes('\ufffd') || /[\u0000-\u001f]/.test(decoded)) continue;
       if (!/\.(srt|vtt|ass|ssa)$/i.test(decoded)) continue;
-      const base = decoded.split(/[\\/]/).pop() || decoded;
-      return base.replace(/\.(srt|vtt|ass|ssa)$/i, '');
+      const parts = decoded.split(/[\\/]/);
+      const base = (parts.pop() || decoded).replace(/\.(srt|vtt|ass|ssa)$/i, '');
+      const folder = parts.pop();
+      // The archive folder often carries the source ("WEB-DL 3 variante", "CAM", "BluRay"):
+      // keep it when the file name itself does not say the source.
+      if (folder && !/(web|blu|hdtc|hdts|cam|remux|hdrip|dvd|hdtv)/i.test(base)) {
+        return `${base} [${folder}]`;
+      }
+      return base;
     }
   } catch {
     // not decodable, ignore
@@ -80,7 +87,7 @@ export class GenericStremioAddonProvider extends BaseSubtitleProvider {
     for (const sub of response.data.subtitles) {
       if (!sub.url || !sub.lang) continue;
 
-      let release = sub.file || sub.title;
+      let release = decodeReleaseFromUrl(sub.url) || sub.file || sub.title;
       if (!release) {
         try {
           const parsed = new URL(sub.url);
