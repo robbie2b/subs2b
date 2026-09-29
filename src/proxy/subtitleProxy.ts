@@ -491,3 +491,104 @@ export async function handleShortIdDownload(req: Request, res: Response): Promis
 export async function handleSubtitleProxy(req: Request, res: Response): Promise<void> {
   return handleUnifiedSubtitleProxy(req, res);
 }
+
+/**
+ * Picks the subtitle file inside a Subs.ro ZIP archive.
+ * For series, prefers the file whose name matches the requested season/episode.
+ */
+function pickSubsRoEntry(zip: AdmZip, season: number | null, episode: number | null): AdmZip.IZipEntry | null {
+  const entries = zip.getEntries().filter(e =>
+    !e.isDirectory &&
+    !e.entryName.includes('__MACOSX') &&
+    !path.basename(e.entryName).startsWith('.') &&
+    /\.(srt|vtt)$/i.test(e.entryName)
+  );
+  if (entries.length === 0) return null;
+  if (season === null || episode === null) return entries[0];
+
+  const e2 = String(episode).padStart(2, '0');
+  const patterns = [
+    new RegExp(`s0*${season}[\s._-]*e0*${episode}(?!\d)`, 'i'),
+    new RegExp(`(?<!\d)0*${season}x${e2}(?!\d)`, 'i'),
+    new RegExp(`(?:^|[^a-z0-9])e0*${episode}(?!\d)`, 'i'),
+    new RegExp(`(?:episod(?:ul)?|episode|ep)[\s._-]*0*${episode}(?!\d)`, 'i')
+  ];
+  for (const re of patterns) {
+    const hit = entries.find(e => re.test(path.basename(e.entryName)));
+    if (hit) return hit;
+  }
+  // A pack with several files and no match for this episode: refuse rather than serve a wrong episode
+  return entries.length === 1 ? entries[0] : null;
+}
+
+/**
+ * Subs.ro download: GET https://api.subs.ro/v1.0/subtitle/{id}/download (X-Subs-Api-Key),
+ * returns an archive; extracts the right .srt (episode-aware) and serves it as UTF-8 text.
+ */
+export async function handleSubsRoDownload(req: Request, res: Response): Promise<void> {
+  const { id } = req.params;
+  const apiKey = (req.query.apiKey as string) || '';
+  const filename = (req.query.filename as string) || `subsro-${id}.srt`;
+  const season = req.query.season ? parseInt(String(req.query.season), 10) : null;
+  const episode = req.query.episode ? parseInt(String(req.query.episode), 10) : null;
+
+  const fail = (status: number, message: string): void => {
+    res.status(status);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(message);
+  };
+
+  if (!id || !/^\d+$/.test(id)) {
+    fail(400, 'Invalid Subs.ro subtitle id.');
+    return;
+  }
+  if (!apiKey) {
+    fail(401, 'Subs.ro API key missing.');
+    return;
+  }
+
+  try {
+    const upstream = await axios.get<ArrayBuffer>(`https://api.subs.ro/v1.0/subtitle/${id}/download`, {
+      responseType: 'arraybuffer',
+      timeout: 20000,
+      headers: { 'X-Subs-Api-Key': apiKey, 'User-Agent': 'AIOSubs v1.0.0', 'Accept': '*/*' }
+    });
+
+    let buffer: Buffer = Buffer.from(upstream.data);
+    let finalFilename = filename;
+
+    if (buffer[0] === 0x52 && buffer[1] === 0x61 && buffer[2] === 0x72) {
+      Logger.warn(`Subs.ro subtitle ${id} is a RAR archive (not supported yet)`);
+      fail(415, 'This Subs.ro subtitle is a RAR archive, which is not supported yet.');
+      return;
+    }
+
+    if (buffer[0] === 0x50 && buffer[1] === 0x4b) {
+      const zip = new AdmZip(buffer);
+      const entry = pickSubsRoEntry(zip, season, episode);
+      if (!entry) {
+        Logger.warn(`Subs.ro subtitle ${id}: no file for S${season}E${episode} inside archive`);
+        fail(404, 'No matching episode found inside the Subs.ro archive.');
+        return;
+      }
+      buffer = entry.getData();
+      finalFilename = path.basename(entry.entryName);
+    }
+
+    const utf8Text = toCleanUtf8(buffer);
+    const format: 'srt' | 'vtt' = finalFilename.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt';
+    const validation = validateAndFormatSubtitle(utf8Text, format);
+    if (!validation.valid) {
+      Logger.warn(`Invalid Subs.ro subtitle ${id}: ${validation.reason}`);
+      fail(502, `Failed to process Subs.ro subtitle: ${validation.reason}`);
+      return;
+    }
+
+    sendSubtitleResponse(res, validation.content, validation.format, finalFilename);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    Logger.error(`Subs.ro download failed for ${id}: ${msg}`, err);
+    fail(502, `Error downloading from Subs.ro: ${msg}`);
+  }
+}

@@ -9,7 +9,7 @@ import QRCode from 'qrcode';
 import { ENV } from './config/env';
 import { StremioManifest } from './types/stremio';
 import { decodeUserConfig, decodeUserConfigAsync, mergeWithDefaults } from './config/userConfig';
-import { handleSubtitleProxy, handleOpenSubtitlesRestDownload, handleShortIdDownload, handleUnifiedSubtitleProxy } from './proxy/subtitleProxy';
+import { handleSubtitleProxy, handleSubsRoDownload, handleOpenSubtitlesRestDownload, handleShortIdDownload, handleUnifiedSubtitleProxy } from './proxy/subtitleProxy';
 import { getAllProviders } from './providers';
 import { globalSubtitleCache } from './utils/cache';
 import { Logger } from './utils/logger';
@@ -252,6 +252,30 @@ export function createServer(): express.Application {
 
     if (!apiKey) {
       res.json({ valid: false, error: 'Chave não informada.' });
+      return;
+    }
+
+    if (service === 'subsro') {
+      try {
+        const response = await axios.get('https://api.subs.ro/v1.0/quota', {
+          headers: { 'X-Subs-Api-Key': apiKey },
+          timeout: 8000
+        });
+        const remaining = response.data?.quota?.remaining_quota;
+        if (response.status === 200 && typeof remaining === 'number' && remaining >= 0) {
+          res.json({ valid: true });
+          return;
+        }
+        res.json({ valid: false, error: 'Cheia Subs.ro nu a fost acceptată.' });
+      } catch (err: any) {
+        const status = err.response?.status;
+        res.json({
+          valid: false,
+          error: status === 401 || status === 403
+            ? 'Cheie Subs.ro invalidă sau inexistentă.'
+            : 'Nu m-am putut conecta la Subs.ro.'
+        });
+      }
       return;
     }
 
@@ -499,6 +523,7 @@ app.get('/proxy/download/subdl', handleUnifiedSubtitleProxy);
 app.get('/proxy/download/subsource', handleUnifiedSubtitleProxy);
 app.get('/proxy/subtitle/:data', handleSubtitleProxy);
 app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
+app.get('/proxy/download/subsro/:id', handleSubsRoDownload);
 
 // Direct subtitle download endpoints
 app.get('/download/:id', handleShortIdDownload);

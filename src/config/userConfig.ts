@@ -9,12 +9,14 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   providers: {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
-    'subsource': { enabled: false, apiKey: '' }
+    'subsource': { enabled: false, apiKey: '' },
+    'subsro': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   addonFetchingStrategy: 'default',
   providerPriority: [
     'opensubtitles',
+    'subsro',
     'subdl',
     'subsource'
   ],
@@ -164,7 +166,8 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
     providers: {
       'opensubtitles': { enabled: false, apiKey: '' },
       'subdl': { enabled: false, apiKey: '' },
-      'subsource': { enabled: false, apiKey: '' }
+      'subsource': { enabled: false, apiKey: '' },
+      'subsro': { enabled: false, apiKey: '' }
     },
     customAddons,
     addonFetchingStrategy: partial.addonFetchingStrategy === 'fastest' ? 'fastest' : 'default',
