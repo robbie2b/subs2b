@@ -1,6 +1,6 @@
 // Debug page: live server log + when/what the addon was used for.
 // Loaded after app.js; app.js calls startDebugPage()/stopDebugPage() when the page is shown/left.
-const debugState = { logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null };
+const debugState = { logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5 };
 const PLAY_ICON = 'M8,5.14V19.14L19,12.14L8,5.14Z';
 const PAUSE_ICON = 'M14,19H18V5H14M6,19H10V5H6V19Z';
 
@@ -16,6 +16,22 @@ function escapeHtmlDebug(text) {
 function startDebugPage() {
   if (!debugState.wired) {
     debugState.wired = true;
+    try {
+      const saved = parseInt(localStorage.getItem('subs2b_dbg_pagesize') || '', 10);
+      if ([5, 10, 20, 50].includes(saved)) debugState.pageSize = saved;
+    } catch (err) { /* storage may be blocked */ }
+    const sizeSelect = document.getElementById('dbg-page-size');
+    if (sizeSelect) {
+      sizeSelect.value = String(debugState.pageSize);
+      sizeSelect.addEventListener('change', () => {
+        debugState.pageSize = parseInt(sizeSelect.value, 10) || 5;
+        debugState.page = 1;
+        try { localStorage.setItem('subs2b_dbg_pagesize', String(debugState.pageSize)); } catch (err) { /* ignore */ }
+        renderRecent();
+      });
+    }
+    document.getElementById('dbg-page-prev')?.addEventListener('click', () => { debugState.page--; renderRecent(); });
+    document.getElementById('dbg-page-next')?.addEventListener('click', () => { debugState.page++; renderRecent(); });
     document.getElementById('dbg-log-pause')?.addEventListener('click', () => {
       debugState.paused = !debugState.paused;
       document.getElementById('dbg-pause-label').textContent = debugState.paused ? 'Resume' : 'Pause';
@@ -43,9 +59,10 @@ function startDebugPage() {
     return;
   }
   refreshUsage();
+  refreshProviders();
   refreshLogs();
   debugState.logTimer = setInterval(refreshLogs, 2000);
-  debugState.usageTimer = setInterval(refreshUsage, 30000);
+  debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); }, 30000);
 }
 
 function stopDebugPage() {
@@ -137,9 +154,78 @@ function renderUsage(data) {
     sugg.innerHTML = `<strong>Keep-alive hours suggested by the data:</strong> ${list} <span class="dbg-muted">(${hours.length} h/day, about ${hours.length * 30} h/month)</span>`;
   }
 
-  recent.innerHTML = data.recent.length
-    ? data.recent.map(e => renderRequest(e, data.tz)).join('')
+  debugState.lastUsage = data;
+  renderRecent();
+}
+
+// The request list is shown a page at a time (page size chosen at the top, remembered in this browser)
+function renderRecent() {
+  const data = debugState.lastUsage;
+  const recent = document.getElementById('dbg-recent');
+  const info = document.getElementById('dbg-page-info');
+  if (!data || !recent) return;
+
+  const total = data.recent.length;
+  const pages = Math.max(1, Math.ceil(total / debugState.pageSize));
+  debugState.page = Math.min(Math.max(1, debugState.page), pages);
+  const from = (debugState.page - 1) * debugState.pageSize;
+  const slice = data.recent.slice(from, from + debugState.pageSize);
+
+  recent.innerHTML = slice.length
+    ? slice.map(e => renderRequest(e, data.tz)).join('')
     : '<div class="dbg-empty">No requests recorded yet. Press Play on something in Stremio.</div>';
+  if (info) info.textContent = total ? `${from + 1}-${from + slice.length} of ${total} · page ${debugState.page}/${pages}` : '';
+  document.getElementById('dbg-page-prev').disabled = debugState.page <= 1;
+  document.getElementById('dbg-page-next').disabled = debugState.page >= pages;
+}
+
+async function refreshProviders() {
+  const base = debugBase();
+  if (!base) return;
+  try {
+    const res = await fetch(`${base}/providers.json`);
+    if (!res.ok) return;
+    renderProviders(await res.json());
+  } catch (err) {
+    // ignore
+  }
+}
+
+function renderProviders(data) {
+  const body = document.getElementById('dbg-prov-body');
+  const summary = document.getElementById('dbg-prov-summary');
+  if (!body || !summary) return;
+
+  summary.textContent = data.requests
+    ? `Based on the latest ${data.requests} request${data.requests === 1 ? '' : 's'} with stored details.`
+    : 'No data yet. Press Play on something in Stremio.';
+  if (!data.providers.length) {
+    body.innerHTML = '<tr><td colspan="10" class="dbg-empty">No service has answered yet.</td></tr>';
+    return;
+  }
+
+  const pct = n => `${Math.round(n * 100)}%`;
+  const ms = n => (n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${n} ms`);
+  const ranked = data.withRanking || 0;
+  body.innerHTML = data.providers.map(p => {
+    let status;
+    if (p.lastOk === null) status = '<span class="dbg-status idle">no search yet</span>';
+    else if (p.lastOk) status = '<span class="dbg-status ok">OK</span>';
+    else status = `<span class="dbg-status bad" title="${escapeHtmlDebug(p.lastError || '')}">Failed</span>`;
+    const rateClass = p.searches && p.successRate < 0.9 ? ' bad-text' : '';
+    const wins = ranked ? `${p.wins} <span class="dbg-muted">(${pct(p.wins / ranked)})</span>` : '-';
+    const inTop = ranked ? `${p.inTop} <span class="dbg-muted">(${pct(p.inTop / ranked)})</span>` : '-';
+    return `<tr>`
+      + `<td class="dbg-prov-name">${escapeHtmlDebug(p.name)}<div class="dbg-muted">${escapeHtmlDebug(p.id)}</div></td>`
+      + `<td>${status}</td>`
+      + `<td class="${rateClass}">${p.searches ? pct(p.successRate) : '-'}<div class="dbg-muted">${p.searches ? `${p.searches - p.failures}/${p.searches}` : ''}</div></td>`
+      + `<td>${p.searches ? ms(p.avgMs) : '-'}<div class="dbg-muted">${p.searches ? `max ${ms(p.maxMs)}` : ''}</div></td>`
+      + `<td>${p.searches ? ms(p.medianMs) : '-'}</td>`
+      + `<td>${p.searches ? p.avgFound : '-'}<div class="dbg-muted">${p.searches ? `${pct(p.emptyRate)} empty` : ''}</div></td>`
+      + `<td>${wins}</td><td>${inTop}</td><td>${ranked ? p.avgSent : '-'}</td>`
+      + `<td>${p.avgBestScore === null ? '-' : p.avgBestScore}</td>`
+      + `</tr>`;
+  }).join('');
 }
 
 function renderRequest(e, tz) {

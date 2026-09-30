@@ -1,4 +1,4 @@
-import { SubtitleProvider, SubtitleQuery, RawSubtitleItem, ProviderContext, SearchOutcome } from '../types/provider';
+import { SubtitleProvider, SubtitleQuery, RawSubtitleItem, ProviderContext, SearchOutcome, ProviderReport } from '../types/provider';
 import { UserConfig } from '../types/config';
 import { OpenSubtitlesProvider } from './openSubtitles';
 import { SubDLProvider } from './subdl';
@@ -25,7 +25,8 @@ export function getAllProviders(): SubtitleProvider[] {
 
 export async function executeParallelSearch(
   query: SubtitleQuery,
-  config: UserConfig
+  config: UserConfig,
+  report?: ProviderReport[]
 ): Promise<RawSubtitleItem[]> {
   const activeProviders: SubtitleProvider[] = BUILTIN_PROVIDERS.filter(provider => {
     const provConfig = config.providers[provider.id];
@@ -88,7 +89,34 @@ export async function executeParallelSearch(
     return provider.search(query, context).then(items => ({ items, failed: false }));
   };
 
-  const settledResults = await Promise.allSettled(activeProviders.map(runProvider));
+  // Same as runProvider, but also notes how long the provider took and whether it worked
+  const runTimed = async (provider: SubtitleProvider): Promise<SearchOutcome> => {
+    const started = Date.now();
+    try {
+      const outcome = await runProvider(provider);
+      report?.push({
+        id: provider.id,
+        name: provider.name,
+        ms: Date.now() - started,
+        ok: !outcome.failed,
+        count: outcome.items.length,
+        error: outcome.error
+      });
+      return outcome;
+    } catch (err) {
+      report?.push({
+        id: provider.id,
+        name: provider.name,
+        ms: Date.now() - started,
+        ok: false,
+        count: 0,
+        error: err instanceof Error ? err.message : String(err)
+      });
+      throw err;
+    }
+  };
+
+  const settledResults = await Promise.allSettled(activeProviders.map(runTimed));
   const aggregatedSubtitles: RawSubtitleItem[] = [];
   let directFailed = false;
 
@@ -110,7 +138,7 @@ export async function executeParallelSearch(
   if (fallbackProviders.length > 0) {
     if (directFailed) {
       Logger.warn(`[FALLBACK] Direct OpenSubtitles failed -> using addon(s): ${fallbackProviders.map(p => p.id).join(', ')}`);
-      const fallbackResults = await Promise.allSettled(fallbackProviders.map(runProvider));
+      const fallbackResults = await Promise.allSettled(fallbackProviders.map(runTimed));
       for (const result of fallbackResults) {
         if (result.status === 'fulfilled') {
           aggregatedSubtitles.push(...result.value.items);

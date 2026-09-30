@@ -1109,11 +1109,52 @@
             <div class="dbg-head">
               <div>
                 <div class="section-badge-header">WHAT WAS ACCESSED</div>
-                <p class="section-desc-subtle">Latest subtitle requests (one per Play). Times are in Europe/Bucharest.</p>
+                <p class="section-desc-subtle">Latest subtitle requests (one per Play), newest first. Click one to see the subtitles it returned, in ranked order. Times are in Europe/Bucharest.</p>
+              </div>
+              <div class="dbg-actions">
+                <label class="dbg-perpage">Per page
+                  <select id="dbg-page-size" class="dbg-select">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                  </select>
+                </label>
               </div>
             </div>
-            <p class="section-desc-subtle" style="margin-top:0">Click a request to see the subtitles it returned, in ranked order.</p>
             <div id="dbg-recent" class="dbg-list"><div class="dbg-empty">Loading...</div></div>
+            <div class="dbg-pager" id="dbg-pager">
+              <span id="dbg-page-info" class="dbg-muted"></span>
+              <div class="dbg-actions">
+                <button class="dbg-btn" id="dbg-page-prev" type="button">‹ Prev</button>
+                <button class="dbg-btn" id="dbg-page-next" type="button">Next ›</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dbg-card">
+            <div class="dbg-head">
+              <div>
+                <div class="section-badge-header">SERVICES &amp; ADDONS</div>
+                <p class="section-desc-subtle" id="dbg-prov-summary">Loading...</p>
+              </div>
+            </div>
+            <div class="dbg-table-scroll">
+              <table class="dbg-prov-table">
+                <thead>
+                  <tr>
+                    <th>Service</th><th>Status</th><th>Success</th><th>Avg time</th><th>Median</th>
+                    <th>Found / search</th><th>Ranked #1</th><th>In top</th><th>Sent / Play</th><th>Best score</th>
+                  </tr>
+                </thead>
+                <tbody id="dbg-prov-body"><tr><td colspan="10" class="dbg-empty">Loading...</td></tr></tbody>
+              </table>
+            </div>
+            <p class="section-desc-subtle" style="margin-bottom:0">
+              Measured over the latest requests that really asked the services (answers served from the cache are not counted).
+              <strong>Ranked #1</strong>: how often the service supplied the best-scored subtitle; <strong>In top</strong>: requests where it had a subtitle among the ranked ones;
+              <strong>Sent / Play</strong>: average number of its subtitles that reached the player; <strong>Best score</strong>: average score of its best subtitle.
+            </p>
           </div>
 
           <div class="dbg-card">

@@ -1,5 +1,5 @@
 import { StremioSubtitle, StremioSubtitlesResponse } from '../types/stremio';
-import { SubtitleQuery, RawSubtitleItem } from '../types/provider';
+import { SubtitleQuery, RawSubtitleItem, ProviderReport } from '../types/provider';
 import { UserConfig } from '../types/config';
 import { executeParallelSearch } from '../providers';
 import { validateAndNormalizeLanguage, isLanguageWhitelisted } from '../utils/normalizer';
@@ -64,9 +64,11 @@ export async function getAggregatedSubtitles(
   );
 
   let rawSubtitles = globalSubtitleCache.get(cacheKey);
+  const providerReport: ProviderReport[] = [];
+  const fromCache = !!rawSubtitles;
 
   if (!rawSubtitles) {
-    rawSubtitles = await executeParallelSearch(query, config);
+    rawSubtitles = await executeParallelSearch(query, config, providerReport);
     globalSubtitleCache.set(cacheKey, rawSubtitles, config.cacheTtlMinutes);
   } else {
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);
@@ -174,7 +176,9 @@ export async function getAggregatedSubtitles(
       shown: orderedItems.length,
       usedFilename: debugUsedFilename,
       scoringFallback: debugFallback,
-      top: debugTop
+      top: debugTop,
+      // timings exist only for searches that really ran (a cached answer did not ask the providers again)
+      ...(fromCache ? { cached: true } : { providers: providerReport })
     };
     recordDebug(configId, {
       at: new Date().toISOString(),

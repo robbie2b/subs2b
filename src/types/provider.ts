@@ -33,6 +33,16 @@ export interface ProviderLogEntry {
   error?: string;
 }
 
+/** How one provider did during one search: used by the Debug page statistics */
+export interface ProviderReport {
+  id: string;
+  name: string;
+  ms: number;
+  ok: boolean;
+  count: number;
+  error?: string;
+}
+
 export interface SearchOutcome {
   items: RawSubtitleItem[];
   /** true when the provider errored or timed out (an empty result is NOT a failure) */

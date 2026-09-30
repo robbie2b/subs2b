@@ -23,7 +23,7 @@ import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { subsroGet } from './utils/subsroHttp';
 import { getDebug } from './utils/debugLog';
-import { getUsage } from './storage/usageStore';
+import { getUsage, getProviderStats } from './storage/usageStore';
 
 interface KeyValidation {
   valid: boolean;
@@ -452,6 +452,14 @@ export function createServer(): express.Application {
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
     res.json(await getUsage(key, typeof req.query.tz === 'string' ? req.query.tz : undefined));
+  });
+
+  // Per-provider status: response times, success rate and how often each one supplies the best subtitles
+  app.get('/:config/debug/providers.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await getProviderStats(key));
   });
 
   // Live server log (poll with ?after=<last seq received>)

@@ -1,4 +1,4 @@
-import { recordUsage, getUsage } from '../src/storage/usageStore';
+import { recordUsage, getUsage, computeProviderStats } from '../src/storage/usageStore';
 import { getLogLines, Logger } from '../src/utils/logger';
 
 let failures = 0;
@@ -32,6 +32,27 @@ async function main() {
   Logger.info('usage-test marker');
   const after = getLogLines(before);
   check('log buffer returns only new lines', after.lines.length === 1 && after.lines[0].text.includes('usage-test marker'), after);
+
+  // Provider statistics: two requests, subsro wins one, opensubtitles wins the other and fails once
+  const mk = (over: object) => ({ rawTotal: 5, rawByProvider: {}, afterLanguage: 5, afterDedup: 5, afterScoring: 5, shown: 2, usedFilename: true, scoringFallback: false, ...over });
+  const stats = computeProviderStats([
+    { at: "2026-09-30T10:00:00Z", id: "a", type: "movie", filename: "", details: mk({
+      providers: [{ id: "subsro", name: "Subs.ro", ms: 400, ok: true, count: 3 }, { id: "opensubtitles", name: "OpenSubtitles", ms: 1200, ok: false, count: 0, error: "timeout" }],
+      top: [{ rank: 1, score: 90, rejected: false, provider: "subsro", release: "x", reasons: [] }, { rank: 2, score: 50, rejected: false, provider: "subsro", release: "y", reasons: [] }] }) },
+    { at: "2026-09-30T09:00:00Z", id: "b", type: "movie", filename: "", details: mk({
+      providers: [{ id: "subsro", name: "Subs.ro", ms: 600, ok: true, count: 0 }, { id: "opensubtitles", name: "OpenSubtitles", ms: 800, ok: true, count: 4 }],
+      top: [{ rank: 1, score: 250, rejected: false, provider: "opensubtitles", release: "z", reasons: ["hash match +200"] }, { rank: 2, score: 40, rejected: true, provider: "subsro", release: "w", reasons: [] }] }) },
+    { at: "2026-09-30T08:00:00Z", id: "c", type: "movie", filename: "", details: mk({ cached: true, top: [{ rank: 1, score: 70, rejected: false, provider: "subsro", release: "q", reasons: [] }] }) }
+  ]);
+  const ro = stats.providers.find(p => p.id === "subsro")!;
+  const os = stats.providers.find(p => p.id === "opensubtitles")!;
+  check("stats: searches exclude cached answers", ro.searches === 2 && os.searches === 2, [ro, os]);
+  check("stats: average and median time", ro.avgMs === 500 && ro.medianMs === 500 && os.maxMs === 1200);
+  check("stats: success rate and last status", os.successRate === 0.5 && os.lastOk === false && os.lastError === "timeout" && ro.lastOk === true);
+  check("stats: wins and top presence", ro.wins === 2 && os.wins === 1 && stats.withRanking === 3, stats);
+  check("stats: rejected subtitles are not counted as in top", ro.inTop === 2, ro.inTop);
+  check("stats: hash matches counted", os.hashMatches === 1);
+  check("stats: empty answers are not failures", ro.emptyRate === 0.5 && ro.failures === 0);
 
   if (failures) { console.log(`\n${failures} check(s) failed`); process.exit(1); }
   console.log('\nAll usage checks passed');
