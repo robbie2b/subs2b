@@ -392,7 +392,7 @@
                   <div class="service-info">
                     <div class="service-name-row">
                       <span class="service-name">RegieLive</span>
-                      <span class="service-badge">API Key optional</span>
+                      <span class="service-badge service-badge-optional">Optional API Key</span>
                     </div>
                     <div class="service-desc">Romanian subtitles database (the source Bazarr uses). Works without a key.</div>
                   </div>
@@ -1195,10 +1195,27 @@
             <div class="dbg-head">
               <div>
                 <div class="section-badge-header">SUBSYNC DECISIONS</div>
-                <p class="section-desc-subtle">What the automatic re-timing did lately (kept in memory, reset on restart). It only appears when no subtitle fits your file.</p>
+                <p class="section-desc-subtle">What the automatic re-timing did lately (kept in memory, reset on restart), newest first. It only appears when no subtitle fits your file.</p>
+              </div>
+              <div class="dbg-actions">
+                <label class="dbg-perpage">Per page
+                  <select id="dbg-subsync-page-size" class="dbg-select">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                  </select>
+                </label>
               </div>
             </div>
             <div id="dbg-subsync" class="dbg-list"><div class="dbg-empty">Nothing yet.</div></div>
+            <div class="dbg-pager" id="dbg-subsync-pager">
+              <span id="dbg-subsync-page-info" class="dbg-muted"></span>
+              <div class="dbg-actions">
+                <button class="dbg-btn" id="dbg-subsync-prev" type="button">‹ Prev</button>
+                <button class="dbg-btn" id="dbg-subsync-next" type="button">Next ›</button>
+              </div>
+            </div>
           </div>
 
           <div class="dbg-card">

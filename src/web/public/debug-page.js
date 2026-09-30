@@ -1,6 +1,6 @@
 // Debug page: live server log + when/what the addon was used for.
 // Loaded after app.js; app.js calls startDebugPage()/stopDebugPage() when the page is shown/left.
-const debugState = { logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {} };
+const debugState = { logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5 };
 const PLAY_ICON = 'M8,5.14V19.14L19,12.14L8,5.14Z';
 const PAUSE_ICON = 'M14,19H18V5H14M6,19H10V5H6V19Z';
 
@@ -36,6 +36,22 @@ function startDebugPage() {
         renderRecent();
       });
     }
+    try {
+      const savedSync = parseInt(localStorage.getItem('subs2b_dbg_subsync_pagesize') || '', 10);
+      if ([5, 10, 20, 50].includes(savedSync)) debugState.subsyncPageSize = savedSync;
+    } catch (err) { /* storage may be blocked */ }
+    const syncSelect = document.getElementById('dbg-subsync-page-size');
+    if (syncSelect) {
+      syncSelect.value = String(debugState.subsyncPageSize);
+      syncSelect.addEventListener('change', () => {
+        debugState.subsyncPageSize = parseInt(syncSelect.value, 10) || 5;
+        debugState.subsyncPage = 1;
+        try { localStorage.setItem('subs2b_dbg_subsync_pagesize', String(debugState.subsyncPageSize)); } catch (err) { /* ignore */ }
+        renderSubsync();
+      });
+    }
+    document.getElementById('dbg-subsync-prev')?.addEventListener('click', () => { debugState.subsyncPage--; renderSubsync(); });
+    document.getElementById('dbg-subsync-next')?.addEventListener('click', () => { debugState.subsyncPage++; renderSubsync(); });
     document.getElementById('dbg-page-prev')?.addEventListener('click', () => { debugState.page--; renderRecent(); });
     document.getElementById('dbg-page-next')?.addEventListener('click', () => { debugState.page++; renderRecent(); });
     document.getElementById('dbg-log-pause')?.addEventListener('click', () => {
@@ -281,17 +297,33 @@ function renderRequest(e, tz) {
 
 async function refreshSubsync() {
   const base = debugBase();
-  const box = document.getElementById('dbg-subsync');
-  if (!base || !box) return;
+  if (!base) return;
   try {
     const res = await fetch(`${base}/alignments.json`);
     if (!res.ok) return;
-    const data = await res.json();
-    if (!data.entries.length) {
-      box.innerHTML = '<div class="dbg-empty">Nothing yet. It appears when no subtitle fits your file (for example a 2160p file with only 1080p subtitles).</div>';
-      return;
-    }
-    box.innerHTML = data.entries.map(e => {
+    debugState.subsyncEntries = (await res.json()).entries || [];
+    renderSubsync();
+  } catch (err) {
+    // ignore
+  }
+}
+
+// The decisions are shown a page at a time (own page size, remembered in this browser)
+function renderSubsync() {
+  const box = document.getElementById('dbg-subsync');
+  const info = document.getElementById('dbg-subsync-page-info');
+  if (!box) return;
+  const entries = debugState.subsyncEntries;
+  const total = entries.length;
+  const pages = Math.max(1, Math.ceil(total / debugState.subsyncPageSize));
+  debugState.subsyncPage = Math.min(Math.max(1, debugState.subsyncPage), pages);
+  const from = (debugState.subsyncPage - 1) * debugState.subsyncPageSize;
+  const slice = entries.slice(from, from + debugState.subsyncPageSize);
+
+  if (!slice.length) {
+    box.innerHTML = '<div class="dbg-empty">Nothing yet. It appears when no subtitle fits your file (for example a 2160p file with only 1080p subtitles).</div>';
+  } else {
+    box.innerHTML = slice.map(e => {
       const label = { shifted: `shifted ${e.offset > 0 ? '+' : ''}${e.offset} s`, unchanged: 'unchanged', timeout: 'too slow: sent unchanged', error: 'error: sent unchanged' }[e.outcome] || e.outcome;
       const cls = e.outcome === 'shifted' ? 'service' : 'addon';
       const refs = (e.references || []).map(r => `<span class="dbg-chip">${escapeHtmlDebug(r.label)}: ${r.offset > 0 ? '+' : ''}${r.offset} s (${r.score})</span>`).join('');
@@ -302,7 +334,10 @@ async function refreshSubsync() {
         + `<div class="dbg-req-side"><span class="dbg-tag ${cls}">${escapeHtmlDebug(label)}</span><div class="dbg-muted">${new Date(e.at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Bucharest', hour12: false })} · ${e.ms} ms</div></div>`
         + `</div></div>`;
     }).join('');
-  } catch (err) {
-    // ignore
   }
+  if (info) info.textContent = total ? `${from + 1}-${from + slice.length} of ${total} · page ${debugState.subsyncPage}/${pages}` : '';
+  const prev = document.getElementById('dbg-subsync-prev');
+  const next = document.getElementById('dbg-subsync-next');
+  if (prev) prev.disabled = debugState.subsyncPage <= 1;
+  if (next) next.disabled = debugState.subsyncPage >= pages;
 }

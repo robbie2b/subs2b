@@ -235,7 +235,7 @@ const alignmentLog = new Map<string, AlignmentLogEntry[]>();
 export function recordAlignment(configKey: string, entry: AlignmentLogEntry): void {
   const list = alignmentLog.get(configKey) || [];
   list.unshift(entry);
-  if (list.length > 30) list.length = 30;
+  if (list.length > 100) list.length = 100;
   alignmentLog.set(configKey, list);
 }
 
