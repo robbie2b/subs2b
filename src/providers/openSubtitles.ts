@@ -13,6 +13,9 @@ interface OpenSubtitlesRestItem {
     ratings: number;
     release: string;
     moviehash_match?: boolean;
+    foreign_parts_only?: boolean;
+    ai_translated?: boolean;
+    machine_translated?: boolean;
     legacy_subtitle_id?: number;
     files: Array<{
       file_id: number;
@@ -134,6 +137,8 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
         release: attr.release || fileName.replace(/\.(srt|vtt)$/i, ''),
         format: fileName.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt',
         hearingImpaired: Boolean(attr.hearing_impaired),
+        forced: attr.foreign_parts_only === true,
+        aiTranslated: attr.ai_translated === true || attr.machine_translated === true,
         rating: attr.ratings,
         downloads: attr.download_count,
         hashMatch: attr.moviehash_match === true

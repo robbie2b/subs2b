@@ -192,6 +192,10 @@ export async function getAggregatedSubtitles(
   }
 
   const addonHosts = addonHostsOf(config);
+  const archivePickParams =
+    (query.season != null ? `&season=${query.season}` : '') +
+    (query.episode != null ? `&episode=${query.episode}` : '') +
+    (query.extra?.filename ? `&vf=${encodeURIComponent(query.extra.filename)}` : '');
 
   // Stremio treats the subtitle id as unique: never send the same id twice
   const usedIds = new Set<string>();
@@ -204,6 +208,8 @@ export async function getAggregatedSubtitles(
 
     let finalUrl = item.url;
     if (finalUrl.startsWith('/')) {
+      // Archive downloads also learn what is being played, to pick the right file inside a season pack
+      if (finalUrl.startsWith('/sub/proxy?')) finalUrl += archivePickParams;
       finalUrl = `${baseUrl}${finalUrl}`;
     } else if (
       config.convertVttToSrt !== false &&
@@ -220,7 +226,7 @@ export async function getAggregatedSubtitles(
       const ext = item.format === 'vtt' || finalUrl.toLowerCase().endsWith('.vtt') ? '.vtt' : '.srt';
       const safeBaseName = (item.release || item.id).replace(/[^a-zA-Z0-9._-]/g, '_');
       const safeFilename = safeBaseName.endsWith(ext) ? safeBaseName : `${safeBaseName}${ext}`;
-      finalUrl = `${baseUrl}/sub/proxy?url=${encodeURIComponent(finalUrl)}&filename=${encodeURIComponent(safeFilename)}`;
+      finalUrl = `${baseUrl}/sub/proxy?url=${encodeURIComponent(finalUrl)}&filename=${encodeURIComponent(safeFilename)}${archivePickParams}`;
     }
 
     return {

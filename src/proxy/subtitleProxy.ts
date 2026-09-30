@@ -7,6 +7,7 @@ import path from 'path';
 import { LRUCache } from 'lru-cache';
 import { Logger } from '../utils/logger';
 import { isWebVtt, vttToSrt } from '../utils/subtitleFormat';
+import { parseRelease, rankSubtitles } from '../utils/scorer';
 import { configStorage } from '../storage/configStore';
 import { UserConfig } from '../types/config';
 import { USER_AGENT, APP_VERSION } from '../config/version';
@@ -58,7 +59,60 @@ function sendError(res: Response, status: number, message: string): void {
  * Recursively inspects and decompresses GZIP or ZIP archives.
  * Extracts the primary .srt or .vtt subtitle file.
  */
-export function decompressBuffer(input: Buffer): { buffer: Buffer; formatHint?: 'srt' | 'vtt'; filename?: string } {
+/** What is being played, so the right file can be chosen inside an archive with several subtitles (season packs) */
+export interface ArchivePick {
+  season?: number | null;
+  episode?: number | null;
+  videoFilename?: string | null;
+}
+
+/** Episode number written in a file name without a full S01E02 marker: "Show - 04", "Show E04", "Show_04" */
+function looseEpisodeOf(name: string): number | null {
+  const base = path.basename(name).replace(/\.[a-z0-9]{2,4}$/i, '');
+  const withE = base.match(/(?:^|[\s._\-\[(])(?:e|ep|episode|episodul)\s?0*(\d{1,3})(?:[\s._\-\])]|$)/i);
+  if (withE) return parseInt(withE[1], 10);
+  const trailing = base.match(/[\s._\-]0*(\d{1,3})$/);
+  return trailing ? parseInt(trailing[1], 10) : null;
+}
+
+/**
+ * Chooses the subtitle inside an archive. Without information about the playing file it is the first .srt (as before).
+ * With it: the entries for the requested episode first (season packs), then the one whose release name is most
+ * similar to the playing file.
+ */
+export function pickArchiveEntry<T extends { entryName: string }>(entries: T[], pick?: ArchivePick): T | undefined {
+  const srt = entries.filter(e => /\.srt$/i.test(e.entryName));
+  const vtt = entries.filter(e => /\.vtt$/i.test(e.entryName));
+  const pool = srt.length > 0 ? srt : vtt.length > 0 ? vtt : entries;
+  if (pool.length <= 1 || !pick) return pool[0];
+
+  let candidates = pool;
+  if (pick.episode != null) {
+    const wanted = pick.episode;
+    const byEpisode = pool.filter(e => {
+      const parsed = parseRelease(path.basename(e.entryName));
+      if (parsed.episode !== null) return parsed.episode === wanted && (pick.season == null || parsed.season === null || parsed.season === pick.season);
+      return looseEpisodeOf(e.entryName) === wanted;
+    });
+    if (byEpisode.length > 0) candidates = byEpisode;
+  }
+  if (candidates.length === 1) return candidates[0];
+
+  const filename = (pick.videoFilename || '').trim();
+  if (!filename) return candidates[0];
+
+  // Several candidates (releases of the same episode, or an archive we cannot tell apart): the closest name wins
+  const items = candidates.map((e, i) => ({
+    id: String(i), provider: 'archive', providerName: 'archive', url: '', lang: 'x', release: path.basename(e.entryName).replace(/\.[a-z0-9]{2,4}$/i, '')
+  }));
+  const ranked = rankSubtitles(items, { filename, season: pick.season, episode: pick.episode });
+  return candidates[parseInt(ranked.items[0]?.id ?? '0', 10)] ?? candidates[0];
+}
+
+export function decompressBuffer(
+  input: Buffer,
+  pick?: ArchivePick
+): { buffer: Buffer; formatHint?: 'srt' | 'vtt'; filename?: string } {
   let buf = input;
   let formatHint: 'srt' | 'vtt' | undefined;
   let filename: string | undefined;
@@ -88,9 +142,7 @@ export function decompressBuffer(input: Buffer): { buffer: Buffer; formatHint?: 
           !path.basename(e.entryName).startsWith('.')
         );
 
-        const subEntry = validEntries.find(e => e.entryName.toLowerCase().endsWith('.srt'))
-          || validEntries.find(e => e.entryName.toLowerCase().endsWith('.vtt'))
-          || validEntries[0];
+        const subEntry = pickArchiveEntry(validEntries, pick);
 
         if (subEntry) {
           const entryName = subEntry.entryName.toLowerCase();
@@ -287,7 +339,17 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
       headers: requestHeaders
     });
 
-    const { buffer: cleanBuffer, formatHint, filename: extractedFilename } = decompressBuffer(Buffer.from(upstreamRes.data));
+    // The list links carry what is being played, so a season pack yields the right episode
+    const toNumber = (v: unknown): number | null => {
+      const n = parseInt(String(v ?? ''), 10);
+      return isNaN(n) ? null : n;
+    };
+    const pick: ArchivePick = {
+      season: toNumber(req.query.season),
+      episode: toNumber(req.query.episode),
+      videoFilename: typeof req.query.vf === 'string' ? req.query.vf : null
+    };
+    const { buffer: cleanBuffer, formatHint, filename: extractedFilename } = decompressBuffer(Buffer.from(upstreamRes.data), pick);
     const validation = validateAndFormatSubtitle(toCleanUtf8(cleanBuffer), formatHint || preferredFormat);
 
     if (!validation.valid) {

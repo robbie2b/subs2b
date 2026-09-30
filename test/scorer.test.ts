@@ -1,5 +1,11 @@
-import { parseRelease, rankSubtitles } from '../src/utils/scorer';
+import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated, setDefaultRules } from '../src/utils/scorer';
 import { RawSubtitleItem } from '../src/types/provider';
+
+// "scorer.test.ts all" (or SCORER_RULES=all) runs the whole suite with every optional rule switched on (regression check for those rules)
+if (process.env.SCORER_RULES === 'all' || process.argv[2] === 'all') {
+  setDefaultRules({ fuzzyGroup: true, sourceTiers: true, multiVariant: true });
+  console.log('(all optional scoring rules ON)');
+}
 
 let failed = 0;
 function check(label: string, ok: boolean, info?: unknown): void {
@@ -145,6 +151,42 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
   ];
   const r = rankSubtitles(items, { filename: 'Movie.2020.1080p.BluRay.x264-AAA.mkv' });
   check('hash match ranks first', r.items[0].provider === 'opensubtitles', r.items.map(i => i.provider));
+}
+
+// ---------- forced / machine translated (rule 2) ----------
+{
+  const video = 'Movie.2021.1080p.BluRay.x264-GRP.mkv';
+  const items = [
+    // the forced one matches the file perfectly, the full one only partly
+    item('Movie.2021.1080p.BluRay.x264-GRP.FORCED'),
+    item('Movie.2021.1080p.BluRay.x264-OTHER')
+  ];
+  const r = rankSubtitles(items, { filename: video });
+  check('a forced subtitle never wins against a full one, even with a perfect name match', r.items[0].release === 'Movie.2021.1080p.BluRay.x264-OTHER', r.items.map(i => i.release));
+
+  const flagged = rankSubtitles([
+    item('Movie.2021.1080p.BluRay.x264-GRP', 'opensubtitles', { forced: true }),
+    item('Movie.2021.1080p.BluRay.x264-OTHER', 'opensubtitles')
+  ], { filename: video });
+  check('the provider flag (foreign_parts_only) counts too', flagged.items[0].release.endsWith('OTHER'), flagged.items.map(i => i.release));
+
+  const ai = rankSubtitles([
+    item('Movie.2021.1080p.BluRay.x264-GRP', 'opensubtitles', { aiTranslated: true }),
+    item('Movie.2021.1080p.BluRay.x264-GRP', 'subdl', { id: 'human' })
+  ], { filename: video });
+  check('a human translation beats an equal machine translation', ai.items[0].provider === 'subdl', ai.items.map(i => i.provider));
+
+  const aiName = rankSubtitles([
+    item('Movie.2021.1080p.BluRay.x264-GRP.AI translated'),
+    item('Movie.2021.1080p.BluRay.x264-GRP', 'subsro')
+  ], { filename: video });
+  check('"AI translated" in the name is detected', aiName.items[0].provider === 'subsro', aiName.items.map(i => i.release));
+
+  // not too eager: a full subtitle stays ahead of a worse-matching forced one and both are kept
+  const only = rankSubtitles([item('Movie.2021.1080p.BluRay.x264-GRP.forced')], { filename: video });
+  check('a lone forced subtitle is still returned (nothing else to offer)', only.items.length === 1);
+  check('words that merely contain "forced" letters are not flagged', !looksForced('Reinforced.Concrete.2020.1080p') && !looksForced('Enforced.2020'));
+  check('AI is only flagged as a translation term', !looksMachineTranslated('Maid.2021.1080p') && !looksMachineTranslated('Automatic.Weapon.2020'));
 }
 
 check('empty input', rankSubtitles([], {}).items.length === 0);

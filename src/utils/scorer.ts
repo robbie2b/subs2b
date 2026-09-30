@@ -24,6 +24,32 @@ export interface ParsedRelease {
   informative: boolean;
 }
 
+/**
+ * Optional scoring rules that are compared against the baseline before being switched on
+ * (see test/scorerRules.test.ts for the comparison on the known cases).
+ */
+export interface RuleFlags {
+  /** a group name that only differs by a tracker/suffix ("demand" vs "demandrarbg") counts as a partial group match */
+  fuzzyGroup: boolean;
+  /** neighbouring source tiers (BluRay vs WEB-DL, WEB vs HDTV...) get partial credit instead of a penalty */
+  sourceTiers: boolean;
+  /** names listing several releases ("a;b;c") are scored per variant, the best one counts */
+  multiVariant: boolean;
+}
+
+// fuzzyGroup and multiVariant are safe (see the hazard cases in test/scorerRules.test.ts) and on by default.
+// sourceTiers only reorders neighbouring sources and nothing shows it helps synchronisation, so it stays off.
+export const DEFAULT_RULES: RuleFlags = { fuzzyGroup: true, sourceTiers: false, multiVariant: true };
+
+/** Changes the defaults (used by the tests to run the whole suite with every optional rule switched on) */
+export function setDefaultRules(rules: Partial<RuleFlags>): void {
+  Object.assign(DEFAULT_RULES, rules);
+}
+
+function ruleOn(ctx: ScoringContext, name: keyof RuleFlags): boolean {
+  return ctx.rules?.[name] ?? DEFAULT_RULES[name];
+}
+
 export interface ScoringContext {
   /** File name of the video being played (Stremio `filename` extra), if the player sent it */
   filename?: string | null;
@@ -32,6 +58,7 @@ export interface ScoringContext {
   episode?: number | null;
   /** Extra points per provider id (substring match), e.g. { subsro: 8 } */
   providerBonus?: Record<string, number>;
+  rules?: Partial<RuleFlags>;
 }
 
 export interface ScoreDetail {
@@ -253,13 +280,34 @@ function mostCommonYear(parsed: ParsedRelease[]): number | null {
   return best;
 }
 
-function sourceScore(sub: Source | null, video: Source | null): { points: number; reason: string } {
+/** Forced / foreign-parts-only subtitles contain only the lines spoken in another language */
+export function looksForced(name: string): boolean {
+  return /\b(forced|foreign parts?|foreign only|fpo)\b/.test(normalize(name || ''));
+}
+
+/** Machine translated / AI generated subtitles */
+export function looksMachineTranslated(name: string): boolean {
+  return /\b(ai|machine|auto|automatic|google|gpt|chatgpt) (translated|translation|translate)\b/.test(normalize(name || ''));
+}
+
+const SOURCE_TIER: Record<Source, number> = { remux: 5, bluray: 4, webdl: 3, webrip: 3, hdtv: 2, hdrip: 2, dvd: 1, cam: 0 };
+
+function sourceScore(sub: Source | null, video: Source | null, tiers = false): { points: number; reason: string } {
   if (!sub || !video) return { points: 0, reason: '' };
   if (sub === video) return { points: 25, reason: 'source=' + sub };
   const pair = [sub, video].sort().join('+');
   if (pair === 'bluray+remux') return { points: 20, reason: 'source~bluray/remux' };
   if (pair === 'webdl+webrip') return { points: 12, reason: 'source~web' };
+  if (tiers && sub !== 'cam' && video !== 'cam' && Math.abs(SOURCE_TIER[sub] - SOURCE_TIER[video]) === 1) {
+    return { points: 6, reason: 'source~' + sub + '/' + video + ' (neighbour tier)' };
+  }
   return { points: -5, reason: 'source!=' + sub };
+}
+
+/** Same group apart from a short tracker/suffix: "demand" vs "demandrarbg". Different groups of similar spelling (NTb / NTG) do NOT match. */
+export function groupsAlike(a: string, b: string): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.length >= 4 && long !== short && long.startsWith(short) && long.length - short.length <= 8;
 }
 
 /** Preference when there is no file name to compare against */
@@ -347,9 +395,12 @@ function scoreOne(
       if (sub.group === video.group) {
         score += differentMaster ? 15 : 50;
         reasons.push('group=' + sub.group + (differentMaster ? ' (other resolution class)' : ''));
+      } else if (ruleOn(ctx, 'fuzzyGroup') && groupsAlike(sub.group, video.group)) {
+        score += differentMaster ? 6 : 25;
+        reasons.push('group~' + sub.group + '/' + video.group);
       }
     }
-    const src = sourceScore(sub.source, video.source);
+    const src = sourceScore(sub.source, video.source, ruleOn(ctx, 'sourceTiers'));
     score += src.points;
     if (src.reason) reasons.push(src.reason);
 
@@ -404,6 +455,15 @@ function scoreOne(
     reasons.push('bad quality (cam/ts)');
   }
   if (item.hearingImpaired) score -= 3;
+  // A forced subtitle only carries the foreign-language lines: it must never win against a full one
+  if (item.forced === true || looksForced(item.release || '')) {
+    score -= 60;
+    reasons.push('forced (foreign parts only)');
+  }
+  if (item.aiTranslated === true || looksMachineTranslated(item.release || '')) {
+    score -= 8;
+    reasons.push('machine translated');
+  }
 
   const downloads = typeof item.downloads === 'number' ? item.downloads : 0;
   if (downloads > 0) score += Math.min(5, Math.log10(downloads + 1));
@@ -451,7 +511,17 @@ export function rankSubtitles(items: RawSubtitleItem[], ctx: ScoringContext): Ra
   const refYear = video && video.year !== null && refTokens === video.titleTokens ? video.year : mostCommonYear(parsedItems);
   const reference: Reference = { titleTokens: refTokens, year: refYear };
 
-  const details = items.map((item, idx) => scoreOne(item, parsedItems[idx], video, reference, ctx));
+  const details = items.map((item, idx) => {
+    const variants = ruleOn(ctx, 'multiVariant') ? (item.release || '').split(';').map(v => v.trim()).filter(Boolean) : [];
+    if (variants.length < 2) return scoreOne(item, parsedItems[idx], video, reference, ctx);
+    // several releases listed in one name: the subtitle fits all of them, so the best variant counts
+    let best: ScoreDetail | null = null;
+    for (const variant of variants) {
+      const d = scoreOne({ ...item, release: variant }, parseRelease(variant), video, reference, ctx);
+      if (!best || d.score > best.score) best = d;
+    }
+    return { ...best!, release: item.release || '', reasons: ['best of ' + variants.length + ' variants', ...best!.reasons] };
+  });
 
   const order = items.map((_, idx) => idx);
   const kept = order.filter(idx => !details[idx].rejected);

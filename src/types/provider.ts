@@ -19,6 +19,10 @@ export interface RawSubtitleItem {
   release?: string;
   format?: 'srt' | 'vtt' | string;
   hearingImpaired?: boolean;
+  /** forced / foreign-parts-only subtitle (only the lines in another language): must not be picked as the main one */
+  forced?: boolean;
+  /** machine translated / AI generated: usable, but a human translation is preferred */
+  aiTranslated?: boolean;
   rating?: number;
   downloads?: number;
   /** true when the provider confirmed this subtitle was made for the exact video file (file hash match) */
