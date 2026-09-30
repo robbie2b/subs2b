@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   // 1. Registered built-in providers
   section('Test 1: built-in providers');
   const providers = getAllProviders();
-  const expectedIds = ['opensubtitles', 'subdl', 'subsource', 'subsro'];
+  const expectedIds = ['opensubtitles', 'subdl', 'subsource'];
   check(providers.length === expectedIds.length, `exactly ${expectedIds.length} built-in providers`, providers.map(p => p.id));
   for (const p of providers) {
     check(expectedIds.includes(p.id), `provider [${p.id}] is expected`);
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
 
   // 5. Services default state and API key rules
   section('Test 5: services start disabled and need an API key');
-  for (const id of ['opensubtitles', 'subdl', 'subsource', 'subsro']) {
+  for (const id of ['opensubtitles', 'subdl', 'subsource']) {
     check(DEFAULT_USER_CONFIG.providers[id]?.enabled === false, `provider ${id} starts disabled`);
   }
   const mergedNoKey = mergeWithDefaults({

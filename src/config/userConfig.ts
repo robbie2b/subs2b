@@ -11,13 +11,11 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   providers: {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
-    'subsource': { enabled: false, apiKey: '' },
-    'subsro': { enabled: false, apiKey: '' }
+    'subsource': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
-    'subsro',
     'subdl',
     'subsource'
   ],
@@ -143,7 +141,8 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
   if (Array.isArray(partial.providerPriority)) {
     for (const item of partial.providerPriority) {
       const mapped = item === 'opensubtitles-rest' || item === 'opensubtitles-v3' ? 'opensubtitles' : item;
-      if (mapped !== 'addic7ed' && !providerPriority.includes(mapped)) {
+      // addic7ed and the removed direct Subs.ro provider are dropped from saved priority lists
+      if (mapped !== 'addic7ed' && mapped !== 'subsro' && !providerPriority.includes(mapped)) {
         providerPriority.push(mapped);
       }
     }
@@ -175,8 +174,7 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
     providers: {
       'opensubtitles': { enabled: false, apiKey: '' },
       'subdl': { enabled: false, apiKey: '' },
-      'subsource': { enabled: false, apiKey: '' },
-      'subsro': { enabled: false, apiKey: '' }
+      'subsource': { enabled: false, apiKey: '' }
     },
     customAddons,
     providerPriority,

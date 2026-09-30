@@ -45,8 +45,8 @@ subtitles are *shown* to the player, best first.
 
 ## Features
 
-- **Sources:** OpenSubtitles.com (API v1), SubDL, Subsource and Subs.ro, each with its own API key that is
-  validated live, plus any Stremio subtitle addon imported by its `manifest.json` URL.
+- **Sources:** OpenSubtitles.com (API v1), SubDL and Subsource, each with its own API key that is
+  validated live, plus any Stremio subtitle addon imported by its `manifest.json` URL (for example the community Subs.ro addon).
 - **Language whitelist and remapping:** everything is normalized to ISO 639-2; free rules such as `pt-br → pob`.
 - **Deduplication** by download URL and release-name similarity, with provider priority.
 - **Results limit** to show only the best *N* subtitles.
@@ -59,8 +59,8 @@ subtitles are *shown* to the player, best first.
 ## Requirements
 
 - **API keys** (each user enters their own in the *Services* tab): [OpenSubtitles](https://www.opensubtitles.com/api)
-  (enable *Under development* for the key), [SubDL](https://subdl.com), [Subsource](https://subsource.net),
-  [Subs.ro](https://subs.ro/api). Use only the providers you want.
+  (enable *Under development* for the key), [SubDL](https://subdl.com), [Subsource](https://subsource.net).
+  Use only the providers you want.
 - **Stremio** sends the file name and hash to subtitle addons. **Nuvio currently does not**
   ([NuvioMobile#1979](https://github.com/NuvioMedia/NuvioMobile/issues/1979),
   [NuvioDesktop#765](https://github.com/NuvioMedia/NuvioDesktop/issues/765)), so with Nuvio the ranking falls back to
@@ -110,19 +110,14 @@ The free plan sleeps after inactivity; the first request after a pause takes abo
 | `DATABASE_URL` | *(empty)* | PostgreSQL connection string. Empty: configurations go to `./data/configurations.json` |
 | `DATA_DIR` | `./data` | Folder for the local configuration file |
 | `OPENSUBTITLES_ADDON_MODE` | `parallel` | `parallel`: OpenSubtitles addons imported in the UI run together with the direct integration. `fallback`: only if the direct integration fails |
-| `SUBSRO_PROXY_URL`, `SUBSRO_PROXY_TOKEN` | *(empty)* | Optional relay for the Subs.ro API (see below) |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | `60000`, `150` | Rate limit of the subtitles endpoint |
 
-## Subs.ro and Cloudflare
+## Subs.ro
 
-The Subs.ro API sits behind Cloudflare, which challenges many datacenter IPs (Render included) with a
-"Just a moment" page, so the direct Subs.ro provider may report "blocked by Cloudflare". Options:
-
-- Import the community **Subs.ro** Stremio addon in the *Addons* tab. Its results work with subs2b: the real file
-  names hidden in its links are decoded and scored like any other source.
-- Run the relay in [`scripts/cloudflare-subsro-relay.js`](scripts/cloudflare-subsro-relay.js) as a free Cloudflare
-  Worker and set `SUBSRO_PROXY_URL` / `SUBSRO_PROXY_TOKEN`. This helps only while Cloudflare accepts the Worker's traffic.
-- Ask Subs.ro to allow your server.
+Subs.ro is used through the community **Subs.ro** Stremio addon: import it in the *Addons* tab. Its results work
+with subs2b: the real file names hidden in its links are decoded and scored like any other source, and its WebVTT
+subtitles are converted to SRT. A direct Subs.ro integration is not included: its API sits behind Cloudflare, which
+blocks most datacenter IPs (Render included).
 
 ## Diagnostics
 
@@ -141,7 +136,7 @@ Render logs show the same information: lines starting with `Request`, `Scoring` 
 ## Security notes
 
 - The **configuration UUID is a secret**: it identifies your addon and unlocks your diagnostics. Do not post the addon URL.
-- Some subtitle links handed to the player contain the provider API key (OpenSubtitles direct, Subsource, Subs.ro
+- Some subtitle links handed to the player contain the provider API key (OpenSubtitles direct, Subsource
   direct) because the player downloads through this server. Treat the links as private too.
 - The download proxy only fetches from subtitle sites (SubDL, Subsource, OpenSubtitles, Stremio's mirror) and ignores
   files bigger than 10 MB inside archives. The VTT converter also accepts the hosts of the addons imported in that

@@ -46,13 +46,11 @@ const DEFAULT_CONFIG = {
   providers: {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
-    'subsource': { enabled: false, apiKey: '' },
-    'subsro': { enabled: false, apiKey: '' }
+    'subsource': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
-    'subsro',
     'subdl',
     'subsource'
   ],
@@ -83,11 +81,6 @@ const SERVICES_META = {
     id: 'opensubtitles',
     name: 'OpenSubtitles',
     helpText: 'Don\'t have a key? <a href="https://www.opensubtitles.com/users/sign_up" target="_blank" rel="noopener noreferrer">Create a free account on OpenSubtitles.com</a> to get your key.'
-  },
-  subsro: {
-    id: 'subsro',
-    name: 'Subs.ro',
-    helpText: 'Don\'t have a key? <a href="https://subs.ro/api" target="_blank" rel="noopener noreferrer">Create a free account on Subs.ro</a> and generate your API key from your profile.'
   },
   subdl: {
     id: 'subdl',
@@ -813,7 +806,7 @@ function renderHomeBranding() {
 }
 
 function setupServicesActions() {
-  const serviceIds = ['opensubtitles', 'subsro', 'subdl', 'subsource'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource'];
 
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
@@ -1047,7 +1040,7 @@ function triggerAutoValidation(serviceId, apiKey) {
 }
 
 function renderServicesState() {
-  const serviceIds = ['opensubtitles', 'subsro', 'subdl', 'subsource'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource'];
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
     if (toggle) {
@@ -2026,7 +2019,7 @@ function renderFiltersPriority() {
 
   const activeItemsMap = new Map();
 
-  const nativeKeys = ['opensubtitles', 'subsro', 'subdl', 'subsource'];
+  const nativeKeys = ['opensubtitles', 'subdl', 'subsource'];
   for (const id of nativeKeys) {
     const prov = state.config.providers[id];
     // ONLY show native services that are enabled AND have an API key
@@ -2260,7 +2253,7 @@ function setupInstallPageActions() {
 
     // Check credentials on active services
     const missingCreds = [];
-    const nativeIds = ['opensubtitles', 'subsro', 'subdl', 'subsource'];
+    const nativeIds = ['opensubtitles', 'subdl', 'subsource'];
     for (const id of nativeIds) {
       const prov = state.config.providers[id];
       if (prov && prov.enabled === true && (!prov.apiKey || prov.apiKey.trim() === '')) {
@@ -2405,7 +2398,7 @@ function setupInstallPageActions() {
 
 async function saveCurrentConfiguration(andShowInstall = false) {
   const missingCreds = [];
-  const nativeIds = ['opensubtitles', 'subsro', 'subdl', 'subsource'];
+  const nativeIds = ['opensubtitles', 'subdl', 'subsource'];
   for (const id of nativeIds) {
     const prov = state.config.providers[id];
     if (prov && prov.enabled === true) {

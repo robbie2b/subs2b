@@ -8,7 +8,7 @@
     "build": "tsc && node scripts/copy-assets.js",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
-    "test": "tsx test/providerValidation.test.ts && tsx test/persistenceStorage.test.ts && tsx test/decodeRelease.test.ts && tsx test/subsroPick.test.ts && tsx test/scorer.test.ts && tsx test/fallback.test.ts && tsx test/vttConvert.test.ts && tsx test/usage.test.ts"
+    "test": "tsx test/providerValidation.test.ts && tsx test/persistenceStorage.test.ts && tsx test/decodeRelease.test.ts && tsx test/scorer.test.ts && tsx test/fallback.test.ts && tsx test/vttConvert.test.ts && tsx test/usage.test.ts"
   },
   "keywords": [
     "stremio",

@@ -11,7 +11,6 @@ import { APP_NAME, APP_VERSION, USER_AGENT } from './config/version';
 import { StremioManifest } from './types/stremio';
 import { DEFAULT_USER_CONFIG, decodeUserConfigAsync, mergeWithDefaults } from './config/userConfig';
 import {
-  handleSubsRoDownload,
   handleOpenSubtitlesRestDownload,
   handleUnifiedSubtitleProxy,
   handleVttConvert
@@ -21,7 +20,6 @@ import { Logger, getLogLines } from './utils/logger';
 import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
-import { subsroGet } from './utils/subsroHttp';
 import { getDebug } from './utils/debugLog';
 import { getUsage, getProviderStats } from './storage/usageStore';
 
@@ -31,33 +29,6 @@ interface KeyValidation {
 }
 
 const KEY_VALIDATORS: Record<string, (apiKey: string) => Promise<KeyValidation>> = {
-  async subsro(apiKey) {
-    try {
-      const response = await subsroGet<{ quota?: { remaining_quota?: number } }>('https://api.subs.ro/v1.0/quota', apiKey, { timeout: 8000 });
-      const remaining = response.data?.quota?.remaining_quota;
-      if (response.status === 200 && typeof remaining === 'number' && remaining >= 0) {
-        return { valid: true };
-      }
-      return { valid: false, error: 'The Subs.ro key was not accepted.' };
-    } catch (err: any) {
-      const status = err.response?.status;
-      const upstreamMsg = typeof err.response?.data === 'object'
-        ? String(err.response?.data?.message || '')
-        : String(err.response?.data || '').slice(0, 120);
-      Logger.warn(`Subs.ro key validation failed: ${status ?? ''} ${upstreamMsg || err.code || err.message}`);
-      if (String(err.message).includes('Cloudflare')) {
-        return {
-          valid: false,
-          error: `Subs.ro is blocking this server (Cloudflare anti-bot check); the key itself is not the problem. Relay: ${ENV.SUBSRO_PROXY_URL ? 'configured' : 'not configured (set SUBSRO_PROXY_URL / SUBSRO_PROXY_TOKEN)'}.`
-        };
-      }
-      return {
-        valid: false,
-        error: `Subs.ro rejected the key (HTTP ${status || 'no response'}${upstreamMsg ? `: ${upstreamMsg}` : err.code ? `: ${err.code}` : ''}).`
-      };
-    }
-  },
-
   async opensubtitles(apiKey) {
     if (apiKey.length < 16) {
       return { valid: false, error: 'The OpenSubtitles key looks invalid or incomplete.' };
@@ -541,7 +512,6 @@ export function createServer(): express.Application {
   app.get(['/sub/proxy', '/sub/proxy/:data', '/proxy/subtitle/:data'], handleUnifiedSubtitleProxy);
   app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
   app.get(['/:config/sub/convert/:data.srt', '/:config/sub/convert.srt'], subtitlesLimiter, handleVttConvert);
-  app.get('/proxy/download/subsro/:id', handleSubsRoDownload);
 
   app.use((req: Request, res: Response) => {
     res.status(404).json({ error: 'Endpoint not found', path: req.path });
