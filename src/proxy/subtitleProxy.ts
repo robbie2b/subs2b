@@ -300,7 +300,8 @@ export function sendSubtitleResponse(
   res: Response,
   text: string,
   format: 'srt' | 'vtt',
-  filename: string
+  filename: string,
+  cacheControl = 'public, max-age=86400'
 ): void {
   const contentType = format === 'vtt' ? 'text/vtt; charset=utf-8' : 'text/plain; charset=utf-8';
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -308,7 +309,7 @@ export function sendSubtitleResponse(
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
-  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Cache-Control', cacheControl);
   res.send(text);
 }
 

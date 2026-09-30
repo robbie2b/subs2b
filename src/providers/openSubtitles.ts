@@ -70,7 +70,7 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
     const osLangs = mapWhitelistToOpenSubtitles(effectiveLangs, activeRemap);
     // The API only accepts ISO 639-1 style codes ("ro", "pt-br"); 3-letter codes like "ron" are not valid there
     const validOsLangs = osLangs.filter(l => /^[a-z]{2}(-[a-z]{2})?$/i.test(l));
-    const languageParam = (validOsLangs.length > 0 ? validOsLangs : osLangs).join(',');
+    const languageParam = query.allLanguages ? '' : (validOsLangs.length > 0 ? validOsLangs : osLangs).join(',');
     if (languageParam) {
       params.languages = languageParam;
     }

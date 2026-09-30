@@ -40,6 +40,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   deduplicationStrategy: 'both',
   maxSubtitles: 0,
   convertVttToSrt: true,
+  subsync: true,
   cacheTtlMinutes: 30
 };
 
@@ -207,6 +208,9 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
     convertVttToSrt: typeof partial.convertVttToSrt === 'boolean'
       ? partial.convertVttToSrt
       : DEFAULT_USER_CONFIG.convertVttToSrt,
+    subsync: typeof partial.subsync === 'boolean'
+      ? partial.subsync
+      : DEFAULT_USER_CONFIG.subsync,
     cacheTtlMinutes: typeof partial.cacheTtlMinutes === 'number'
       ? Math.max(1, Math.min(1440, partial.cacheTtlMinutes))
       : DEFAULT_USER_CONFIG.cacheTtlMinutes

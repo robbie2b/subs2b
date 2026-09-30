@@ -23,6 +23,8 @@ import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { getDebug } from './utils/debugLog';
 import { getUsage, getProviderStats } from './storage/usageStore';
+import { createAlignedHandler } from './proxy/alignedProxy';
+import { getAlignments } from './core/alignment';
 import { REGIELIVE_SEARCH_URL, regieLiveHeaders } from './providers/regielive';
 
 interface KeyValidation {
@@ -451,6 +453,14 @@ export function createServer(): express.Application {
     res.json(await getProviderStats(key));
   });
 
+  // What the automatic re-timing decided lately
+  app.get('/:config/debug/alignments.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ entries: getAlignments(key) });
+  });
+
   // Live server log (poll with ?after=<last seq received>)
   app.get('/:config/debug/logs.json', async (req: Request, res: Response): Promise<void> => {
     const key = await requireStoredConfig(req, res);
@@ -532,6 +542,7 @@ export function createServer(): express.Application {
   app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
   app.get('/proxy/download/regielive/:data', handleRegieLiveDownload);
   app.get(['/:config/sub/convert/:data.srt', '/:config/sub/convert.srt'], subtitlesLimiter, handleVttConvert);
+  app.get('/:config/sub/aligned/:data.srt', subtitlesLimiter, createAlignedHandler(getBaseUrl));
 
   app.use((req: Request, res: Response) => {
     res.status(404).json({ error: 'Endpoint not found', path: req.path });

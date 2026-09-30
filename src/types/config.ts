@@ -41,6 +41,9 @@ export interface UserConfig {
   /** Convert WebVTT subtitles to SRT before they reach the player (SRT respects the player's size/position settings) */
   convertVttToSrt: boolean;
 
+  /** Automatic re-timing: when no subtitle fits the playing release, align them to a matching-release reference */
+  subsync: boolean;
+
   cacheTtlMinutes: number;
 }
 

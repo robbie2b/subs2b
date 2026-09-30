@@ -8,6 +8,8 @@ export interface SubtitleQuery {
   episode: number | null;
   kitsuId: string | null;
   extra?: Record<string, string | undefined>;
+  /** search in every language (used to find timing references, not for the list shown to the player) */
+  allLanguages?: boolean;
 }
 
 export interface RawSubtitleItem {

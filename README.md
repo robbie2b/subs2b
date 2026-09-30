@@ -113,6 +113,26 @@ The free plan sleeps after inactivity; the first request after a pause takes abo
 | `REGIELIVE_API_KEY` | *(empty)* | Personal RegieLive API key (optional; the shared Bazarr key is used without it) |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | `60000`, `150` | Rate limit of the subtitles endpoint |
 
+## Subsync (automatic re-timing)
+
+Releases of the same episode can start at different moments (a 2160p WEB-DL with a few extra seconds, for example), so
+a subtitle made for a 1080p release is late or early by a constant amount, and no name-based ranking can see that.
+
+When **no subtitle in the list comes from the same release group or the same resolution class as the playing file**
+(and at least one is known to come from another class), the subtitle links go through `/sub/aligned/...`. When the
+player downloads the chosen subtitle, subs2b:
+
+1. searches OpenSubtitles, SubDL and Subsource **in every language** for subtitles of the file's own kind (same
+   resolution class, matching title/episode), and downloads up to three of them as timing references;
+2. measures the constant shift between the subtitle and each reference (only when lines appear, never the text, so the
+   language does not matter);
+3. shifts the subtitle in memory if the references agree and fit well; otherwise it is sent unchanged.
+
+If this takes longer than 5 seconds (`SUBSYNC_BUDGET_MS`) the player gets the subtitle unchanged and the result is ready
+for the next request. It can be switched off in Filters → Subsync, and the Debug page lists the decisions.
+Limits: constant shifts only (not frame-rate stretches), precision about 0.1 s, needs a reference in some language, and
+reference downloads from OpenSubtitles count against its daily quota.
+
 ## RegieLive
 
 RegieLive is built in as a service (Services tab, no key needed). It uses the same search API as Bazarr: by title and

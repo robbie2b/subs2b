@@ -510,6 +510,13 @@
                 <span>Priority</span>
               </button>
 
+              <button class="filters-nav-item" data-filter-tab="subsync" type="button">
+                <svg class="filters-nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22C6.47,22 2,17.5 2,12A10,10 0 0,1 12,2M12.5,7V12.25L17,14.92L16.25,16.15L11,13V7H12.5Z" />
+                </svg>
+                <span>Subsync</span>
+              </button>
+
               <button class="filters-nav-item" data-filter-tab="limit" type="button">
                 <svg class="filters-nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3,4H21V6H3V4M3,11H15V13H3V11M3,18H9V20H3V18Z" />
@@ -735,7 +742,32 @@
                 </div>
               </div>
 
-              <!-- TAB 4: NUMBER OF RESULTS -->
+              <!-- TAB 4: SUBSYNC -->
+              <div class="filters-tab-pane" id="pane-filter-subsync">
+                <div class="panel-header-row">
+                  <div>
+                    <h2 class="panel-title">Subsync</h2>
+                    <p class="panel-subtitle">Automatic re-timing of subtitles that do not fit the file you are playing.</p>
+                  </div>
+                </div>
+
+                <div class="card card-filter-pane">
+                  <div class="filter-section-header">
+                    <div>
+                      <h3>Align to a matching-release reference</h3>
+                      <p class="panel-subtitle">Different releases of the same episode can have slightly different timing (for example a 2160p file with a few extra seconds at the start). When none of the subtitles found comes from the same release group or the same resolution class as your file, subs2b looks for a subtitle of your file&#39;s release in <em>any</em> language, measures the difference in timing (only when the lines appear, never the text) and shifts the subtitle it serves accordingly. If no reliable reference is found, the subtitle is sent unchanged.</p>
+                    </div>
+                    <div class="header-toggle">
+                      <label class="compact-switch" title="Automatic subtitle re-timing">
+                        <input type="checkbox" id="toggle-subsync" checked>
+                        <span class="compact-slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB 5: NUMBER OF RESULTS -->
               <div class="filters-tab-pane" id="pane-filter-limit">
                 <div class="panel-header-row">
                   <div>
@@ -1157,6 +1189,16 @@
               <strong>Ranked #1</strong>: how often the service supplied the best-scored subtitle; <strong>In top</strong>: requests where it had a subtitle among the ranked ones;
               <strong>Sent / Play</strong>: average number of its subtitles that reached the player; <strong>Best score</strong>: average score of its best subtitle.
             </p>
+          </div>
+
+          <div class="dbg-card">
+            <div class="dbg-head">
+              <div>
+                <div class="section-badge-header">SUBSYNC DECISIONS</div>
+                <p class="section-desc-subtle">What the automatic re-timing did lately (kept in memory, reset on restart). It only appears when no subtitle fits your file.</p>
+              </div>
+            </div>
+            <div id="dbg-subsync" class="dbg-list"><div class="dbg-empty">Nothing yet.</div></div>
           </div>
 
           <div class="dbg-card">

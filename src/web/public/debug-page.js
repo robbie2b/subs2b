@@ -66,9 +66,10 @@ function startDebugPage() {
   }
   refreshUsage();
   refreshProviders();
+  refreshSubsync();
   refreshLogs();
   debugState.logTimer = setInterval(refreshLogs, 2000);
-  debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); }, 30000);
+  debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); }, 30000);
 }
 
 function stopDebugPage() {
@@ -255,6 +256,7 @@ function renderRequest(e, tz) {
   } else {
     const providers = Object.entries(d.rawByProvider).map(([p, n]) => `${escapeHtmlDebug(p)} ${n}`).join(' · ') || 'none';
     const flow = `Found ${d.rawTotal} (${providers}) → language ${d.afterLanguage} → after duplicates ${d.afterDedup} → ranked ${d.afterScoring} → sent ${d.shown}`;
+    const sync = d.subsync ? `Subsync: ${d.subsync.triggered ? 'a timing reference was needed' : 'not needed'} (${escapeHtmlDebug(d.subsync.reason)}).` : '';
     const mode = d.usedFilename ? 'Ranked against the file name sent by the player.' : 'The player sent no file name: general-quality ranking.';
     const rows = d.top.map(t => {
       const sent = t.rank <= d.shown && !t.rejected;
@@ -266,7 +268,7 @@ function renderRequest(e, tz) {
         + `<span class="dbg-sent${sent ? ' yes' : ''}">${t.rejected ? 'rejected' : sent ? 'sent' : 'not sent'}</span>`
         + `</div>`;
     }).join('');
-    body = `<div class="dbg-flow">${flow}</div><div class="dbg-flow dbg-muted">${mode}</div><div class="dbg-subs">${rows || '<div class="dbg-empty">Nothing to rank.</div>'}</div>`
+    body = `<div class="dbg-flow">${flow}</div><div class="dbg-flow dbg-muted">${mode} ${sync}</div><div class="dbg-subs">${rows || '<div class="dbg-empty">Nothing to rank.</div>'}</div>`
       + (d.top.length < d.afterScoring ? `<div class="dbg-flow dbg-muted">Only the top ${d.top.length} are listed.</div>` : '');
   }
 
@@ -275,4 +277,32 @@ function renderRequest(e, tz) {
     + `<div class="dbg-req-title"><div class="dbg-req-file">${title}</div><div class="dbg-req-sub">${escapeHtmlDebug(e.type)} ${escapeHtmlDebug(e.id)}</div></div>`
     + `<div class="dbg-req-side"><div>${escapeHtmlDebug(when)}</div><div class="dbg-muted">${summary}</div></div></div>`
     + `<div class="dbg-req-body">${body}</div></div>`;
+}
+
+async function refreshSubsync() {
+  const base = debugBase();
+  const box = document.getElementById('dbg-subsync');
+  if (!base || !box) return;
+  try {
+    const res = await fetch(`${base}/alignments.json`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.entries.length) {
+      box.innerHTML = '<div class="dbg-empty">Nothing yet. It appears when no subtitle fits your file (for example a 2160p file with only 1080p subtitles).</div>';
+      return;
+    }
+    box.innerHTML = data.entries.map(e => {
+      const label = { shifted: `shifted ${e.offset > 0 ? '+' : ''}${e.offset} s`, unchanged: 'unchanged', timeout: 'too slow: sent unchanged', error: 'error: sent unchanged' }[e.outcome] || e.outcome;
+      const cls = e.outcome === 'shifted' ? 'service' : 'addon';
+      const refs = (e.references || []).map(r => `<span class="dbg-chip">${escapeHtmlDebug(r.label)}: ${r.offset > 0 ? '+' : ''}${r.offset} s (${r.score})</span>`).join('');
+      return `<div class="dbg-req open"><div class="dbg-req-head" style="cursor:default">`
+        + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(e.subtitle || '(subtitle)')}</div>`
+        + `<div class="dbg-req-sub">for ${escapeHtmlDebug(e.filename)} · ${escapeHtmlDebug(e.reason)}</div>`
+        + `<div class="dbg-sub-meta" style="margin-top:6px">${refs}</div></div>`
+        + `<div class="dbg-req-side"><span class="dbg-tag ${cls}">${escapeHtmlDebug(label)}</span><div class="dbg-muted">${new Date(e.at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Bucharest', hour12: false })} · ${e.ms} ms</div></div>`
+        + `</div></div>`;
+    }).join('');
+  } catch (err) {
+    // ignore
+  }
 }

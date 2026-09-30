@@ -57,7 +57,7 @@ export class SubDLProvider extends BaseSubtitleProvider {
       : ['pob', 'eng'];
     const activeRemap = context.config.language_remapping || context.config.languageRemap;
     const subdlLangs = mapWhitelistToSubDL(effectiveLangs, activeRemap);
-    if (subdlLangs.length > 0) {
+    if (subdlLangs.length > 0 && !query.allLanguages) {
       params.languages = subdlLangs.join(',');
     }
 

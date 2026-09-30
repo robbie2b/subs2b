@@ -9,6 +9,8 @@ import { Logger } from '../utils/logger';
 import { rankSubtitles } from '../utils/scorer';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
 import { recordUsage } from '../storage/usageStore';
+import { needsReference, archivePickParams as buildArchivePickParams } from './alignment';
+import { encodeAlignedToken } from './alignedToken';
 import { isAllowedDownloadUrl, addonHostsOf } from '../proxy/subtitleProxy';
 
 function toNumberOrNull(value: string | undefined): number | null {
@@ -156,6 +158,13 @@ export async function getAggregatedSubtitles(
     Logger.error('Scoring failed, keeping provider order', err);
   }
 
+  // Subsync: when no subtitle fits the playing file (same group / same resolution class), the links go through the
+  // aligning endpoint, which re-times them to a reference of the file's own kind
+  const subsyncVerdict = config.subsync !== false && configId
+    ? needsReference(query.extra?.filename, orderedItems)
+    : { needed: false, reason: configId ? 'subsync is switched off' : 'no configuration id' };
+  if (subsyncVerdict.needed) Logger.info(`[SUBSYNC] a timing reference is needed: ${subsyncVerdict.reason}`);
+
   // All subtitles are always searched and scored; the limit only trims what is shown to the player
   const afterScoringCount = orderedItems.length;
   const limit = config.maxSubtitles;
@@ -176,6 +185,7 @@ export async function getAggregatedSubtitles(
       shown: orderedItems.length,
       usedFilename: debugUsedFilename,
       scoringFallback: debugFallback,
+      subsync: { triggered: subsyncVerdict.needed, reason: subsyncVerdict.reason },
       top: debugTop,
       // timings exist only for searches that really ran (a cached answer did not ask the providers again)
       ...(fromCache ? { cached: true } : { providers: providerReport })
@@ -192,10 +202,7 @@ export async function getAggregatedSubtitles(
   }
 
   const addonHosts = addonHostsOf(config);
-  const archivePickParams =
-    (query.season != null ? `&season=${query.season}` : '') +
-    (query.episode != null ? `&episode=${query.episode}` : '') +
-    (query.extra?.filename ? `&vf=${encodeURIComponent(query.extra.filename)}` : '');
+  const archivePickParams = buildArchivePickParams(query);
 
   // Stremio treats the subtitle id as unique: never send the same id twice
   const usedIds = new Set<string>();
@@ -227,6 +234,12 @@ export async function getAggregatedSubtitles(
       const safeBaseName = (item.release || item.id).replace(/[^a-zA-Z0-9._-]/g, '_');
       const safeFilename = safeBaseName.endsWith(ext) ? safeBaseName : `${safeBaseName}${ext}`;
       finalUrl = `${baseUrl}/sub/proxy?url=${encodeURIComponent(finalUrl)}&filename=${encodeURIComponent(safeFilename)}${archivePickParams}`;
+    }
+
+    // Aligned: the player asks this server, which re-times the subtitle before sending it (only our own or allowed links)
+    if (subsyncVerdict.needed && configId && query.extra?.filename && (finalUrl.startsWith(baseUrl + '/') || isAllowedDownloadUrl(finalUrl, addonHosts))) {
+      const token = encodeAlignedToken({ u: finalUrl, id: query.id, t: query.type, f: query.extra.filename, r: item.release });
+      finalUrl = `${baseUrl}/${configId}/sub/aligned/${token}.srt`;
     }
 
     return {

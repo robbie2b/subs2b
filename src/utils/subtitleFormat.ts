@@ -113,3 +113,46 @@ export function microDvdToSrt(text: string, fpsDefault = 23.976): string {
   cues.sort((a, b) => a.start - b.start);
   return cues.map((c, i) => `${i + 1}\n${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`).join('\n');
 }
+
+const SRT_TIMING = /(\d+):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d+):(\d{2}):(\d{2})[,.](\d{1,3})(.*)$/;
+
+const toMs = (h: string, m: string, s: string, f: string): number =>
+  ((parseInt(h, 10) * 60 + parseInt(m, 10)) * 60 + parseInt(s, 10)) * 1000 + parseInt(f.padEnd(3, '0'), 10);
+
+function fromMs(total: number): string {
+  const t = Math.max(0, Math.round(total));
+  const h = Math.floor(t / 3600000);
+  const m = Math.floor((t % 3600000) / 60000);
+  const s = Math.floor((t % 60000) / 1000);
+  const ms = t % 1000;
+  const p = (n: number, w = 2) => String(n).padStart(w, '0');
+  return `${p(h)}:${p(m)}:${p(s)},${p(ms, 3)}`;
+}
+
+/**
+ * Moves every cue of an SRT text by `offsetSeconds` (positive = later, negative = earlier).
+ * Cues that would end before the start of the video are dropped and a cue that would start before it is clamped to 0.
+ * WebVTT input is converted to SRT first. Cues are renumbered.
+ */
+export function shiftSubtitle(text: string, offsetSeconds: number): string {
+  const source = isWebVtt(text) ? vttToSrt(text) : text;
+  const shiftMs = Math.round(offsetSeconds * 1000);
+  const blocks = source.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split(/\n{2,}/);
+  const out: string[] = [];
+
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const timingIndex = lines.findIndex(l => l.includes('-->'));
+    if (timingIndex < 0) continue;
+    const m = SRT_TIMING.exec(lines[timingIndex]);
+    if (!m) continue;
+
+    const start = toMs(m[1], m[2], m[3], m[4]) + shiftMs;
+    const end = toMs(m[5], m[6], m[7], m[8]) + shiftMs;
+    if (end <= 0) continue;
+
+    const body = lines.slice(timingIndex + 1).join('\n').trim();
+    out.push(`${out.length + 1}\n${fromMs(start)} --> ${fromMs(end)}\n${body}`);
+  }
+  return out.join('\n\n') + '\n';
+}
