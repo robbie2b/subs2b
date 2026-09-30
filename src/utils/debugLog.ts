@@ -24,6 +24,8 @@ export interface DebugEntry {
   /** subtitles removed as duplicates of a similar release */
   dedupDropped: Array<{ provider: string; release: string }>;
   afterScoring: number;
+  /** how many subtitles were actually sent to the player (after the Results limit) */
+  shown?: number;
   usedFilename: boolean;
   scoringFallback: boolean;
   top: DebugTopEntry[];

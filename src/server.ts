@@ -23,7 +23,7 @@ import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { subsroGet } from './utils/subsroHttp';
 import { getDebug } from './utils/debugLog';
-import { recordUsage, getUsage } from './storage/usageStore';
+import { getUsage } from './storage/usageStore';
 
 interface KeyValidation {
   valid: boolean;
@@ -153,7 +153,7 @@ export function createServer(): express.Application {
     let name = DEFAULT_USER_CONFIG.instanceName as string;
     let description = 'Subtitle aggregator with automatic best-match scoring for Stremio and Nuvio.';
     let logo = DEFAULT_USER_CONFIG.instanceLogo as string;
-    let version = APP_VERSION;
+    const version = APP_VERSION;
 
     if (configEncoded) {
       try {
@@ -161,7 +161,6 @@ export function createServer(): express.Application {
         name = userCfg.instanceName?.trim() || name;
         description = userCfg.instanceDesc?.trim() || description;
         logo = userCfg.instanceLogo?.trim() || logo;
-        version = userCfg.instanceVersion?.trim().replace(/^v/i, '') || version;
       } catch {
         // Use default branding on decode failure
       }
@@ -417,7 +416,6 @@ export function createServer(): express.Application {
       const query = parseSubtitleQuery(type, id, extraArgs);
       const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
       const response = await getAggregatedSubtitles(query, userConfig, getBaseUrl(req), debugKey);
-      if (debugKey) void recordUsage(debugKey, { id, type, filename: extraArgs.filename });
 
       res.setHeader('Cache-Control', 'max-age=1800, public');
       res.json(response);

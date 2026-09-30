@@ -8,6 +8,7 @@ import { globalSubtitleCache } from '../utils/cache';
 import { Logger } from '../utils/logger';
 import { rankSubtitles } from '../utils/scorer';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
+import { recordUsage } from '../storage/usageStore';
 import { isAllowedDownloadUrl, addonHostsOf } from '../proxy/subtitleProxy';
 
 function toNumberOrNull(value: string | undefined): number | null {
@@ -153,30 +154,37 @@ export async function getAggregatedSubtitles(
     Logger.error('Scoring failed, keeping provider order', err);
   }
 
-  if (configId) {
-    const rawByProvider: Record<string, number> = {};
-    for (const r of rawSubtitles) rawByProvider[r.provider] = (rawByProvider[r.provider] || 0) + 1;
-    recordDebug(configId, {
-      at: new Date().toISOString(),
-      id: query.id,
-      extra: query.extra,
-      rawTotal: rawSubtitles.length,
-      rawByProvider,
-      afterLanguage: whitelistedItems.length,
-      afterDedup: afterDedupCount,
-      dedupDropped,
-      afterScoring: orderedItems.length,
-      usedFilename: debugUsedFilename,
-      scoringFallback: debugFallback,
-      top: debugTop
-    });
-  }
-
   // All subtitles are always searched and scored; the limit only trims what is shown to the player
+  const afterScoringCount = orderedItems.length;
   const limit = config.maxSubtitles;
   if (limit > 0 && orderedItems.length > limit) {
     Logger.info(`Showing the best ${limit} of ${orderedItems.length} subtitles (limit set in the configuration)`);
     orderedItems = orderedItems.slice(0, limit);
+  }
+
+  if (configId) {
+    const rawByProvider: Record<string, number> = {};
+    for (const r of rawSubtitles) rawByProvider[r.provider] = (rawByProvider[r.provider] || 0) + 1;
+    const record = {
+      rawTotal: rawSubtitles.length,
+      rawByProvider,
+      afterLanguage: whitelistedItems.length,
+      afterDedup: afterDedupCount,
+      afterScoring: afterScoringCount,
+      shown: orderedItems.length,
+      usedFilename: debugUsedFilename,
+      scoringFallback: debugFallback,
+      top: debugTop
+    };
+    recordDebug(configId, {
+      at: new Date().toISOString(),
+      id: query.id,
+      extra: query.extra,
+      dedupDropped,
+      ...record
+    });
+    // The same summary is stored with the usage timeline, so the Debug page can show it for older requests too
+    void recordUsage(configId, { id: query.id, type: query.type, filename: query.extra?.filename, details: record });
   }
 
   const addonHosts = addonHostsOf(config);

@@ -2,6 +2,7 @@ import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
 import { Logger } from '../utils/logger';
 import { mapWhitelistToOpenSubtitles } from '../utils/languages';
+import { USER_AGENT } from '../config/version';
 
 interface OpenSubtitlesRestItem {
   id: string;
@@ -78,7 +79,7 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
           params: p,
           headers: {
             'Api-Key': apiKey,
-            'User-Agent': 'subs2b v1.0.0',
+            'User-Agent': USER_AGENT,
             'Content-Type': 'application/json'
           },
           timeout: 10000

@@ -229,6 +229,19 @@ function isUuid(str) {
   return typeof str === 'string' && UUID_REGEX.test(str.trim());
 }
 
+// Version of the running server (read from package.json on the server), shown on the Home page
+let appVersionLabel = '';
+fetch('/health')
+  .then(r => r.json())
+  .then(h => {
+    if (h && h.version) {
+      appVersionLabel = `v${h.version}`;
+      const el = document.getElementById('home-instance-version');
+      if (el) el.textContent = appVersionLabel;
+    }
+  })
+  .catch(() => { /* the label simply stays empty */ });
+
 document.addEventListener('DOMContentLoaded', async () => {
   setupLandingActions();
   setupNavigation();
@@ -698,12 +711,10 @@ function setupHomeActions() {
     const name = document.getElementById('modal-input-name').value.trim();
     const desc = document.getElementById('modal-input-desc').value.trim();
     const logo = document.getElementById('modal-input-logo').value.trim();
-    const ver = document.getElementById('modal-input-version').value.trim();
 
     if (name) state.config.instanceName = name;
     if (desc) state.config.instanceDesc = desc;
     if (logo) state.config.instanceLogo = logo;
-    if (ver) state.config.instanceVersion = ver;
 
     renderHomeBranding();
     closeBrandingModal();
@@ -763,7 +774,6 @@ function openBrandingModal() {
   document.getElementById('modal-input-name').value = state.config.instanceName || '';
   document.getElementById('modal-input-desc').value = state.config.instanceDesc || '';
   document.getElementById('modal-input-logo').value = state.config.instanceLogo || '';
-  document.getElementById('modal-input-version').value = state.config.instanceVersion || '';
   openModal('modal-branding');
 }
 
@@ -781,7 +791,7 @@ function renderHomeBranding() {
 
   if (nameEl) nameEl.textContent = state.config.instanceName || 'subs2b';
   if (descEl) descEl.textContent = state.config.instanceDesc || 'Subtitle aggregator and organizer';
-  if (verEl) verEl.textContent = state.config.instanceVersion || 'v1.0.0';
+  if (verEl) verEl.textContent = appVersionLabel || '';
 
   const logoSrc = state.config.instanceLogo && state.config.instanceLogo.trim() !== ''
     ? state.config.instanceLogo.trim()

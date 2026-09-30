@@ -8,11 +8,25 @@ import { Logger } from '../utils/logger';
  * (survives restarts), otherwise only in memory. The owner is stored as a hash, never as the UUID.
  */
 
+/** Summary of how one request was answered (see aggregator): counts per step and the ranked top of the list */
+export interface UsageDetails {
+  rawTotal: number;
+  rawByProvider: Record<string, number>;
+  afterLanguage: number;
+  afterDedup: number;
+  afterScoring: number;
+  shown: number;
+  usedFilename: boolean;
+  scoringFallback: boolean;
+  top: Array<{ rank: number; score: number; rejected: boolean; provider: string; release: string; reasons: string[] }>;
+}
+
 export interface UsageEvent {
   at: string;
   id: string;
   type: string;
   filename: string;
+  details?: UsageDetails;
 }
 
 export interface UsageSummary {
@@ -28,6 +42,7 @@ export interface UsageSummary {
 const MAX_MEMORY_EVENTS = 5000;
 const MAX_ROWS_READ = 20000;
 const RETENTION_DAYS = 90;
+const RECENT_LIMIT = 150;
 const memory = new Map<string, UsageEvent[]>();
 let tableReady: Promise<boolean> | null = null;
 
@@ -47,8 +62,10 @@ async function ensureTable(): Promise<boolean> {
             at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             content_id TEXT NOT NULL DEFAULT '',
             content_type TEXT NOT NULL DEFAULT '',
-            filename TEXT NOT NULL DEFAULT ''
+            filename TEXT NOT NULL DEFAULT '',
+            details JSONB
           );
+          ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS details JSONB;
           CREATE INDEX IF NOT EXISTS idx_usage_events_owner_at ON usage_events(owner, at DESC);
         `);
         return true;
@@ -62,14 +79,15 @@ async function ensureTable(): Promise<boolean> {
 }
 
 /** Records one subtitles request. Never throws and never blocks the response for long. */
-export async function recordUsage(configKey: string, event: { id: string; type: string; filename?: string }): Promise<void> {
+export async function recordUsage(configKey: string, event: { id: string; type: string; filename?: string; details?: UsageDetails }): Promise<void> {
   try {
     const owner = ownerOf(configKey);
     const entry: UsageEvent = {
       at: new Date().toISOString(),
       id: event.id,
       type: event.type,
-      filename: (event.filename || '').slice(0, 300)
+      filename: (event.filename || '').slice(0, 300),
+      details: event.details
     };
 
     const list = memory.get(owner) || [];
@@ -80,8 +98,8 @@ export async function recordUsage(configKey: string, event: { id: string; type: 
     if (await ensureTable()) {
       const pool = await configStorage.getPool();
       await pool!.query(
-        'INSERT INTO usage_events (owner, at, content_id, content_type, filename) VALUES ($1, $2, $3, $4, $5)',
-        [owner, entry.at, entry.id, entry.type, entry.filename]
+        'INSERT INTO usage_events (owner, at, content_id, content_type, filename, details) VALUES ($1, $2, $3, $4, $5, $6)',
+        [owner, entry.at, entry.id, entry.type, entry.filename, entry.details ? JSON.stringify(entry.details) : null]
       );
       if (Math.random() < 0.02) {
         await pool!.query(
@@ -114,14 +132,18 @@ export async function getUsage(configKey: string, tzInput?: string): Promise<Usa
     try {
       const pool = await configStorage.getPool();
       const res = await pool!.query(
-        'SELECT at, content_id, content_type, filename FROM usage_events WHERE owner = $1 ORDER BY at DESC LIMIT $2',
-        [owner, MAX_ROWS_READ]
+        // the ranked details are only needed for the rows the page lists, not for the whole history
+        `SELECT at, content_id, content_type, filename,
+                CASE WHEN ROW_NUMBER() OVER (ORDER BY at DESC) <= $3 THEN details END AS details
+         FROM usage_events WHERE owner = $1 ORDER BY at DESC LIMIT $2`,
+        [owner, MAX_ROWS_READ, RECENT_LIMIT]
       );
       events = res.rows.map((r: any) => ({
         at: new Date(r.at).toISOString(),
         id: r.content_id,
         type: r.content_type,
-        filename: r.filename
+        filename: r.filename,
+        details: r.details || undefined
       }));
       persistent = true;
     } catch (err) {
@@ -150,6 +172,6 @@ export async function getUsage(configKey: string, tzInput?: string): Promise<Usa
     persistent,
     byHour,
     byDayHour,
-    recent: events.slice(0, 150)
+    recent: events.slice(0, RECENT_LIMIT)
   };
 }

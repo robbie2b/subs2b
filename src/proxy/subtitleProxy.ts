@@ -10,12 +10,12 @@ import { subsroGet } from '../utils/subsroHttp';
 import { isWebVtt, vttToSrt } from '../utils/subtitleFormat';
 import { configStorage } from '../storage/configStore';
 import { UserConfig } from '../types/config';
-import { USER_AGENT } from '../config/version';
+import { USER_AGENT, APP_VERSION } from '../config/version';
 
 /** A subtitle is a small text file: anything bigger inside an archive is ignored (protects the server's memory) */
 const MAX_SUBTITLE_BYTES = 10 * 1024 * 1024;
 
-const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) subs2b/1.0.0';
+const BROWSER_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) subs2b/${APP_VERSION}`;
 
 /** Sites the generic proxy is allowed to download from (prevents it from being used as an open proxy) */
 const ALLOWED_DOWNLOAD_HOSTS = ['subdl.com', 'subsource.net', 'opensubtitles.org', 'opensubtitles.com', 'strem.io'];
@@ -333,7 +333,7 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
         {
           headers: {
             'Api-Key': apiKey,
-            'User-Agent': 'subs2b v1.0.0',
+            'User-Agent': USER_AGENT,
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },

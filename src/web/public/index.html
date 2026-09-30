@@ -175,7 +175,7 @@
                         d="M14.06,9L15,9.94L5.92,19H5V18.08L14.06,9M17.66,3C17.41,3 17.15,3.1 16.96,3.29L15.13,5.12L18.88,8.87L20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18.17,3.09 17.92,3 17.66,3M14.06,6.19L3,17.25V21H6.75L17.81,9.94L14.06,6.19Z" />
                     </svg>
                   </button>
-                  <span class="badge-version" id="home-instance-version">v1.0.0</span>
+                  <span class="badge-version" id="home-instance-version"></span>
                 </div>
 
                 <div class="hero-desc-row">
@@ -1112,12 +1112,8 @@
                 <p class="section-desc-subtle">Latest subtitle requests (one per Play). Times are in Europe/Bucharest.</p>
               </div>
             </div>
-            <div class="dbg-table-wrap">
-              <table class="dbg-table">
-                <thead><tr><th>Time</th><th>Content</th><th>File sent by the player</th></tr></thead>
-                <tbody id="dbg-recent"><tr><td colspan="3">Loading...</td></tr></tbody>
-              </table>
-            </div>
+            <p class="section-desc-subtle" style="margin-top:0">Click a request to see the subtitles it returned, in ranked order.</p>
+            <div id="dbg-recent" class="dbg-list"><div class="dbg-empty">Loading...</div></div>
           </div>
 
           <div class="dbg-card">
@@ -1127,9 +1123,18 @@
                 <p class="section-desc-subtle">Server log lines, refreshed every 2 seconds while this page is open (kept in memory, reset on restart).</p>
               </div>
               <div class="dbg-actions">
-                <label class="dbg-check"><input type="checkbox" id="dbg-autoscroll" checked> Auto-scroll</label>
-                <button class="btn-outline" id="dbg-log-pause" type="button">Pause</button>
-                <button class="btn-outline" id="dbg-log-clear" type="button">Clear view</button>
+                <span class="dbg-live" id="dbg-live"><i></i>Live</span>
+                <label class="dbg-switch" title="Keep the newest line in view">
+                  <input type="checkbox" id="dbg-autoscroll" checked><span class="dbg-switch-track"></span>Auto-scroll
+                </label>
+                <button class="dbg-btn" id="dbg-log-pause" type="button">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" id="dbg-pause-icon"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
+                  <span id="dbg-pause-label">Pause</span>
+                </button>
+                <button class="dbg-btn" id="dbg-log-clear" type="button">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
+                  Clear
+                </button>
               </div>
             </div>
             <pre id="dbg-log" class="dbg-log"></pre>
@@ -1277,10 +1282,6 @@
         <div class="input-group">
           <label for="modal-input-logo">Logo / Icon URL:</label>
           <input type="text" id="modal-input-logo" class="form-input" placeholder="https://...">
-        </div>
-        <div class="input-group">
-          <label for="modal-input-version">Version:</label>
-          <input type="text" id="modal-input-version" class="form-input" placeholder="v1.0.0">
         </div>
       </div>
       <div class="modal-footer">
