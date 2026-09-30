@@ -3126,3 +3126,6 @@ button:active {
 .dbg-status.bad { color: var(--accent-danger); background: rgba(239, 68, 68, 0.12); }
 .dbg-status.idle { color: var(--text-muted); background: var(--bg-chip); }
 .bad-text { color: var(--accent-danger) !important; }
+.dbg-tag { display: inline-block; vertical-align: middle; margin-left: 4px; font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; border: 1px solid transparent; }
+.dbg-tag.service { color: #a78bfa; background: rgba(124, 58, 237, 0.14); border-color: rgba(124, 58, 237, 0.35); }
+.dbg-tag.addon { color: #fbbf24; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.35); }

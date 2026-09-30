@@ -11,13 +11,15 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   providers: {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
-    'subsource': { enabled: false, apiKey: '' }
+    'subsource': { enabled: false, apiKey: '' },
+    'regielive': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
     'subdl',
-    'subsource'
+    'subsource',
+    'regielive'
   ],
   languages: ['pob', 'por', 'eng'],
   allowUnknownLanguages: false,
@@ -52,6 +54,9 @@ function upgradeLegacyName(name: string): string {
     .replace(/^subs2b\s*\(\s*subs2b\s*\)$/i, 'subs2b');
 }
 const LEGACY_LOGO = '/assets/AIOsubs_logo_wordmark.png';
+
+/** Providers that work without a personal API key (a shared one is used) */
+const KEY_OPTIONAL_PROVIDERS = ['regielive'];
 
 /**
  * Decodes a configuration passed directly in the URL (base64 JSON). Kept for old install links;
@@ -174,7 +179,8 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
     providers: {
       'opensubtitles': { enabled: false, apiKey: '' },
       'subdl': { enabled: false, apiKey: '' },
-      'subsource': { enabled: false, apiKey: '' }
+      'subsource': { enabled: false, apiKey: '' },
+      'regielive': { enabled: false, apiKey: '' }
     },
     customAddons,
     providerPriority,
@@ -213,10 +219,11 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
       const targetKey = key === 'opensubtitles-rest' || key === 'opensubtitles-v3' ? 'opensubtitles' : key;
       if (!result.providers[targetKey]) continue;
 
-      // A provider can only be enabled when it has an API key
+      // A provider can only be enabled when it has an API key (RegieLive works without one)
       const apiKey = typeof val.apiKey === 'string' ? val.apiKey.trim() : '';
+      const keyOptional = KEY_OPTIONAL_PROVIDERS.includes(targetKey);
       result.providers[targetKey] = {
-        enabled: apiKey !== '' && val.enabled === true,
+        enabled: (apiKey !== '' || keyOptional) && val.enabled === true,
         apiKey
       };
     }

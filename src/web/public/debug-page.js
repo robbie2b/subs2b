@@ -1,11 +1,17 @@
 // Debug page: live server log + when/what the addon was used for.
 // Loaded after app.js; app.js calls startDebugPage()/stopDebugPage() when the page is shown/left.
-const debugState = { logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5 };
+const debugState = { logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {} };
 const PLAY_ICON = 'M8,5.14V19.14L19,12.14L8,5.14Z';
 const PAUSE_ICON = 'M14,19H18V5H14M6,19H10V5H6V19Z';
 
 function debugBase() {
   return state.uuid && isUuid(state.uuid) ? `/${state.uuid}/debug` : null;
+}
+
+// 'service' (built into subs2b) or 'addon' (imported Stremio addon) as a small tag
+function kindTag(kind) {
+  if (kind !== 'service' && kind !== 'addon') return '';
+  return `<span class="dbg-tag ${kind}">${kind}</span>`;
 }
 
 function escapeHtmlDebug(text) {
@@ -192,6 +198,11 @@ async function refreshProviders() {
 }
 
 function renderProviders(data) {
+  // the request list shows the same tags next to each provider
+  debugState.kinds = {};
+  for (const p of data.providers || []) debugState.kinds[p.id] = p.kind;
+  renderRecent();
+
   const body = document.getElementById('dbg-prov-body');
   const summary = document.getElementById('dbg-prov-summary');
   if (!body || !summary) return;
@@ -216,7 +227,7 @@ function renderProviders(data) {
     const wins = ranked ? `${p.wins} <span class="dbg-muted">(${pct(p.wins / ranked)})</span>` : '-';
     const inTop = ranked ? `${p.inTop} <span class="dbg-muted">(${pct(p.inTop / ranked)})</span>` : '-';
     return `<tr>`
-      + `<td class="dbg-prov-name">${escapeHtmlDebug(p.name)}<div class="dbg-muted">${escapeHtmlDebug(p.id)}</div></td>`
+      + `<td class="dbg-prov-name">${escapeHtmlDebug(p.name)} ${kindTag(p.kind)}<div class="dbg-muted">${escapeHtmlDebug(p.id)}</div></td>`
       + `<td>${status}</td>`
       + `<td class="${rateClass}">${p.searches ? pct(p.successRate) : '-'}<div class="dbg-muted">${p.searches ? `${p.searches - p.failures}/${p.searches}` : ''}</div></td>`
       + `<td>${p.searches ? ms(p.avgMs) : '-'}<div class="dbg-muted">${p.searches ? `max ${ms(p.maxMs)}` : ''}</div></td>`
@@ -250,7 +261,7 @@ function renderRequest(e, tz) {
       const reasons = t.reasons.map(r => `<span class="dbg-chip">${escapeHtmlDebug(r)}</span>`).join('');
       return `<div class="dbg-sub${t.rejected ? ' rejected' : ''}">`
         + `<span class="dbg-rank">#${t.rank}</span>`
-        + `<div class="dbg-sub-main"><div class="dbg-sub-name">${escapeHtmlDebug(t.release) || '(no name)'}</div><div class="dbg-sub-meta"><span class="dbg-prov">${escapeHtmlDebug(t.provider)}</span>${reasons}</div></div>`
+        + `<div class="dbg-sub-main"><div class="dbg-sub-name">${escapeHtmlDebug(t.release) || '(no name)'}</div><div class="dbg-sub-meta"><span class="dbg-prov">${escapeHtmlDebug(t.provider)}</span>${kindTag(debugState.kinds[t.provider])}${reasons}</div></div>`
         + `<span class="dbg-score">${t.score}</span>`
         + `<span class="dbg-sent${sent ? ' yes' : ''}">${t.rejected ? 'rejected' : sent ? 'sent' : 'not sent'}</span>`
         + `</div>`;

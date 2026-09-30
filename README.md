@@ -46,7 +46,7 @@ subtitles are *shown* to the player, best first.
 ## Features
 
 - **Sources:** OpenSubtitles.com (API v1), SubDL and Subsource, each with its own API key that is
-  validated live, plus any Stremio subtitle addon imported by its `manifest.json` URL (for example the community Subs.ro addon).
+  validated live, **RegieLive** (Romanian; works without a key, see below), plus any Stremio subtitle addon imported by its `manifest.json` URL (for example the community Subs.ro addon).
 - **Language whitelist and remapping:** everything is normalized to ISO 639-2; free rules such as `pt-br → pob`.
 - **Deduplication** by download URL and release-name similarity, with provider priority.
 - **Results limit** to show only the best *N* subtitles.
@@ -110,7 +110,19 @@ The free plan sleeps after inactivity; the first request after a pause takes abo
 | `DATABASE_URL` | *(empty)* | PostgreSQL connection string. Empty: configurations go to `./data/configurations.json` |
 | `DATA_DIR` | `./data` | Folder for the local configuration file |
 | `OPENSUBTITLES_ADDON_MODE` | `parallel` | `parallel`: OpenSubtitles addons imported in the UI run together with the direct integration. `fallback`: only if the direct integration fails |
+| `REGIELIVE_API_KEY` | *(empty)* | Personal RegieLive API key (optional; the shared Bazarr key is used without it) |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | `60000`, `150` | Rate limit of the subtitles endpoint |
+
+## RegieLive
+
+RegieLive is built in as a service (Services tab, no key needed). It uses the same search API as Bazarr: by title and
+year (+ season/episode) and by the playing file's name, and it downloads the ZIP/RAR archives, picks the right file
+(episode, Romanian language), fixes the old Romanian charset (Windows-1250) and converts MicroDVD `.sub` files to SRT.
+
+- RegieLive asks API users to stay under about 8 searches per minute; subs2b enforces that (and caches results).
+- Without a personal key the **shared Bazarr key** is used, whose request budget is shared with every other Bazarr user.
+  If you have your own RegieLive key, paste it in the service settings (or set `REGIELIVE_API_KEY`).
+- The IMDb-id search is not used: the API refuses it for the shared key.
 
 ## Subs.ro
 

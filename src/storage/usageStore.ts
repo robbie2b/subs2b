@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { configStorage } from './configStore';
 import { Logger } from '../utils/logger';
+import { providerKind, ProviderKind } from '../providers/kind';
 
 /**
  * Remembers WHEN each addon configuration is used (one row per subtitles request, i.e. per press on Play),
@@ -182,6 +183,8 @@ export async function getUsage(configKey: string, tzInput?: string): Promise<Usa
 export interface ProviderStat {
   id: string;
   name: string;
+  /** 'service' = built into subs2b, 'addon' = imported Stremio addon */
+  kind: ProviderKind;
   /** searches in which the provider really ran (cached answers excluded) */
   searches: number;
   failures: number;
@@ -305,6 +308,7 @@ export function computeProviderStats(events: UsageEvent[]): ProviderStats {
     return {
       id,
       name: a.name || id,
+      kind: providerKind(id),
       searches,
       failures: a.failures,
       successRate: searches ? round((searches - a.failures) / searches, 3) : 0,

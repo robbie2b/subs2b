@@ -46,13 +46,15 @@ const DEFAULT_CONFIG = {
   providers: {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
-    'subsource': { enabled: false, apiKey: '' }
+    'subsource': { enabled: false, apiKey: '' },
+    'regielive': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
     'subdl',
-    'subsource'
+    'subsource',
+    'regielive'
   ],
   languages: ['pob', 'por', 'eng'],
   allowUnknownLanguages: false,
@@ -76,11 +78,19 @@ const DEFAULT_CONFIG = {
   cacheTtlMinutes: 30
 };
 
+// Services that work without a personal key (the key is optional)
+const KEY_OPTIONAL_SERVICES = new Set(['regielive']);
+
 const SERVICES_META = {
   opensubtitles: {
     id: 'opensubtitles',
     name: 'OpenSubtitles',
     helpText: 'Don\'t have a key? <a href="https://www.opensubtitles.com/users/sign_up" target="_blank" rel="noopener noreferrer">Create a free account on OpenSubtitles.com</a> to get your key.'
+  },
+  regielive: {
+    id: 'regielive',
+    name: 'RegieLive',
+    helpText: 'Works without a key (a shared one is used). To get your own request budget, ask RegieLive for a personal API key and paste it here; it is optional.'
   },
   subdl: {
     id: 'subdl',
@@ -406,8 +416,9 @@ function applyConfigWithMigration(parsed) {
       if (merged.providers[targetKey]) {
         const apiKey = typeof val.apiKey === 'string' ? val.apiKey.trim() : '';
         const hasApiKey = Boolean(apiKey && apiKey.trim() !== '');
-        // Rule: service can only be enabled if apiKey exists
-        merged.providers[targetKey].enabled = hasApiKey ? (typeof val.enabled === 'boolean' ? val.enabled : false) : false;
+        // Rule: service can only be enabled if apiKey exists (unless its key is optional, like RegieLive)
+        const mayBeEnabled = hasApiKey || KEY_OPTIONAL_SERVICES.has(targetKey);
+        merged.providers[targetKey].enabled = mayBeEnabled ? (typeof val.enabled === 'boolean' ? val.enabled : false) : false;
         merged.providers[targetKey].apiKey = apiKey;
         if (hasApiKey) {
           state.validatedKeys[targetKey] = true;
@@ -806,7 +817,7 @@ function renderHomeBranding() {
 }
 
 function setupServicesActions() {
-  const serviceIds = ['opensubtitles', 'subdl', 'subsource'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
 
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
@@ -814,7 +825,14 @@ function setupServicesActions() {
       toggle.addEventListener('click', async (e) => {
                 const isTurningOn = toggle.checked;
 
-        if (isTurningOn) {
+        if (isTurningOn && KEY_OPTIONAL_SERVICES.has(id)) {
+          if (!state.config.providers[id]) state.config.providers[id] = { enabled: false, apiKey: '' };
+          state.config.providers[id].enabled = true;
+          hideMissingCredentialsBanner();
+          renderFiltersPriority();
+          updateStats();
+          notifyConfigChanged();
+        } else if (isTurningOn) {
           // Rule: cannot be turned ON without valid API key
           const prov = state.config.providers[id];
           const apiKey = prov?.apiKey?.trim() || '';
@@ -947,8 +965,8 @@ function setupServicesActions() {
     }
     state.config.providers[serviceId].apiKey = newKey;
 
-    // If key is empty, ensure disabled
-    if (!newKey) {
+    // If key is empty, ensure disabled (services with an optional key keep working without one)
+    if (!newKey && !KEY_OPTIONAL_SERVICES.has(serviceId)) {
       state.config.providers[serviceId].enabled = false;
       state.validatedKeys[serviceId] = false;
       const toggle = document.getElementById(`svc-toggle-${serviceId}`);
@@ -1040,7 +1058,7 @@ function triggerAutoValidation(serviceId, apiKey) {
 }
 
 function renderServicesState() {
-  const serviceIds = ['opensubtitles', 'subdl', 'subsource'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
     if (toggle) {
@@ -2019,11 +2037,11 @@ function renderFiltersPriority() {
 
   const activeItemsMap = new Map();
 
-  const nativeKeys = ['opensubtitles', 'subdl', 'subsource'];
+  const nativeKeys = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
   for (const id of nativeKeys) {
     const prov = state.config.providers[id];
     // ONLY show native services that are enabled AND have an API key
-    if (prov && prov.enabled === true && prov.apiKey && prov.apiKey.trim() !== '') {
+    if (prov && prov.enabled === true && (KEY_OPTIONAL_SERVICES.has(id) || (prov.apiKey && prov.apiKey.trim() !== ''))) {
       activeItemsMap.set(id, {
         id,
         name: SERVICES_META[id]?.name || id,
@@ -2253,10 +2271,10 @@ function setupInstallPageActions() {
 
     // Check credentials on active services
     const missingCreds = [];
-    const nativeIds = ['opensubtitles', 'subdl', 'subsource'];
+    const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
     for (const id of nativeIds) {
       const prov = state.config.providers[id];
-      if (prov && prov.enabled === true && (!prov.apiKey || prov.apiKey.trim() === '')) {
+      if (prov && prov.enabled === true && !KEY_OPTIONAL_SERVICES.has(id) && (!prov.apiKey || prov.apiKey.trim() === '')) {
         missingCreds.push(SERVICES_META[id]?.name || id);
       }
     }
@@ -2398,10 +2416,10 @@ function setupInstallPageActions() {
 
 async function saveCurrentConfiguration(andShowInstall = false) {
   const missingCreds = [];
-  const nativeIds = ['opensubtitles', 'subdl', 'subsource'];
+  const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
   for (const id of nativeIds) {
     const prov = state.config.providers[id];
-    if (prov && prov.enabled === true) {
+    if (prov && prov.enabled === true && !KEY_OPTIONAL_SERVICES.has(id)) {
       if (!prov.apiKey || prov.apiKey.trim() === '') {
         missingCreds.push(SERVICES_META[id]?.name || id);
       }

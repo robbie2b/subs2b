@@ -6,7 +6,8 @@ import zlib from 'zlib';
 import path from 'path';
 import { LRUCache } from 'lru-cache';
 import { Logger } from '../utils/logger';
-import { isWebVtt, vttToSrt } from '../utils/subtitleFormat';
+import { isWebVtt, vttToSrt, isMicroDvd, microDvdToSrt } from '../utils/subtitleFormat';
+import { decodeTicket, regieLiveApiKey, regieLiveHeaders, REGIELIVE_DOWNLOAD_HOST } from '../providers/regielive';
 import { parseRelease, rankSubtitles } from '../utils/scorer';
 import { configStorage } from '../storage/configStore';
 import { UserConfig } from '../types/config';
@@ -75,6 +76,21 @@ function looseEpisodeOf(name: string): number | null {
   return trailing ? parseInt(trailing[1], 10) : null;
 }
 
+const RO_TOKENS = new Set(['ro', 'rom', 'ron', 'romana', 'romanian']);
+const FOREIGN_TOKENS = new Set([
+  'en', 'eng', 'uk', 'gb', 'us', 'fr', 'fra', 'fre', 'de', 'ger', 'deu', 'es', 'spa', 'it', 'ita', 'nl', 'dut', 'pt', 'por',
+  'ru', 'rus', 'hu', 'hun', 'bg', 'bul', 'gr', 'gre', 'ell', 'tr', 'tur', 'pl', 'pol', 'cz', 'cze', 'ar', 'ara', 'zh', 'chi',
+  'ja', 'jpn', 'ko', 'kor'
+]);
+
+/** Language tag written in a file name ("...ro.srt", "...uk-hi.srt"), compared token by token */
+function archiveEntryLanguage(name: string): 'ro' | 'foreign' | null {
+  const tokens = path.basename(name).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.some(t => RO_TOKENS.has(t))) return 'ro';
+  if (tokens.some(t => FOREIGN_TOKENS.has(t))) return 'foreign';
+  return null;
+}
+
 /**
  * Chooses the subtitle inside an archive. Without information about the playing file it is the first .srt (as before).
  * With it: the entries for the requested episode first (season packs), then the one whose release name is most
@@ -83,10 +99,17 @@ function looseEpisodeOf(name: string): number | null {
 export function pickArchiveEntry<T extends { entryName: string }>(entries: T[], pick?: ArchivePick): T | undefined {
   const srt = entries.filter(e => /\.srt$/i.test(e.entryName));
   const vtt = entries.filter(e => /\.vtt$/i.test(e.entryName));
-  const pool = srt.length > 0 ? srt : vtt.length > 0 ? vtt : entries;
-  if (pool.length <= 1 || !pick) return pool[0];
+  const other = entries.filter(e => /\.(sub|ass|ssa)$/i.test(e.entryName));
+  const pool = srt.length > 0 ? srt : vtt.length > 0 ? vtt : other.length > 0 ? other : entries;
+  if (pool.length <= 1) return pool[0];
 
-  let candidates = pool;
+  // Archives sometimes hold several languages ("...ro...", "...uk..."): keep the Romanian ones when they exist
+  const romanian = pool.filter(e => archiveEntryLanguage(e.entryName) === 'ro');
+  // (only when one is tagged as Romanian: short tags such as "it" or "us" can also be part of a title)
+  const usable = romanian.length > 0 ? romanian : pool;
+  if (!pick) return usable[0];
+
+  let candidates = usable;
   if (pick.episode != null) {
     const wanted = pick.episode;
     const byEpisode = pool.filter(e => {
@@ -168,7 +191,7 @@ export function decompressBuffer(
  * Accurately decodes buffers of unknown charset (UTF-8, Windows-1252, ISO-8859-1, UTF-16 LE/BE)
  * into a clean UTF-8 string and strips BOMs.
  */
-export function toCleanUtf8(buffer: Buffer): string {
+export function toCleanUtf8(buffer: Buffer, legacyCharset: 'win1252' | 'win1250' = 'win1252'): string {
   if (!buffer || buffer.length === 0) return '';
 
   let text = '';
@@ -187,7 +210,7 @@ export function toCleanUtf8(buffer: Buffer): string {
   } else {
     // Standard UTF-8 attempt, falling back to Windows-1252 for Latin diacritics
     const utf8 = buffer.toString('utf8');
-    text = utf8.includes('�') ? iconv.decode(buffer, 'win1252') : utf8;
+    text = utf8.includes('�') ? iconv.decode(buffer, legacyCharset) : utf8;
   }
 
   // 2. Strip UTF-8 BOM if present at index 0
@@ -517,5 +540,114 @@ export async function handleVttConvert(req: Request, res: Response): Promise<voi
   } catch (err: unknown) {
     Logger.warn('VTT -> SRT conversion failed, sending the player to the original link', { reason: err instanceof Error ? err.message : String(err) });
     res.redirect(302, original);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RegieLive downloads: ZIP or RAR archives (the type is only known from the first bytes), old Romanian
+// charsets, and sometimes MicroDVD (".sub") subtitles
+// ---------------------------------------------------------------------------
+
+/** Extracts the subtitle bytes from a RAR archive, choosing the entry like pickArchiveEntry does for ZIP */
+async function extractFromRar(buf: Buffer, pick?: ArchivePick): Promise<{ buffer: Buffer; filename: string }> {
+  const { createExtractorFromData } = await import('node-unrar-js');
+  const data = Uint8Array.from(buf).buffer;
+  const extractor = await createExtractorFromData({ data });
+  const headers = [...extractor.getFileList().fileHeaders].filter(
+    h => !h.flags.directory && !h.flags.encrypted && h.unpSize <= MAX_SUBTITLE_BYTES
+  );
+  const chosen = pickArchiveEntry(headers.map(h => ({ entryName: h.name })), pick);
+  if (!chosen) throw new Error('The RAR archive has no usable file.');
+
+  const extracted = extractor.extract({ files: [chosen.entryName] });
+  const file = [...extracted.files][0];
+  if (!file || !file.extraction || file.extraction.length > MAX_SUBTITLE_BYTES) {
+    throw new Error('Could not extract the subtitle from the RAR archive.');
+  }
+  return { buffer: Buffer.from(file.extraction), filename: path.basename(chosen.entryName) };
+}
+
+/** Turns a downloaded RegieLive archive (ZIP / RAR / plain file) into subtitle text in SRT form */
+export async function subtitleFromRegieLiveArchive(
+  archive: Buffer,
+  pick?: ArchivePick
+): Promise<{ content: string; filename: string; valid: boolean; reason?: string }> {
+  let bytes: Buffer;
+  let filename = 'subtitle.srt';
+
+  const isRar = archive.length > 4 && archive[0] === 0x52 && archive[1] === 0x61 && archive[2] === 0x72 && archive[3] === 0x21;
+  if (isRar) {
+    const rar = await extractFromRar(archive, pick);
+    bytes = rar.buffer;
+    filename = rar.filename;
+  } else {
+    const plain = decompressBuffer(archive, pick);
+    bytes = plain.buffer;
+    filename = plain.filename || filename;
+  }
+
+  let text = toCleanUtf8(bytes, 'win1250');
+  if (isMicroDvd(text)) text = microDvdToSrt(text);
+
+  const validation = validateAndFormatSubtitle(text, 'srt');
+  return { content: validation.content, filename, valid: validation.valid, reason: validation.reason };
+}
+
+/**
+ * GET /proxy/download/regielive/<ticket>  Downloads the archive chosen at search time (the ticket carries its address,
+ * the RegieLive session cookie and what is being played) and serves the right subtitle from it as SRT.
+ */
+export async function handleRegieLiveDownload(req: Request, res: Response): Promise<void> {
+  const ticket = decodeTicket(String(req.params.data || ''));
+  let url: URL | null = null;
+  try {
+    url = ticket ? new URL(ticket.u) : null;
+  } catch {
+    url = null;
+  }
+  if (!ticket || !url || url.protocol !== 'https:' || url.hostname !== REGIELIVE_DOWNLOAD_HOST) {
+    sendError(res, 400, 'Invalid RegieLive download link.');
+    return;
+  }
+
+  const headers = regieLiveHeaders(regieLiveApiKey(), ticket.c);
+  headers.Accept = 'application/octet-stream, */*';
+  const retryDelays = [1500, 3000];
+
+  try {
+    let response: { data: ArrayBuffer } | null = null;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        response = await axios.get<ArrayBuffer>(url.toString(), {
+          responseType: 'arraybuffer',
+          timeout: 15000,
+          headers,
+          maxContentLength: 20 * 1024 * 1024,
+          maxRedirects: 0
+        });
+        break;
+      } catch (err) {
+        // 429 is RegieLive's temporary rate limit: a short wait usually fixes it
+        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+        if (status !== 429 || attempt >= retryDelays.length) throw err;
+        await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+      }
+    }
+
+    const result = await subtitleFromRegieLiveArchive(Buffer.from(response.data), {
+      season: ticket.s ?? null,
+      episode: ticket.e ?? null,
+      videoFilename: ticket.vf ?? null
+    });
+    if (!result.valid) {
+      Logger.warn(`Invalid subtitle from RegieLive: ${result.reason}`);
+      sendError(res, 502, `Failed to process the RegieLive subtitle: ${result.reason}`);
+      return;
+    }
+    sendSubtitleResponse(res, result.content, 'srt', result.filename);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    Logger.error(`RegieLive download failed: ${msg}`, err);
+    sendError(res, 502, `Could not download from RegieLive: ${msg}`);
   }
 }

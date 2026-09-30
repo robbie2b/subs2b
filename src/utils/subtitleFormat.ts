@@ -74,3 +74,42 @@ export function vttToSrt(input: string): string {
 
   return cues.join('\n\n') + (cues.length > 0 ? '\n' : '');
 }
+
+/** MicroDVD (".sub" with frame numbers: "{508}{583}text|second line") */
+export function isMicroDvd(text: string): boolean {
+  const first = text.replace(/^﻿/, '').trimStart().split(/\r?\n/, 1)[0] || '';
+  return /^\{\d+\}\{\d+\}/.test(first);
+}
+
+/** Converts MicroDVD to SRT. Without a frame rate in the file, 23.976 fps is assumed (the usual one for rips). */
+export function microDvdToSrt(text: string, fpsDefault = 23.976): string {
+  const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').split('\n');
+  let fps = fpsDefault;
+
+  // some files carry the frame rate in a first cue like "{1}{1}23.976"
+  const header = lines[0]?.match(/^\{1\}\{1\}(\d+(?:\.\d+)?)\s*$/);
+  if (header) {
+    const declared = parseFloat(header[1]);
+    if (declared >= 10 && declared <= 60) fps = declared;
+  }
+
+  const stamp = (frame: number): string => {
+    let ms = Math.round((frame / fps) * 1000);
+    const h = Math.floor(ms / 3600000); ms -= h * 3600000;
+    const m = Math.floor(ms / 60000); ms -= m * 60000;
+    const s = Math.floor(ms / 1000); ms -= s * 1000;
+    const p = (n: number, w = 2) => String(n).padStart(w, '0');
+    return `${p(h)}:${p(m)}:${p(s)},${p(ms, 3)}`;
+  };
+
+  const cues: Array<{ start: number; end: number; text: string }> = [];
+  for (const line of lines) {
+    const m = line.match(/^\{(\d+)\}\{(\d+)\}(.*)$/);
+    if (!m) continue;
+    if (m[1] === '1' && m[2] === '1' && /^\d+(\.\d+)?$/.test(m[3].trim())) continue;
+    const body = m[3].replace(/\{[a-zA-Z]:[^}]*\}/g, '').replace(/\|/g, '\n').trim();
+    if (body) cues.push({ start: parseInt(m[1], 10), end: parseInt(m[2], 10), text: body });
+  }
+  cues.sort((a, b) => a.start - b.start);
+  return cues.map((c, i) => `${i + 1}\n${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`).join('\n');
+}

@@ -1,6 +1,6 @@
 {
   "name": "subs2b",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Stremio & Nuvio subtitle aggregator: searches several providers and puts the subtitle that best matches the playing file first.",
   "main": "dist/index.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "tsc && node scripts/copy-assets.js",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
-    "test": "tsx test/providerValidation.test.ts && tsx test/persistenceStorage.test.ts && tsx test/decodeRelease.test.ts && tsx test/scorer.test.ts && tsx test/scorer.test.ts all && tsx test/scorerRules.test.ts && tsx test/zipPick.test.ts && tsx test/fallback.test.ts && tsx test/vttConvert.test.ts && tsx test/usage.test.ts"
+    "test": "tsx test/providerValidation.test.ts && tsx test/persistenceStorage.test.ts && tsx test/decodeRelease.test.ts && tsx test/scorer.test.ts && tsx test/scorer.test.ts all && tsx test/scorerRules.test.ts && tsx test/zipPick.test.ts && tsx test/regielive.test.ts && tsx test/fallback.test.ts && tsx test/vttConvert.test.ts && tsx test/usage.test.ts"
   },
   "keywords": [
     "stremio",
@@ -32,6 +32,7 @@
     "express-rate-limit": "^7.5.0",
     "iconv-lite": "^0.6.3",
     "lru-cache": "^11.0.2",
+    "node-unrar-js": "^2.0.2",
     "pg": "^8.23.0",
     "qrcode": "^1.5.4"
   },

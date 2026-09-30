@@ -12,6 +12,7 @@ import { StremioManifest } from './types/stremio';
 import { DEFAULT_USER_CONFIG, decodeUserConfigAsync, mergeWithDefaults } from './config/userConfig';
 import {
   handleOpenSubtitlesRestDownload,
+  handleRegieLiveDownload,
   handleUnifiedSubtitleProxy,
   handleVttConvert
 } from './proxy/subtitleProxy';
@@ -22,6 +23,7 @@ import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { getDebug } from './utils/debugLog';
 import { getUsage, getProviderStats } from './storage/usageStore';
+import { REGIELIVE_SEARCH_URL, regieLiveHeaders } from './providers/regielive';
 
 interface KeyValidation {
   valid: boolean;
@@ -29,6 +31,23 @@ interface KeyValidation {
 }
 
 const KEY_VALIDATORS: Record<string, (apiKey: string) => Promise<KeyValidation>> = {
+  // The key is optional for RegieLive (a shared one is used without it); a personal key is checked with one small search
+  async regielive(apiKey) {
+    try {
+      const res = await axios.get(REGIELIVE_SEARCH_URL, {
+        params: { nume: 'Friends', sezon: 1, episod: 1 },
+        headers: regieLiveHeaders(apiKey),
+        timeout: 8000,
+        validateStatus: () => true
+      });
+      if (res.status === 200 && res.data && typeof res.data === 'object' && res.data.rezultate) return { valid: true };
+      if (res.status === 403 || res.status === 401) return { valid: false, error: 'RegieLive did not accept this key.' };
+      return { valid: false, error: `RegieLive answered HTTP ${res.status}.` };
+    } catch (err: any) {
+      return { valid: false, error: `Could not reach RegieLive: ${err?.code || err?.message || 'error'}.` };
+    }
+  },
+
   async opensubtitles(apiKey) {
     if (apiKey.length < 16) {
       return { valid: false, error: 'The OpenSubtitles key looks invalid or incomplete.' };
@@ -511,6 +530,7 @@ export function createServer(): express.Application {
   // /sub/proxy/:data and /proxy/subtitle/:data  legacy links with a base64 URL
   app.get(['/sub/proxy', '/sub/proxy/:data', '/proxy/subtitle/:data'], handleUnifiedSubtitleProxy);
   app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
+  app.get('/proxy/download/regielive/:data', handleRegieLiveDownload);
   app.get(['/:config/sub/convert/:data.srt', '/:config/sub/convert.srt'], subtitlesLimiter, handleVttConvert);
 
   app.use((req: Request, res: Response) => {

@@ -1,5 +1,7 @@
 import { recordUsage, getUsage, computeProviderStats } from '../src/storage/usageStore';
 import { getLogLines, Logger } from '../src/utils/logger';
+import { getAllProviders } from '../src/providers';
+import { BUILTIN_PROVIDER_IDS, providerKind } from '../src/providers/kind';
 
 let failures = 0;
 function check(name: string, ok: boolean, detail?: unknown) {
@@ -53,6 +55,10 @@ async function main() {
   check("stats: rejected subtitles are not counted as in top", ro.inTop === 2, ro.inTop);
   check("stats: hash matches counted", os.hashMatches === 1);
   check("stats: empty answers are not failures", ro.emptyRate === 0.5 && ro.failures === 0);
+
+  check('stats: a built-in provider is tagged "service", an imported addon "addon"', os.kind === 'service' && ro.kind === 'addon', [os.kind, ro.kind]);
+  check('the list of built-in ids matches the registered providers', JSON.stringify([...BUILTIN_PROVIDER_IDS].sort()) === JSON.stringify(getAllProviders().map(p => p.id).sort()), getAllProviders().map(p => p.id));
+  check('an addon id that only looks similar is still an addon', providerKind('org.stremio.subsro') === 'addon' && providerKind('regielive') === 'service');
 
   if (failures) { console.log(`\n${failures} check(s) failed`); process.exit(1); }
   console.log('\nAll usage checks passed');
