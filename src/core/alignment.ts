@@ -2,7 +2,7 @@ import axios from 'axios';
 import { LRUCache } from 'lru-cache';
 import { RawSubtitleItem, SubtitleQuery } from '../types/provider';
 import { UserConfig } from '../types/config';
-import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated } from '../utils/scorer';
+import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated, ParsedRelease, Source } from '../utils/scorer';
 import { readCues } from '../utils/subtitleCues';
 import { alignToReference, decide, speechFlags, Decision, RefAlignment, TimedCue } from '../utils/subsync';
 import { executeParallelSearch } from '../providers';
@@ -14,7 +14,7 @@ import { USER_AGENT } from '../config/version';
  *
  * Releases of the same episode can have a different start (a 2160p file with a few extra seconds, for instance),
  * so a subtitle made for a 1080p release is late or early by a constant amount. When none of the subtitles found
- * fits the playing file, a subtitle of the playing file's own kind (same resolution class, any language) is used as
+ * fits the playing file, a subtitle of the playing file's own kind (same resolution class and source family, any language) is used as
  * a timing reference, and the subtitle that is served is shifted by the measured difference.
  */
 
@@ -25,6 +25,39 @@ export function resolutionClass(resolution: number | null): ResolutionClass | nu
   return resolution >= 2160 ? 'uhd' : 'hd';
 }
 
+/** Releases of one family come from the same master (a REMUX and a WEB-DL of one episode often start differently) */
+export type SourceFamily = 'disc' | 'web' | 'tv' | 'dvd';
+
+export function sourceFamily(source: Source | null): SourceFamily | null {
+  switch (source) {
+    case 'remux':
+    case 'bluray':
+      return 'disc';
+    case 'webdl':
+    case 'webrip':
+      return 'web';
+    case 'hdtv':
+      return 'tv';
+    case 'dvd':
+      return 'dvd';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Has a subtitle the same kind as the file: same resolution class AND same source family
+ * (when the file's family is unknown, the class alone decides).
+ */
+function sameKind(sub: ParsedRelease, video: ParsedRelease): boolean {
+  const videoFamily = sourceFamily(video.source);
+  return resolutionClass(sub.resolution) === resolutionClass(video.resolution) &&
+    (videoFamily === null || sourceFamily(sub.source) === videoFamily);
+}
+
+const kindLabel = (p: ParsedRelease): string =>
+  [resolutionClass(p.resolution), sourceFamily(p.source)].filter(Boolean).join(' ');
+
 export interface TriggerVerdict {
   needed: boolean;
   reason: string;
@@ -32,8 +65,8 @@ export interface TriggerVerdict {
 
 /**
  * Is a timing reference needed? Only when no subtitle in the list is "compatible" with the file
- * (same release group, or same resolution class) AND at least one subtitle is known to come from another class.
- * If nothing is known about the file (no name) or about the subtitles' classes, nothing changes.
+ * (same release group, or same resolution class and source family) AND at least one subtitle is known to be of
+ * another kind. If nothing is known about the file (no name) or about the subtitles, nothing changes.
  */
 export function needsReference(filename: string | undefined | null, items: RawSubtitleItem[]): TriggerVerdict {
   if (!filename || !filename.trim()) return { needed: false, reason: 'the player sent no file name' };
@@ -41,19 +74,21 @@ export function needsReference(filename: string | undefined | null, items: RawSu
   const videoClass = resolutionClass(video.resolution);
   if (!videoClass) return { needed: false, reason: 'the resolution of the file is unknown' };
   if (items.length === 0) return { needed: false, reason: 'no subtitles' };
+  const videoFamily = sourceFamily(video.source);
 
-  let knownOtherClass = 0;
+  let knownOther = 0;
   for (const item of items) {
     const sub = parseRelease(item.release || '');
     const sameGroup = Boolean(sub.group && video.group && sub.group === video.group);
-    const subClass = resolutionClass(sub.resolution);
-    if (sameGroup || subClass === videoClass) {
-      return { needed: false, reason: sameGroup ? `a subtitle from the same group (${video.group})` : `a subtitle of the same resolution class (${videoClass})` };
+    if (sameGroup || sameKind(sub, video)) {
+      return { needed: false, reason: sameGroup ? `a subtitle from the same group (${video.group})` : `a subtitle of the same kind (${kindLabel(video)})` };
     }
-    if (subClass && subClass !== videoClass) knownOtherClass++;
+    const subClass = resolutionClass(sub.resolution);
+    const subFamily = sourceFamily(sub.source);
+    if (subClass && (subClass !== videoClass || (videoFamily && subFamily && subFamily !== videoFamily))) knownOther++;
   }
-  if (knownOtherClass === 0) return { needed: false, reason: 'no subtitle is known to come from another resolution class' };
-  return { needed: true, reason: `no subtitle of the same group or class (${videoClass}) among ${items.length}` };
+  if (knownOther === 0) return { needed: false, reason: 'no subtitle is known to be of another kind' };
+  return { needed: true, reason: `no subtitle of the same group or kind (${kindLabel(video)}) among ${items.length}` };
 }
 
 /** Season/episode/file-name parameters that let an archive download choose the right file inside a season pack */
@@ -91,7 +126,7 @@ async function fetchText(url: string, timeoutMs: number): Promise<string> {
   return Buffer.from(res.data).toString('utf8');
 }
 
-/** Picks the references worth downloading: same resolution class as the file, best matching name first, any language */
+/** Picks the references worth downloading: same kind as the file (class and family), best matching name first, any language */
 export function pickReferenceCandidates(
   items: RawSubtitleItem[],
   filename: string,
@@ -111,7 +146,7 @@ export function pickReferenceCandidates(
   for (const item of ranked.items) {
     const release = item.release || '';
     const parsed = parseRelease(release);
-    if (resolutionClass(parsed.resolution) !== videoClass) continue;
+    if (!sameKind(parsed, video)) continue;
     if (parsed.badQuality || looksForced(release) || looksMachineTranslated(release)) continue;
     if (item.forced || item.aiTranslated) continue;
     const key = `${item.provider}|${item.lang}|${release.toLowerCase()}`;
@@ -175,7 +210,7 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
 /** References for one episode/file kind (cached, and shared by concurrent requests) */
 export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
   const video = parseRelease(ctx.filename);
-  const key = `${ctx.query.id}|${resolutionClass(video.resolution)}|${video.service || ''}|${video.group || ''}`;
+  const key = `${ctx.query.id}|${resolutionClass(video.resolution)}|${sourceFamily(video.source) || ''}|${video.service || ''}|${video.group || ''}`;
   let pending = referenceCache.get(key);
   if (!pending) {
     pending = buildReferences(ctx).then(refs => {

@@ -1,4 +1,4 @@
-import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated, setDefaultRules } from '../src/utils/scorer';
+import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated, setDefaultRules, titlesMatch } from '../src/utils/scorer';
 import { RawSubtitleItem } from '../src/types/provider';
 
 // "scorer.test.ts all" (or SCORER_RULES=all) runs the whole suite with every optional rule switched on (regression check for those rules)
@@ -187,6 +187,47 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
   check('a lone forced subtitle is still returned (nothing else to offer)', only.items.length === 1);
   check('words that merely contain "forced" letters are not flagged', !looksForced('Reinforced.Concrete.2020.1080p') && !looksForced('Enforced.2020'));
   check('AI is only flagged as a translation term', !looksMachineTranslated('Maid.2021.1080p') && !looksMachineTranslated('Automatic.Weapon.2020'));
+}
+
+// ---------- title written longer / with a language prefix (Andor) ----------
+{
+  const andor = [
+    item('Andor.S01E01.1080p.WEB.H264-PECULATE'),
+    item('Andor.S01E01.720p.DSNP.WEB-DL.DDP5.1.H.264-NTb'),
+    item('Star.Wars.Andor.S01E01.1080p.DSNP.WEB-DL.DDP5.1.H.264-NTb'),
+    item('21_Romanian---Andor.S01E01.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-ION10.mp4'),
+    item('The.Mandalorian.S01E01.1080p.DSNP.WEB-DL.DDP5.1.H.264-NTb')
+  ];
+  for (const filename of ['Andor.S01E01.1080p.DSNP.WEB-DL.DDP5.1.H.264-NTb.mkv', 'Star.Wars.Andor.S01E01.1080p.DSNP.WEB-DL.DDP5.1.H.264-NTb.mkv', '']) {
+    const r = rankSubtitles(andor, { filename, season: 1, episode: 1 });
+    const kept = r.items.map(i => i.release);
+    check('Star.Wars.Andor kept (' + (filename || 'no file') + ')', kept.some(n => n.startsWith('Star.Wars.Andor')), r.details);
+    check('21_Romanian---Andor kept (' + (filename || 'no file') + ')', kept.some(n => n.startsWith('21_Romanian')), r.details);
+    check('another series still rejected (' + (filename || 'no file') + ')', !kept.some(n => n.startsWith('The.Mandalorian')), r.details);
+  }
+  check('Star.Wars.Andor with the same group ranks first', rankSubtitles(andor, { filename: 'Andor.S01E01.1080p.DSNP.WEB-DL.DDP5.1.H.264-NTb.mkv', season: 1, episode: 1 }).items[0].release.startsWith('Star.Wars.Andor'));
+
+  const tokens = (s: string) => parseRelease(s + '.2003.1080p').titleTokens;
+  check('Andor = Star Wars Andor', titlesMatch(tokens('Andor'), tokens('Star Wars Andor')));
+  check('Andor = 21 Romanian Andor', titlesMatch(tokens('Andor'), tokens('21 Romanian Andor')));
+  check('Wire != Wire in the Blood', !titlesMatch(tokens('The Wire'), tokens('Wire in the Blood')));
+  check('a continuation is not an end match', !titlesMatch(tokens('Matrix'), tokens('Matrix Reloaded Revolutions Resurrections')));
+  check('leading numbers alone are not skipped', !titlesMatch(tokens('Jump Street'), tokens('21 Jump Street Reunion Special Edition Cut')));
+  check('Guardians != Marvel Studios Assembled', !titlesMatch(tokens('Guardians of the Galaxy Vol 3'), parseRelease('Marvel.Studios.Assembled.S02E02.The.Making.of.Guardians.of.the.Galaxy.Vol.3').titleTokens));
+  check('at most 3 extra words in front', !titlesMatch(tokens('Andor'), tokens('One Two Three Four Andor')));
+
+  const matrix = rankSubtitles([
+    item('The.Matrix.1999.1080p.BluRay.x264-AMIABLE'),
+    item('The.Matrix.Reloaded.2003.1080p.BluRay.x264-AMIABLE'),
+    item('The.Matrix.1999.720p.BluRay.x264-SiNNERS')
+  ], { filename: 'The.Matrix.1999.1080p.BluRay.x264-AMIABLE.mkv' });
+  check('Matrix Reloaded still rejected for The Matrix', !matrix.items.some(i => i.release.includes('Reloaded')), matrix.details);
+
+  const jump = rankSubtitles([
+    item('21.Jump.Street.2012.1080p.BluRay.x264-SPARKS'),
+    item('22.Jump.Street.2014.1080p.BluRay.x264-SPARKS')
+  ], { filename: '21.Jump.Street.2012.1080p.BluRay.x264-SPARKS.mkv' });
+  check('22 Jump Street still rejected for 21 Jump Street', jump.items.length === 1 && jump.items[0].release.startsWith('21'), jump.details);
 }
 
 check('empty input', rankSubtitles([], {}).items.length === 0);

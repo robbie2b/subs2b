@@ -132,8 +132,17 @@ async function main() {
     const v3 = needsReference(CRU, [...hdOnly, item('Peacemaker.S01E01.2160p.WEB-DL.HEVC-SOMEONE')]);
     check('a 2160p subtitle of another group is compatible (same class) -> no reference', !v3.needed, v3);
 
-    const v4 = needsReference('Movie.2020.1080p.WEB-DL.x264-AAA.mkv', [item('Movie.2020.720p.BluRay.x264-BBB')]);
-    check('HD file with HD subtitles -> no reference', !v4.needed, v4);
+    const v4 = needsReference('Movie.2020.1080p.WEB-DL.x264-AAA.mkv', [item('Movie.2020.720p.WEBRip.x264-BBB')]);
+    check('HD web file with HD web subtitles -> no reference', !v4.needed, v4);
+
+    const BBT = 'The.Big.Bang.Theory.S01E06.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-EPSiLON.mkv';
+    const bbt = needsReference(BBT, [item('The.Big.Bang.Theory.S01E06.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb'), item('The.Big.Bang.Theory.S01E06.720p.WEBRip.x264-ION10')]);
+    check('Big Bang case: 1080p REMUX file, only WEB subtitles -> a reference is needed (other source family)', bbt.needed, bbt);
+    const bbtOk = needsReference(BBT, [item('The.Big.Bang.Theory.S01E06.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb'), item('The.Big.Bang.Theory.S01E06.720p.BluRay.x264-DEMAND')]);
+    check('REMUX file with a BluRay subtitle (same family) -> no reference', !bbtOk.needed, bbtOk);
+    check('HDTV file with WEB subtitles -> a reference is needed', needsReference('Show.S01E01.720p.HDTV.x264-KILLERS.mkv', [item('Show.S01E01.1080p.WEB-DL.x264-NTb')]).needed);
+    check('file without a known source: the class alone decides', !needsReference('Show.S01E01.1080p.x264-AAA.mkv', [item('Show.S01E01.1080p.WEB-DL.x264-NTb')]).needed);
+    check('subtitle of the same class but unknown source -> no reference (nothing known to differ)', !needsReference(BBT, [item('The.Big.Bang.Theory.S01E06.1080p.x264-XYZ')]).needed);
 
     const v5 = needsReference('Movie.2020.1080p.WEB-DL.x264-AAA.mkv', [item('Movie.2020.2160p.WEB-DL.HEVC-BBB')]);
     check('HD file with only 2160p subtitles of another group -> a reference is needed', v5.needed, v5);
@@ -157,6 +166,14 @@ async function main() {
     const picked = pickReferenceCandidates(found, CRU, 1, 1).map(i => i.lang);
     check('only 2160p subtitles of the right title, any language', picked.includes('fin') && picked.includes('ara') && picked.length === 2, picked);
     check('HD, forced, CAM and other titles are not references', !picked.includes('fra') && picked.length === 2);
+
+    const bbtFound = [
+      item('The.Big.Bang.Theory.S01E06.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb', 'subdl', 'eng'),
+      item('The.Big.Bang.Theory.S01E06.1080p.BluRay.x264-SHORTBREHD', 'subdl', 'spa'),
+      item('The.Big.Bang.Theory.S01E06.720p.BluRay.REMUX-OTHER', 'subsource', 'fre')
+    ];
+    const bbtPicked = pickReferenceCandidates(bbtFound, 'The.Big.Bang.Theory.S01E06.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-EPSiLON.mkv', 1, 6).map(i => i.lang);
+    check('a REMUX file takes only disc references (BluRay/REMUX), not WEB', bbtPicked.length === 2 && !bbtPicked.includes('eng'), bbtPicked);
   }
 
   // ============ the whole thing, with a faked network ============

@@ -247,6 +247,32 @@ function jaccard(a: string[], b: string[]): number {
 
 const TITLE_MATCH_THRESHOLD = 0.5;
 
+/** Language words some sites put before the title ("21_Romanian---Andor..."); only these (with numbers before them) are skipped */
+const LEADING_LANG = new Set(['romanian', 'romana', 'ro', 'rum', 'ron', 'english', 'eng', 'en']);
+const MAX_TITLE_PREFIX_WORDS = 3;
+
+function stripLeadingLanguage(tokens: string[]): string[] {
+  let i = 0;
+  while (i < tokens.length && /^\d+$/.test(tokens[i])) i++;
+  if (i >= tokens.length || !LEADING_LANG.has(tokens[i])) return tokens;
+  while (i < tokens.length && LEADING_LANG.has(tokens[i])) i++;
+  return i < tokens.length ? tokens.slice(i) : tokens;
+}
+
+/**
+ * Same title: enough shared words, or the shorter title is the END of the longer one with at most 3 extra words
+ * in front ("Andor" / "Star Wars Andor"). A continuation ("Matrix Reloaded" vs "Matrix") still does not match.
+ */
+export function titlesMatch(a: string[], b: string[]): boolean {
+  if (jaccard(a, b) >= TITLE_MATCH_THRESHOLD) return true;
+  const x = stripLeadingLanguage(a);
+  const y = stripLeadingLanguage(b);
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (short.length === 0 || long.length - short.length > MAX_TITLE_PREFIX_WORDS) return false;
+  const offset = long.length - short.length;
+  return short.every((t, i) => long[offset + i] === t);
+}
+
 /** Reference title: the one most similar to all others (used when the player sends no file name). */
 function medoidTitle(parsed: ParsedRelease[]): string[] | null {
   const candidates = parsed.filter(p => p.informative && p.titleTokens.length > 0);
@@ -358,7 +384,7 @@ function scoreOne(
 
   // ---- strict filters: other title / year / episode ----
   if (sub.informative && ref.titleTokens && sub.titleTokens.length > 0) {
-    if (jaccard(sub.titleTokens, ref.titleTokens) < TITLE_MATCH_THRESHOLD) {
+    if (!titlesMatch(sub.titleTokens, ref.titleTokens)) {
       rejected = true;
       reasons.push('title mismatch');
     }
@@ -504,7 +530,7 @@ export function rankSubtitles(items: RawSubtitleItem[], ctx: ScoringContext): Ra
   let refTokens: string[] | null = medoid;
   if (video && video.titleTokens.length > 0) {
     // trust the file name's title only when it agrees with what the providers returned
-    if (!medoid || jaccard(video.titleTokens, medoid) >= TITLE_MATCH_THRESHOLD) {
+    if (!medoid || titlesMatch(video.titleTokens, medoid)) {
       refTokens = video.titleTokens;
     }
   }
