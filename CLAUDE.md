@@ -59,7 +59,13 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 - **v1.4.5 (deploy 2026-10-01):** surse care refuză serverul ținute minte (`sourceHealth`), copii descărcabile preferate,
   subtitrări neverificabile mai jos, referințe în Postgres, ediția filmului în Subsync, **Podnapisi** (serviciu nou,
   fără cheie, pornit din Services; `src/providers/podnapisi.ts`, căutarea `search/old?sXML=1` din subliminal/Bazarr,
-  descărcare zip prin `/sub/proxy`). Netestat încă live: din cloud nu se poate ajunge la podnapisi.net.
+  descărcare zip prin `/sub/proxy`). **Live: `getaddrinfo ENOTFOUND www.podnapisi.net`; site-ul nu se deschide nici la
+  utilizator (pare închis).** Codul rămâne; utilizatorul îl oprește din Services. slo-podnapisi.net NU e același site
+  (~37 000 subtitrări, probabil doar slovene), nu se folosește.
+- Teste live v1.4.5: Utopia S01E03 sincronizat (−0.1 s, 2 bucăți, 3 referințe SHORTBREHD, 4.5 s). Sisi S02E04
+  (release italian `iTALiAN ... Pir8`): nicio referință descărcabilă (OpenSubtitles blocat azi) și oricum nu există
+  subtitrări pentru varianta italiană → original. Limită de principiu: Subsync are nevoie de o subtitrare făcută pentru
+  același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
   Tagurile v1.4.2–v1.4.5 de pus de pe calculatorul utilizatorului.
