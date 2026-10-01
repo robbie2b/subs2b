@@ -59,6 +59,9 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 - **v1.4.8:** 1.4.7 a trecut build-ul pe Render, dar nu a devenit live (rămăsese 1.4.6): pornirea aștepta citirea
   `source_blocks` din Postgres înainte de `listen`. Acum serverul pornește întâi, citirea se face în fundal (max 5 s).
   Regulă: nimic din baza de date nu se așteaptă înainte de `app.listen`.
+  Live 09:21: pornit în 0.5 s, dar `CREATE TABLE IF NOT EXISTS source_blocks` atârnă (fără eroare, >1 min) → memoria
+  surselor blocate e doar în RAM. **De investigat:** `statement_timeout`/`lock_timeout` pe pool (eroare clară în loc
+  de atârnare), pagină Debug cu `pg_stat_activity` (interogări care așteaptă), posibil lock rămas de la 1.4.7 anulat.
 - **v1.4.7 (deploy 2026-10-01):** sursele blocate ținute minte în Postgres peste reporniri; rezerve și pentru hash match;
   o subtitrare pe care n-o poate descărca nimeni coboară ultima (eroarea de la Downton Abbey S03E03).
 - **v1.4.6 (deploy 2026-10-01):** referințe independente (fără cele de la release-ul subtitrării verificate), release-uri
