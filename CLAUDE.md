@@ -53,6 +53,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 ## Istoric recent
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
   Tagurile v1.4.2 și v1.4.3 de pus de pe calculatorul utilizatorului.
+  - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
+    FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
+    Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
+  - Observații: Stremio a refolosit lista veche ~30 min după deploy (`Cache-Control: max-age=1800`); aceeași subtitrare
+    s-a re-aliniat de 13 ori în 2 min (playerul o cere din nou; ~40–90 ms fiecare, rezultatul nu e ținut în cache).
 - **v1.4.2 (live din 2026-10-01):** fix titlu Andor; declanșare și referințe pe familia sursei; candidat verificat;
   scos codul vechi `fitOffset`/`decideAlignment` din `src/utils/timeline.ts`. Tagul v1.4.2 încă nu e pus (de pus de pe calculatorul utilizatorului).
 - Teste live 2026-10-01 (din logurile Debug):
