@@ -1,0 +1,71 @@
+# subs2b: context de lucru pentru Claude
+
+Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi la finalul fiecărei etape importante
+(ce s-a făcut, ce a ieșit la teste, ce a rămas).
+
+## Proiectul
+- Addon Stremio de subtitrări cu clasament inteligent (TypeScript / Node / Express). Repo: `robbie2b/subs2b`.
+- Rulează pe Render (Docker, plan gratuit ~0.1 CPU) cu Postgres pe Supabase. Un cron-job.org îl ține treaz ziua (la 10 min).
+- Proprietarul nu e programator: explică simplu, **în română**.
+
+## Reguli
+- **Deploy pe Render DOAR la cererea explicită a utilizatorului.** Render face deploy automat la push pe `main`,
+  deci nu împinge pe `main` fără cerere. Lucrul curent stă pe o ramură (acum: `work/subsync-engine`).
+- **Împinge ramura de lucru pe GitHub la finalul fiecărei etape.** O ramură a fost aproape pierdută o dată
+  (exista doar local când sesiunea s-a mutat în cloud).
+- Versiuni: la fiecare deploy crește doar a treia cifră (1.4.2 → 1.4.3). A doua cifră se schimbă doar când zice utilizatorul.
+  Versiunea se schimbă în `package.json` și pe 2 linii în `package-lock.json` (liniile 3 și 9), cu tag `vX.Y.Z`.
+  Din cloud tagurile NU se pot împinge (proxy-ul le blochează): utilizatorul le pune de pe calculatorul lui
+  (`C:\Users\rober\subs2b`: `git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`).
+- Înainte de commit: `npm run build` și `npm test` (autonom, fără rețea; toate trebuie să treacă).
+- Nu pune UUID-ul configurației sau chei în cod, în commituri sau în chat.
+
+## Debug-ul serverului live
+- `https://subs2b.onrender.com/<uuid>/debug/{recent,usage,providers,alignments,logs,search}.json`. Cere doar UUID-ul, fără parolă.
+- UUID-ul e în variabila de mediu `SUBS2B_UUID` a mediului cloud (citit doar la pornirea sesiunii).
+  Accesul la rețea către `subs2b.onrender.com` e permis (Custom).
+- Exemplu: `curl -s "https://subs2b.onrender.com/$SUBS2B_UUID/debug/alignments.json"`
+
+## Cum funcționează (pe scurt)
+- `src/core/aggregator.ts`: caută la toți furnizorii, filtrează limba, deduplică, ordonează (`src/utils/scorer.ts`),
+  apoi construiește linkurile pentru Stremio.
+- `src/utils/scorer.ts`: punctaj în stil Bazarr (grup, sursă, rezoluție, serviciu, codec, ediție). Respinge alt titlu,
+  an sau episod. Titlu: jaccard ≥ 0.5 SAU titlul scurt e sfârșitul celui lung (max 3 cuvinte în față, prefixe de limbă
+  ca „21_Romanian” ignorate). Reguli opționale în `RuleFlags` (fuzzyGroup și multiVariant pornite, sourceTiers oprită).
+- **Subsync** (re-sincronizare automată, `src/core/alignment.ts`, `src/proxy/alignedProxy.ts`, motor în `src/utils/subsync.ts`):
+  - Se declanșează (`needsReference`) când nicio subtitrare nu e compatibilă cu fișierul. Compatibil înseamnă același grup
+    SAU aceeași clasă de rezoluție (uhd/hd) ȘI aceeași familie de sursă (disc = remux/bluray, web = webdl/webrip, tv = hdtv, dvd).
+  - Atunci linkurile trec prin `/:config/sub/aligned/<token>.srt`. La descărcare caută referințe în orice limbă,
+    de același tip cu fișierul, și aliniază: decalaj, raport de cadre (ex. ×1.043 pentru 25 vs 23.976 fps), split pe bucăți.
+    Bugetul e de 5 s, altfel se trimite originalul.
+  - Candidat verificat: linkul poartă până la 3 alternative din aceeași limbă. Dacă subtitrarea nu se potrivește cu
+    nicio referință, dar referințele se potrivesc între ele, se servește prima alternativă care se potrivește.
+    Debug-ul arată „replaced by …”.
+  - Deciziile se păstrează în DB (`storage/alignmentLogStore.ts`, tabela `subsync_decisions`).
+  - Benchmark față de ffsubsync 0.5.1: potrivire identică (72% global / 77% cu split), ~70 ms față de 16 s pe Render.
+    Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
+
+## Istoric recent
+- **v1.4.2 (live din 2026-10-01):** fix titlu Andor; declanșare și referințe pe familia sursei; candidat verificat;
+  scos codul vechi `fitOffset`/`decideAlignment` din `src/utils/timeline.ts`. Tagul v1.4.2 încă nu e pus (de pus de pe calculatorul utilizatorului).
+- Teste live 2026-10-01 (din logurile Debug):
+  - Big Bang S01E06 (REMUX 1080p FraMeSToR): s-a declanșat (hd disc), 3 referințe BluRay, „shifted 0.7 s ×1.045”.
+  - Friends S03E08 (UHD REMUX FraMeSToR): s-a declanșat (uhd disc), 1 referință (arabă, pachet de sezon), „shifted −0.1 s ×1.043”.
+  - The Chaser (REMUX): corect nedeclanșat (există subtitrare FraMeSToR).
+  - Andor S01E01 (Star.Wars.Andor UHD REMUX HYPERION): „21_Romanian---Andor” și „Star.Wars.Andor…NTb” sunt acum păstrate.
+    Declanșat, 3 referințe UHD REMUX. Decizia de aliniere nu era încă în log.
+  - **De verificat:** sincronizarea pe ecran la mijlocul și finalul episodului (Big Bang, Friends); decizia Subsync la Andor;
+    de ce Andor a avut „Scoring: 15 → 5” (motivele celor 10 respinse).
+
+## De făcut (în ordinea discutată)
+- Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
+- „PGS” la prima subtitrare. Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.
+  Direcție: linkuri care se termină în `.srt`, cu `application/x-subrip`.
+- Mesaj custom la începutul filmului (oprit / tehnic / text propriu; `{\an8}` doar dacă nu există gol; de testat pe dispozitive).
+- Cache scurt (1–2 min) pentru răspunsuri goale sau incomplete, normal (30 min) pentru liste bune.
+- Feedback la alegerea manuală a altei subtitrări (pentru clasament).
+- Măsurarea impactului regulilor de scor pe datele Debug adunate.
+
+## Limitări în cloud
+- Nu există Docker și nici corpusul local de benchmark.
+- Backslash-urile din comenzile inline se strică: folosește fișiere sau Edit.
