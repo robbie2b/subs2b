@@ -3,7 +3,8 @@ import { LRUCache } from 'lru-cache';
 import { RawSubtitleItem, SubtitleQuery } from '../types/provider';
 import { UserConfig } from '../types/config';
 import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated } from '../utils/scorer';
-import { parseCues, fitOffset, decideAlignment, Cue, AlignmentDecision } from '../utils/timeline';
+import { readCues } from '../utils/subtitleCues';
+import { alignToReference, decide, speechFlags, Decision, RefAlignment, TimedCue } from '../utils/subsync';
 import { executeParallelSearch } from '../providers';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
@@ -70,7 +71,8 @@ export interface Reference {
   label: string;
   lang: string;
   provider: string;
-  cues: Cue[];
+  /** times and whether each cue is dialogue (the text itself is not kept) */
+  cues: TimedCue[];
 }
 
 const MIN_REFERENCE_CUES = 40;
@@ -153,8 +155,10 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
 
   const downloads = await Promise.allSettled(candidates.map(async item => {
     const text = await fetchText(absoluteUrl(item, ctx), REFERENCE_DOWNLOAD_TIMEOUT_MS);
-    const cues = parseCues(text);
-    if (cues.length < MIN_REFERENCE_CUES) throw new Error('too few cues');
+    const read = readCues(text);
+    if (read.length < MIN_REFERENCE_CUES) throw new Error('too few cues');
+    const flags = speechFlags(read);
+    const cues: TimedCue[] = read.map((c, i) => ({ start: c.start, end: c.end, speech: flags[i] }));
     return { label: `[${item.lang}] ${item.release || item.id}`, lang: item.lang, provider: item.provider, cues } as Reference;
   }));
 
@@ -194,22 +198,68 @@ export function clearReferenceCache(): void {
 // ---------------------------------------------------------------------------
 
 export interface AlignmentResult {
-  decision: AlignmentDecision;
-  references: Array<{ label: string; offset: number; score: number }>;
+  decision: Decision;
+  references: Array<{ label: string; offset: number; score: number; ratio: number; segments: number }>;
 }
 
+const alignOne = (cues: TimedCue[], r: Reference, split: boolean, topRatios = 1): RefAlignment | null => {
+  const result = alignToReference(cues, r.cues, { split, splitPenalty: 7, topRatios });
+  return result ? { label: r.label, result } : null;
+};
+
+const medianOf = (a: number[]): number => {
+  const s = a.slice().sort((x, y) => x - y);
+  return s.length ? s[Math.floor(s.length / 2)] : 0;
+};
+
+/**
+ * Aligns a subtitle against the references. First with one single shift per reference (fast); only when that is not
+ * convincing, with shifts that may change along the subtitle (and the frame-rate ratio).
+ */
 export function alignAgainst(candidateText: string, references: Reference[]): AlignmentResult {
-  const cues = parseCues(candidateText);
+  const cues = readCues(candidateText);
   if (cues.length < MIN_REFERENCE_CUES || references.length === 0) {
     return {
-      decision: { apply: false, offset: 0, confidence: 0, reason: references.length === 0 ? 'no reference found' : 'the subtitle has too few cues' },
+      decision: { apply: false, offset: 0, ratio: 1, segments: 0, confidence: 0, agreeing: 0, reason: references.length === 0 ? 'no reference found' : 'the subtitle has too few cues' },
       references: []
     };
   }
-  const fits = references.map(r => ({ label: r.label, ...fitOffset(cues, r.cues, 60) }));
+
+  // the references are taken one by one; once two of them agree (and fit well) the rest is not needed
+  const collect = (split: boolean, topRatios: number): { list: RefAlignment[]; decision: Decision } => {
+    const list: RefAlignment[] = [];
+    let d = decide(cues, list);
+    for (const r of references) {
+      const a = alignOne(cues, r, split, topRatios);
+      if (a) list.push(a);
+      d = decide(cues, list);
+      if (list.length >= 2 && d.agreeing >= 2 && d.confidence >= 0.9) break;
+    }
+    return { list, decision: d };
+  };
+
+  const first = collect(false, 1);
+  let used = first.list;
+  let decision = first.decision;
+
+  // (when one shift already worked, the ratio is known: the split search tries only that one, which is much cheaper)
+  if ((!decision.apply && decision.reason !== 'already aligned') || (decision.apply && decision.confidence < 0.95)) {
+    const second = collect(true, decision.apply ? 1 : 2);
+    if (second.decision.apply && (!decision.apply || second.decision.confidence >= decision.confidence)) {
+      decision = second.decision;
+      used = second.list;
+    }
+  }
+
   return {
-    decision: decideAlignment(fits.map(f => ({ offset: f.offset, score: f.score }))),
-    references: fits.map(f => ({ label: f.label, offset: f.offset, score: f.score }))
+    decision,
+    references: used.map(a => ({
+      label: a.label,
+      offset: Math.round(medianOf(a.result.offsets) * 10) / 10,
+      score: Math.round(a.result.overlap * 100) / 100,
+      ratio: Math.round(a.result.ratio * 1000) / 1000,
+      segments: a.result.segments.length
+    }))
   };
 }
 

@@ -4,7 +4,7 @@ import { LRUCache } from 'lru-cache';
 import { configStorage } from '../storage/configStore';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
-import { shiftSubtitle } from '../utils/subtitleFormat';
+import { applyAlignment } from '../utils/subsync';
 import { parseSubtitleQuery } from '../core/aggregator';
 import { decodeAlignedToken } from '../core/alignedToken';
 import { alignAgainst, getReferences, recordAlignment, AlignmentResult } from '../core/alignment';
@@ -87,6 +87,8 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
         subtitle: token.r || '',
         outcome,
         offset: result?.decision.apply ? result.decision.offset : 0,
+        ratio: result?.decision.apply ? result.decision.ratio : 1,
+        segments: result?.decision.apply ? result.decision.segments : 0,
         confidence: result?.decision.confidence ?? 0,
         reason: reason || result?.decision.reason || '',
         references: result?.references || [],
@@ -120,8 +122,8 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       }
 
       if (result.decision.apply) {
-        const shifted = shiftSubtitle(text, result.decision.offset);
-        Logger.info(`[SUBSYNC] shifted ${result.decision.offset} s (${result.decision.reason})`, { id: token.id, subtitle: token.r });
+        const shifted = applyAlignment(text, result.decision.result!);
+        Logger.info(`[SUBSYNC] shifted ${result.decision.offset} s${result.decision.ratio !== 1 ? ` x${result.decision.ratio}` : ''}${result.decision.segments > 1 ? ` in ${result.decision.segments} parts` : ''} (${result.decision.reason})`, { id: token.id, subtitle: token.r });
         log('shifted', result);
         sendSubtitleResponse(res, shifted, 'srt', 'subtitle.srt', 'public, max-age=3600');
       } else {

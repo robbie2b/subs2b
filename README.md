@@ -124,14 +124,16 @@ player downloads the chosen subtitle, subs2b:
 
 1. searches OpenSubtitles, SubDL and Subsource **in every language** for subtitles of the file's own kind (same
    resolution class, matching title/episode), and downloads up to three of them as timing references;
-2. measures the constant shift between the subtitle and each reference (only when lines appear, never the text, so the
-   language does not matter);
-3. shifts the subtitle in memory if the references agree and fit well; otherwise it is sent unchanged.
+2. aligns the subtitle to each reference (only when lines appear, never the text, so the language does not matter): one
+   constant shift, a frame-rate stretch (25 / 23.976 fps and the like) and, when that is not enough, shifts that change
+   along the subtitle (a cut, a different edit). The method follows ffsubsync and alass and runs in the addon itself
+   (about 0.1 s per alignment);
+3. retimes the subtitle in memory if two references agree on the result and it fits well; otherwise it is sent unchanged.
 
 If this takes longer than 5 seconds (`SUBSYNC_BUDGET_MS`) the player gets the subtitle unchanged and the result is ready
 for the next request. It can be switched off in Filters → Subsync, and the Debug page lists the decisions.
-Limits: constant shifts only (not frame-rate stretches), precision about 0.1 s, needs a reference in some language, and
-reference downloads from OpenSubtitles count against its daily quota.
+Limits: needs a reference in some language, precision is about 0.01-0.1 s, and reference downloads from OpenSubtitles count
+against its daily quota. `experiments/subsync/benchmark/` compares the engine with ffsubsync on real subtitles.
 
 ## RegieLive
 
