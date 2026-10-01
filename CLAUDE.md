@@ -56,6 +56,8 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.4.7 (deploy 2026-10-01):** sursele blocate ținute minte în Postgres peste reporniri; rezerve și pentru hash match;
+  o subtitrare pe care n-o poate descărca nimeni coboară ultima (eroarea de la Downton Abbey S03E03).
 - **v1.4.6 (deploy 2026-10-01):** referințe independente (fără cele de la release-ul subtitrării verificate), release-uri
   în paranteze drepte recunoscute, candidați și timpi în log, descărcări în paralel, fir de calcul pornit la start.
   **Podnapisi scos complet** (închis definitiv în martie 2026); configurațiile salvate cu el sunt curățate automat.
@@ -72,7 +74,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.6 de pus de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.7 de pus de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
@@ -145,7 +147,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 
 - **Eroare Downton Abbey S03E03 (SHORTBREHD BluRay) pe 1.4.6:** primul loc era OpenSubtitles direct cu HASH MATCH, dar
   limita era terminată; deploy-ul șterge memoria surselor blocate (doar RAM) și hash match-urile nu primeau rezerve →
-  playerul a primit eroare. Reparat pe ramură (pentru 1.4.7): `source_blocks` în Postgres (`storage/sourceBlockStore.ts`,
+  playerul a primit eroare. Reparat în 1.4.7: `source_blocks` în Postgres (`storage/sourceBlockStore.ts`,
   citit la pornire), `copiesOf` dă rezerve și hash match-urilor (copia care merge îi ia locul, rămâne hash match),
   o subtitrare cu link prin server la o sursă blocată, fără copie, coboară ultima mereu (și cu Subsync oprit).
 
