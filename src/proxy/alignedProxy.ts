@@ -3,9 +3,9 @@ import { configStorage } from '../storage/configStore';
 import { Logger } from '../utils/logger';
 import { applyAlignment } from '../utils/subsync';
 import { parseSubtitleQuery } from '../core/aggregator';
-import { decodeAlignedToken } from '../core/alignedToken';
+import { decodeAlignedToken, decodeFallbackToken, linksOf } from '../core/alignedToken';
 import { recordAlignment, AlignmentResult } from '../core/alignment';
-import { prepareAligned, loadOriginal, clearPrepared, Served } from '../core/alignedPrepare';
+import { prepareAligned, loadFirst, clearPrepared, Served } from '../core/alignedPrepare';
 import { addonHostsOf, isAllowedDownloadUrl, sendSubtitleResponse } from './subtitleProxy';
 
 /**
@@ -51,7 +51,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
 
     if (config.subsync === false) {
       try {
-        sendSubtitleResponse(res, await loadOriginal(token.u, hosts), 'srt', 'subtitle.srt');
+        sendSubtitleResponse(res, (await loadFirst(linksOf(token), hosts, baseUrl)).text, 'srt', 'subtitle.srt');
       } catch (err: unknown) {
         originalFailed(err);
       }
@@ -115,6 +115,37 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       Logger.warn('Subsync failed, sending the subtitle unchanged', { reason });
       log('error', undefined, reason);
       sendSubtitleResponse(res, text, 'srt', 'subtitle.srt', 'no-store');
+    }
+  };
+}
+
+/**
+ * GET /:config/sub/fallback/<token>.srt
+ * A subtitle offered by several providers: the sources are tried in order (the user's provider priority) and the
+ * first that can be downloaded is served, so one provider's rate limit or outage does not lose the subtitle.
+ */
+export function createFallbackHandler(getBaseUrl: (req: Request) => string) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const token = decodeFallbackToken(String(req.params.data || ''));
+    const config = await configStorage.getConfigByUuidAsync(String(req.params.config || ''));
+    const baseUrl = getBaseUrl(req);
+    if (!token || !config) {
+      res.status(400).type('text/plain').send('Invalid subtitle link.');
+      return;
+    }
+    const hosts = addonHostsOf(config);
+    const own = token.u.startsWith(baseUrl + '/');
+    if (!own && !isAllowedDownloadUrl(token.u, hosts)) {
+      res.status(400).type('text/plain').send('Subtitle URL is not from this server, a subtitle site or an addon of this configuration.');
+      return;
+    }
+    try {
+      const { text } = await loadFirst(linksOf(token), hosts, baseUrl);
+      sendSubtitleResponse(res, text, 'srt', 'subtitle.srt', 'public, max-age=3600');
+    } catch {
+      // every source failed here: the player may still reach the first one itself
+      if (own) res.status(502).type('text/plain').send('Could not load the subtitle from any source.');
+      else res.redirect(302, token.u);
     }
   };
 }

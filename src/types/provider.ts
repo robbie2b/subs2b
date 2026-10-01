@@ -29,6 +29,8 @@ export interface RawSubtitleItem {
   downloads?: number;
   /** true when the provider confirmed this subtitle was made for the exact video file (file hash match) */
   hashMatch?: boolean;
+  /** the same subtitle from other providers (merged by deduplication), in priority order: download backups */
+  backups?: RawSubtitleItem[];
 }
 
 export interface ProviderLogEntry {

@@ -84,6 +84,19 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     fir separat, pornire din timp, playerul așteaptă decizia.
   - Idei: Debug să arate toate respinsele, nu doar primele 12; titlu lipit de rezoluție („amb-friends720p”) e respins greșit.
 
+## Surse și limite (2026-10-01)
+- Căutarea întreabă toate sursele în paralel; ordinea finală o dă punctajul. `providerPriority` (Filters → Priority)
+  decide doar ce copie rămâne la deduplicare și ordinea la egalitate. Ordinea utilizatorului: Subs.ro, RegieLive,
+  OpenSubtitles v3 (addon), opensubtitles PRO (addon), OpenSubtitles (serviciu, cheia lui), SubDL, Subsource.
+- OpenSubtitles direct = cheia API a utilizatorului, fără cont: limită zilnică mică de descărcări. Pe 2026-10-01
+  referințele Subsync (Utopia) au primit `HTTP 469`. Addonurile descarcă prin serverele lor (nu consumă cheia).
+- Pe ramură (nedeployat, pentru 1.4.4):
+  - Deduplicarea păstrează copiile ca rezerve (`backups`, max 2). Linkurile cu rezerve trec prin
+    `/:config/sub/fallback/<token>.srt` (sau `b` în tokenul aligned); serverul încearcă sursele în ordine.
+  - Referințe Subsync: OpenSubtitles pierde doar la egalitate de punctaj; se descarcă doar câte trebuie (3), restul doar
+    ca înlocuitori; referințele OpenSubtitles se iau întâi de pe mirroare (`mirrorFirst=1`), API-ul e rezervă.
+  - Log `[DOWNLOAD]`: motivul fiecărui pas (inclusiv mesajul OpenSubtitles despre limită, `remaining`, `reset`).
+
 ## De făcut (în ordinea discutată)
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
 - „PGS” la prima subtitrare. Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.

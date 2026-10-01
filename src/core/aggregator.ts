@@ -10,7 +10,7 @@ import { rankSubtitles } from '../utils/scorer';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
 import { recordUsage } from '../storage/usageStore';
 import { needsReference, fromFileGroup, archivePickParams as buildArchivePickParams } from './alignment';
-import { encodeAlignedToken, AlignedToken, MAX_ALTERNATIVES } from './alignedToken';
+import { encodeAlignedToken, encodeFallbackToken, AlignedToken, MAX_ALTERNATIVES, MAX_BACKUPS } from './alignedToken';
 import { prepareAligned } from './alignedPrepare';
 import { isAllowedDownloadUrl, addonHostsOf } from '../proxy/subtitleProxy';
 
@@ -208,15 +208,8 @@ export async function getAggregatedSubtitles(
   const addonHosts = addonHostsOf(config);
   const archivePickParams = buildArchivePickParams(query);
 
-  // Stremio treats the subtitle id as unique: never send the same id twice
-  const usedIds = new Set<string>();
-  const subtitles: StremioSubtitle[] = orderedItems.map(item => {
-    let uniqueId = item.id;
-    for (let n = 2; usedIds.has(uniqueId); n++) {
-      uniqueId = `${item.id}-${n}`;
-    }
-    usedIds.add(uniqueId);
-
+  /** The link the player (or this server) downloads a subtitle from */
+  const linkOf = (item: RawSubtitleItem): string => {
     let finalUrl = item.url;
     if (finalUrl.startsWith('/')) {
       // Archive downloads also learn what is being played, to pick the right file inside a season pack
@@ -239,36 +232,59 @@ export async function getAggregatedSubtitles(
       const safeFilename = safeBaseName.endsWith(ext) ? safeBaseName : `${safeBaseName}${ext}`;
       finalUrl = `${baseUrl}/sub/proxy?url=${encodeURIComponent(finalUrl)}&filename=${encodeURIComponent(safeFilename)}${archivePickParams}`;
     }
+    return finalUrl;
+  };
+  /** Links this server may download itself (its own, a subtitle site or an addon of this configuration) */
+  const fetchable = (u: string): boolean => u.startsWith(baseUrl + '/') || isAllowedDownloadUrl(u, addonHosts);
+
+  // Stremio treats the subtitle id as unique: never send the same id twice
+  const usedIds = new Set<string>();
+  const subtitles: StremioSubtitle[] = orderedItems.map(item => {
+    let uniqueId = item.id;
+    for (let n = 2; usedIds.has(uniqueId); n++) {
+      uniqueId = `${item.id}-${n}`;
+    }
+    usedIds.add(uniqueId);
 
     return {
       id: uniqueId,
       lang: item.lang,
-      url: finalUrl,
+      url: linkOf(item),
       title: item.release || `${item.providerName || item.provider} Subtitle`
     };
   });
+
+  // The same subtitle from other providers (merged by deduplication): tried in order when the first cannot be downloaded
+  const directUrls = subtitles.map(s => s.url);
+  const backups = orderedItems.map((item, idx) => fetchable(directUrls[idx])
+    ? (item.backups || []).map(linkOf).filter(u => u !== directUrls[idx] && fetchable(u)).slice(0, MAX_BACKUPS)
+    : []);
+  const viaServer = new Set<number>();
 
   // Aligned: the player asks this server, which re-times the subtitle before sending it (only our own or allowed links).
   // Each link also carries the next subtitles of the same language: when it does not fit the references, the first
   // alternative that does is served instead.
   if (subsyncVerdict.needed && configId && query.extra?.filename) {
     const filename = query.extra.filename;
-    const alignable = subtitles.map(s => s.url.startsWith(baseUrl + '/') || isAllowedDownloadUrl(s.url, addonHosts));
-    const directUrls = subtitles.map(s => s.url);
+    const alignable = directUrls.map(fetchable);
     const firstOfLanguage = new Map<string, AlignedToken>();
     subtitles.forEach((sub, idx) => {
       // a subtitle from the file's own release group is trusted and served directly
       if (!alignable[idx] || fromFileGroup(filename, orderedItems[idx].release)) return;
-      const alternatives: Array<{ u: string; r?: string }> = [];
+      const alternatives: Array<{ u: string; r?: string; b?: string[] }> = [];
       for (let j = idx + 1; j < subtitles.length && alternatives.length < MAX_ALTERNATIVES; j++) {
-        if (alignable[j] && orderedItems[j].lang === orderedItems[idx].lang) alternatives.push({ u: directUrls[j], r: orderedItems[j].release });
+        if (alignable[j] && orderedItems[j].lang === orderedItems[idx].lang) {
+          alternatives.push({ u: directUrls[j], r: orderedItems[j].release, ...(backups[j].length ? { b: backups[j] } : {}) });
+        }
       }
       const token: AlignedToken = {
         u: directUrls[idx], id: query.id, t: query.type, f: filename, r: orderedItems[idx].release,
+        ...(backups[idx].length ? { b: backups[idx] } : {}),
         ...(alternatives.length ? { a: alternatives } : {})
       };
       if (!firstOfLanguage.has(orderedItems[idx].lang)) firstOfLanguage.set(orderedItems[idx].lang, token);
       sub.url = `${baseUrl}/${configId}/sub/aligned/${encodeAlignedToken(token)}.srt`;
+      viaServer.add(idx);
     });
 
     // The player usually picks the first subtitle of the language: its alignment starts now, while the video is
@@ -277,6 +293,15 @@ export async function getAggregatedSubtitles(
     for (const token of [...firstOfLanguage.values()].slice(0, MAX_PREPARED_LANGUAGES)) {
       prepareAligned(token, prepQuery, config, baseUrl);
     }
+  }
+
+  // The other subtitles with backups go through this server too, which tries the sources in order
+  if (configId) {
+    subtitles.forEach((sub, idx) => {
+      if (viaServer.has(idx) || backups[idx].length === 0) return;
+      const token = encodeFallbackToken({ u: directUrls[idx], b: backups[idx], r: orderedItems[idx].release });
+      sub.url = `${baseUrl}/${configId}/sub/fallback/${token}.srt`;
+    });
   }
 
   return { subtitles };

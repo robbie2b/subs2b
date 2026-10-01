@@ -124,7 +124,11 @@ async function fetchText(url: string, timeoutMs: number): Promise<string> {
   return Buffer.from(res.data).toString('utf8');
 }
 
-/** Picks the references worth downloading: same kind as the file (class and family), best matching name first, any language */
+/**
+ * Picks the references worth downloading: same kind as the file (class and family), best matching name first, any
+ * language. At equal score a reference from another service goes before OpenSubtitles, whose daily download quota is
+ * kept for the subtitles the user picks.
+ */
 export function pickReferenceCandidates(
   items: RawSubtitleItem[],
   filename: string,
@@ -139,9 +143,14 @@ export function pickReferenceCandidates(
   const ranked = rankSubtitles(items, { filename, season, episode });
   if (ranked.fallback) return [];
 
+  const quota = (item: RawSubtitleItem) => (item.provider === 'opensubtitles' ? 1 : 0);
+  const order = ranked.items
+    .map((item, i) => ({ item, i, score: ranked.details[i]?.score ?? 0 }))
+    .sort((a, b) => b.score - a.score || quota(a.item) - quota(b.item) || a.i - b.i);
+
   const chosen: RawSubtitleItem[] = [];
   const seen = new Set<string>();
-  for (const item of ranked.items) {
+  for (const { item } of order) {
     const release = item.release || '';
     const parsed = parseRelease(release);
     if (!sameKind(parsed, video)) continue;
@@ -166,7 +175,10 @@ export interface ReferenceContext {
 
 function absoluteUrl(item: RawSubtitleItem, ctx: ReferenceContext): string {
   if (item.url.startsWith('/')) {
-    return `${ctx.baseUrl}${item.url}${item.url.startsWith('/sub/proxy?') ? archivePickParams(ctx.query) : ''}`;
+    // an OpenSubtitles reference is taken from the download mirrors first: the API quota is kept for the user's picks
+    const extra = item.url.startsWith('/sub/proxy?') ? archivePickParams(ctx.query)
+      : item.url.startsWith('/proxy/download/os-rest/') ? '&mirrorFirst=1' : '';
+    return `${ctx.baseUrl}${item.url}${extra}`;
   }
   return item.url;
 }
@@ -186,19 +198,30 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
     return [];
   }
 
-  const downloads = await Promise.allSettled(candidates.map(async item => {
+  const load = async (item: RawSubtitleItem): Promise<Reference> => {
     const text = await fetchText(absoluteUrl(item, ctx), REFERENCE_DOWNLOAD_TIMEOUT_MS);
     const read = readCues(text);
     if (read.length < MIN_REFERENCE_CUES) throw new Error('too few cues');
     const flags = speechFlags(read);
     const cues: TimedCue[] = read.map((c, i) => ({ start: c.start, end: c.end, speech: flags[i] }));
     return { label: `[${item.lang}] ${item.release || item.id}`, lang: item.lang, provider: item.provider, cues } as Reference;
-  }));
+  };
 
-  const references = downloads
-    .filter((d): d is PromiseFulfilledResult<Reference> => d.status === 'fulfilled')
-    .map(d => d.value)
-    .slice(0, MAX_REFERENCES);
+  // Only as many downloads as references are needed (in parallel); the next candidates only replace failed ones
+  const found: Array<{ at: number; ref: Reference }> = [];
+  const failures: string[] = [];
+  let next = 0;
+  while (found.length < MAX_REFERENCES && next < candidates.length) {
+    const wave = candidates.slice(next, next + MAX_REFERENCES - found.length).map((item, k) => ({ item, at: next + k }));
+    next += wave.length;
+    const results = await Promise.allSettled(wave.map(w => load(w.item)));
+    results.forEach((r, k) => {
+      if (r.status === 'fulfilled') found.push({ at: wave[k].at, ref: r.value });
+      else failures.push(`[${wave[k].item.provider}] ${wave[k].item.release || wave[k].item.id}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);
+    });
+  }
+  if (failures.length) Logger.info(`[SUBSYNC] ${failures.length} reference download(s) failed for ${ctx.query.id}`, { failures });
+  const references = found.sort((a, b) => a.at - b.at).map(f => f.ref);
   Logger.info(`[SUBSYNC] ${references.length} reference(s) for ${ctx.query.id} in ${Date.now() - started} ms`, {
     references: references.map(r => r.label)
   });

@@ -4,7 +4,7 @@ import { UserConfig } from '../types/config';
 import { SubtitleQuery } from '../types/provider';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
-import { AlignedToken } from './alignedToken';
+import { AlignedToken, linksOf } from './alignedToken';
 import { getReferences, fitsReferences, AlignmentResult, Reference } from './alignment';
 import { alignInWorker, referencesAgreeInWorker } from './alignPool';
 import {
@@ -59,6 +59,31 @@ export async function loadOriginal(url: string, allowedHosts: string[]): Promise
   return validation.content;
 }
 
+const describe = (err: unknown): string => {
+  const e = err as { response?: { status?: number }; message?: string };
+  return e?.response?.status ? `HTTP ${e.response.status}` : (e?.message || String(err));
+};
+
+/**
+ * Downloads the first of the links that works (the same subtitle from several providers, in priority order).
+ * Only links of this server or of allowed hosts are tried. Every failure is logged, with the source that answered.
+ */
+export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl: string): Promise<{ text: string; url: string }> {
+  const failures: string[] = [];
+  for (const url of urls) {
+    if (!url.startsWith(baseUrl + '/') && !isAllowedDownloadUrl(url, allowedHosts)) continue;
+    try {
+      const text = await loadOriginal(url, allowedHosts);
+      if (failures.length) Logger.info(`[DOWNLOAD] served from a backup source (${new URL(url).hostname}) after: ${failures.join('; ')}`);
+      return { text, url };
+    } catch (err: unknown) {
+      failures.push(`${new URL(url).hostname}${new URL(url).pathname.split('/').slice(0, 4).join('/')}: ${describe(err)}`);
+    }
+  }
+  Logger.warn(`[DOWNLOAD] no source of the subtitle could be downloaded: ${failures.join('; ') || 'no allowed link'}`);
+  throw new Error(failures.length ? `every source failed (${failures.join('; ')})` : 'no allowed link');
+}
+
 /**
  * Aligns the subtitle; when it fits none of the references while the references agree with each other (so it was
  * clearly made for another release), the alternatives are tried in order and the first one that fits is served.
@@ -66,7 +91,7 @@ export async function loadOriginal(url: string, allowedHosts: string[]): Promise
 async function alignOrReplace(
   text: string,
   refs: Reference[],
-  alternatives: Array<{ u: string; r?: string }>,
+  alternatives: Array<{ u: string; r?: string; b?: string[] }>,
   hosts: string[],
   baseUrl: string
 ): Promise<Served> {
@@ -77,7 +102,7 @@ async function alignOrReplace(
   for (const alt of alternatives) {
     if (!alt.u.startsWith(baseUrl + '/') && !isAllowedDownloadUrl(alt.u, hosts)) continue;
     try {
-      const altText = await loadOriginal(alt.u, hosts);
+      const altText = (await loadFirst(linksOf(alt), hosts, baseUrl)).text;
       const altResult = await alignInWorker(altText, refs);
       if (fitsReferences(altResult)) {
         return { result: altResult, text: altText, replacedBy: alt.r || alt.u };
@@ -99,7 +124,7 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
   if (existing) return existing;
 
   const hosts = addonHostsOf(config);
-  const original = loadOriginal(token.u, hosts);
+  const original = loadFirst(linksOf(token), hosts, baseUrl).then(r => r.text);
   const served = original.then(text =>
     getReferences({ query, config, baseUrl, filename: token.f })
       .then(refs => alignOrReplace(text, refs, token.a || [], hosts, baseUrl)));

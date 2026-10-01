@@ -31,7 +31,8 @@ function similarity(tokensA: Set<string>, tokensB: Set<string>): number {
  * 1. Identical download URL
  * 2. Identical language + identical hearing-impaired status + high fuzzy similarity (>0.85) on release name
  *
- * Items earlier in the array take precedence over later items.
+ * Items earlier in the array take precedence over later items. A dropped duplicate with another link is kept as a
+ * download backup of the item it duplicates (`backups`, in order); the input items are not changed.
  */
 export function deduplicateSubtitles(
   items: RawSubtitleItem[],
@@ -52,6 +53,7 @@ export function deduplicateSubtitles(
 
     // 2. Fuzzy release name similarity deduplication
     let isDuplicate = false;
+    let original: RawSubtitleItem | null = null;
     if (checkFuzzy) {
       const itemTokens = item.release ? tokenize(item.release) : new Set<string>();
 
@@ -66,6 +68,7 @@ export function deduplicateSubtitles(
             const score = similarity(itemTokens, existingTokens);
             if (score >= similarityThreshold) {
               isDuplicate = true;
+              original = existing;
               break;
             }
           }
@@ -75,11 +78,14 @@ export function deduplicateSubtitles(
 
     if (!isDuplicate) {
       if (item.url) seenUrls.add(item.url);
-      result.push(item);
+      result.push({ ...item, backups: [] });
+    } else if (original && item.url && !seenUrls.has(item.url)) {
+      seenUrls.add(item.url);
+      original.backups!.push(item);
     }
   }
 
-  return result;
+  return result.map(r => (r.backups!.length ? r : (({ backups: _b, ...rest }) => rest)(r)));
 }
 
 /**

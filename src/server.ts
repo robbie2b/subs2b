@@ -23,7 +23,7 @@ import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { getDebug } from './utils/debugLog';
 import { getUsage, getProviderStats } from './storage/usageStore';
-import { createAlignedHandler } from './proxy/alignedProxy';
+import { createAlignedHandler, createFallbackHandler } from './proxy/alignedProxy';
 import { getAlignments } from './core/alignment';
 import { REGIELIVE_SEARCH_URL, regieLiveHeaders } from './providers/regielive';
 
@@ -543,6 +543,8 @@ export function createServer(): express.Application {
   app.get('/proxy/download/regielive/:data', handleRegieLiveDownload);
   app.get(['/:config/sub/convert/:data.srt', '/:config/sub/convert.srt'], subtitlesLimiter, handleVttConvert);
   app.get('/:config/sub/aligned/:data.srt', subtitlesLimiter, createAlignedHandler(getBaseUrl));
+  // a subtitle offered by several providers: the sources are tried in order
+  app.get('/:config/sub/fallback/:data.srt', subtitlesLimiter, createFallbackHandler(getBaseUrl));
 
   app.use((req: Request, res: Response) => {
     res.status(404).json({ error: 'Endpoint not found', path: req.path });

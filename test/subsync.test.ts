@@ -13,7 +13,9 @@ import { parseCues } from '../src/utils/timeline';
 import { shiftSubtitle } from '../src/utils/subtitleFormat';
 import { needsReference, fromFileGroup, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree } from '../src/core/alignment';
 import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
-import { createAlignedHandler, clearAlignmentDecisions } from '../src/proxy/alignedProxy';
+import { createAlignedHandler, createFallbackHandler, clearAlignmentDecisions } from '../src/proxy/alignedProxy';
+import { deduplicateSubtitles } from '../src/utils/deduplicator';
+import { decodeFallbackToken } from '../src/core/alignedToken';
 import { stopAlignWorker } from '../src/core/alignPool';
 import { decodeAlignedToken } from '../src/core/alignedToken';
 import { OpenSubtitlesProvider } from '../src/providers/openSubtitles';
@@ -147,6 +149,37 @@ async function main() {
     check('a REMUX file takes only disc references (BluRay/REMUX), not WEB', bbtPicked.length === 2 && !bbtPicked.includes('eng'), bbtPicked);
   }
 
+  {
+    // at equal score another service goes first (the OpenSubtitles download quota is kept for the user's picks)
+    const tie = [
+      item('Peacemaker.2022.S01E01.2160p.WEB.HEVC-SAME', 'opensubtitles', 'eng'),
+      item('Peacemaker.2022.S01E01.2160p.WEB.HEVC-SAME', 'subdl', 'spa')
+    ];
+    const tiePicked = pickReferenceCandidates(tie, CRU, 1, 1).map(i => i.provider);
+    check('equal score: SubDL before OpenSubtitles', tiePicked[0] === 'subdl', tiePicked);
+    const better = [
+      item('Peacemaker.S01E01.2160p.PL.HMAX.WEB-DL.DDPA5.1.HDR.DV.HEVC-CRU', 'opensubtitles', 'eng'),
+      item('Peacemaker.2022.S01E01.2160p.WEB.HEVC-OTHER', 'subdl', 'spa')
+    ];
+    const betterPicked = pickReferenceCandidates(better, CRU, 1, 1).map(i => i.provider);
+    check('a better match from OpenSubtitles still goes first (the score decides)', betterPicked[0] === 'opensubtitles', betterPicked);
+  }
+
+  console.log('Deduplication keeps backups');
+  {
+    const a = item('Movie.2020.1080p.WEB-DL.x264-AAA', 'org.stremio.subsro', 'ron', { url: 'https://a/1' });
+    const b = item('Movie.2020.1080p.WEB-DL.x264-AAA', 'community.opensubtitlesv3.pro', 'ron', { url: 'https://b/1' });
+    const c = item('Movie.2020.1080p.WEB-DL.x264-AAA', 'opensubtitles', 'ron', { url: 'https://c/1' });
+    const same = item('Movie.2020.1080p.WEB-DL.x264-AAA', 'subdl', 'ron', { url: 'https://a/1' });
+    const other = item('Movie.2020.720p.HDTV-ZZZ', 'subdl', 'ron', { url: 'https://d/1' });
+    const out = deduplicateSubtitles([a, b, same, c, other]);
+    check('duplicates are merged into the first (priority order)', out.length === 2 && out[0].url === 'https://a/1', out.map(o => o.url));
+    check('and kept as its backups, in order (a copy with the same link is not a backup)',
+      (out[0].backups || []).map(x => x.url).join(',') === 'https://b/1,https://c/1', out[0].backups);
+    check('a subtitle without duplicates has no backups', !out[1].backups);
+    check('the input items are not changed', !a.backups);
+  }
+
   console.log('References agree');
   {
     const ref = (cues: Array<{ start: number; end: number }>, label: string) => ({ label, lang: 'eng', provider: 'x', cues: cues.map(c => ({ ...c, speech: true })) });
@@ -190,6 +223,7 @@ async function main() {
     if (url.includes('/ro-hd')) return body(RO_HD);
     if (url.includes('/ro-other')) return body(RO_OTHER);
     if (url.includes('/ro-empty')) return body('1\n00:00:01,000 --> 00:00:02,000\nshort\n');
+    if (url.includes('/rate-limited')) throw Object.assign(new Error('Request failed with status code 469'), { response: { status: 469 } });
     throw new Error('unexpected fetch ' + url);
   };
 
@@ -378,6 +412,40 @@ async function main() {
     await handler({ params: { config: uuid, data: wrapped.url.split('/sub/aligned/')[1].replace('.srt', '') }, query: {} } as any, r.res);
     check('prepared in advance: the player gets the aligned subtitle without waiting for a search', Date.now() - t0 < 500 && providerCalls === callsAfterList && Math.abs(parseCues(r.out.body)[10].start - (parseCues(RO_HD)[10].start - 5)) < 0.15, { ms: Date.now() - t0, calls: providerCalls - callsAfterList });
     searchDelayMs = 0;
+  }
+
+  {
+    // backup sources: the first link answers "rate limited", the next one works
+    clearAlignmentDecisions();
+    const withBackup = Buffer.from(JSON.stringify({ u: baseUrl + '/rate-limited/1', b: [baseUrl + '/ro-hd?backup=1'], id: 'tt13146488:1:1', t: 'series', f: CRU, r: 'X' })).toString('base64url');
+    const r = respond();
+    await handler({ params: { config: uuid, data: withBackup }, query: {} } as any, r.res);
+    check('aligned link: the first source fails, the backup is downloaded and aligned', r.out.status === 200 && Math.abs(parseCues(r.out.body)[10].start - (parseCues(RO_HD)[10].start - 5)) < 0.15, { status: r.out.status, body: r.out.body.slice(0, 60) });
+
+    const fallback = createFallbackHandler(() => baseUrl);
+    const f1 = respond();
+    await fallback({ params: { config: uuid, data: Buffer.from(JSON.stringify({ u: baseUrl + '/rate-limited/2', b: ['https://169.254.169.254/x', baseUrl + '/ro-other?backup=2'] })).toString('base64url') }, query: {} } as any, f1.res);
+    check('fallback link: the backup is served as it is (not-allowed hosts are skipped)', f1.out.status === 200 && f1.out.body.includes('alta 10') && !fetched.some(u => u.includes('169.254.169.254')), f1.out.status);
+    const f2 = respond();
+    await fallback({ params: { config: uuid, data: Buffer.from(JSON.stringify({ u: baseUrl + '/rate-limited/3', b: [baseUrl + '/rate-limited/4'] })).toString('base64url') }, query: {} } as any, f2.res);
+    check('fallback link: every source fails -> an error, not a broken file', f2.out.status === 502, f2.out.status);
+    const f3 = respond();
+    await fallback({ params: { config: uuid, data: Buffer.from(JSON.stringify({ u: 'https://169.254.169.254/x', b: [] })).toString('base64url') }, query: {} } as any, f3.res);
+    check('fallback link: a main link to any other host is refused', f3.out.status === 400, f3.out.status);
+  }
+
+  {
+    // the list: a subtitle found by two providers carries the second one as a backup
+    clearAlignmentDecisions();
+    globalSubtitleCache.clear?.();
+    const dup: RawSubtitleItem = { id: 'ro-dup', provider: 'opensubtitles', providerName: 'OpenSubtitles', url: baseUrl + '/ro-hd?dup=1', lang: 'ron', release: 'Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL.DD5.1.H.264-FLUX' };
+    providerItems.push(dup);
+    const sameGroupFile = parseSubtitleQuery('series', 'tt13146488:1:1', { filename: 'Peacemaker.S01E01.1080p.HMAX.WEB-DL.H.264-FLUX.mkv' });
+    const list = await getAggregatedSubtitles(sameGroupFile, stored, baseUrl, uuid);
+    const fb = list.subtitles.find(x => x.url.includes('/sub/fallback/'));
+    const tok = fb ? decodeFallbackToken(fb.url.split('/sub/fallback/')[1].replace('.srt', '')) : null;
+    check('a duplicate becomes a backup: the link goes through the fallback endpoint', list.subtitles.filter(x => x.lang === 'ron').length === list.subtitles.filter(x => x.lang === 'ron' && !x.url.includes('?dup=1')).length && Boolean(tok && tok.b.length === 1), list.subtitles.map(x => x.url.slice(0, 70)));
+    providerItems.splice(providerItems.indexOf(dup), 1);
   }
 
   {

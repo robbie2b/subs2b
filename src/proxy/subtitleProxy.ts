@@ -390,9 +390,27 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
   }
 }
 
+/** Short reason of a failed request: HTTP status and, when the provider explains it, its message (quota, reset time) */
+function failureReason(err: unknown): string {
+  const e = err as { response?: { status?: number; data?: unknown }; message?: string };
+  if (!e?.response?.status) return e?.message || String(err);
+  let detail = '';
+  const data = e.response.data;
+  try {
+    const body = data instanceof ArrayBuffer || Buffer.isBuffer(data) ? JSON.parse(Buffer.from(data as ArrayBuffer).toString('utf8')) : data;
+    if (body && typeof body === 'object') {
+      const b = body as { message?: unknown; remaining?: unknown; reset_time?: unknown; reset_time_utc?: unknown };
+      detail = [b.message, b.remaining !== undefined ? `remaining ${b.remaining}` : '', b.reset_time_utc || b.reset_time ? `reset ${b.reset_time_utc || b.reset_time}` : '']
+        .filter(Boolean).map(String).join(', ');
+    }
+  } catch { /* not JSON */ }
+  return `HTTP ${e.response.status}${detail ? ` (${detail.slice(0, 200)})` : ''}`;
+}
+
 /**
  * OpenSubtitles download: asks POST /api/v1/download for a temporary link and, if that fails
  * (no user token, quota reached), falls back to the OpenSubtitles direct download mirrors.
+ * With mirrorFirst=1 (Subsync references) the mirrors are tried first, to keep the API quota for the user's picks.
  */
 export async function handleOpenSubtitlesRestDownload(req: Request, res: Response): Promise<void> {
   const { fileId } = req.params;
@@ -400,6 +418,7 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
   const legacyId = (req.query.legacyId as string) || '';
   const filename = (req.query.filename as string) || `subtitle-${fileId}.srt`;
   const preferredFormat: 'srt' | 'vtt' = filename.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt';
+  const mirrorFirst = req.query.mirrorFirst === '1';
 
   if (!fileId || !/^\d+$/.test(fileId)) {
     sendError(res, 400, 'Invalid or missing OpenSubtitles file id.');
@@ -407,10 +426,11 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
   }
 
   let rawBuffer: Buffer | null = null;
-  let lastError: unknown;
+  const failures: string[] = [];
 
   // 1. Official API: POST /api/v1/download returns a temporary link
-  if (apiKey) {
+  const fromApi = async (): Promise<Buffer | null> => {
+    if (!apiKey) return null;
     try {
       const downloadRes = await axios.post<{ link: string }>(
         'https://api.opensubtitles.com/api/v1/download',
@@ -425,23 +445,25 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
           timeout: 7000
         }
       );
-      if (downloadRes.data?.link) {
-        const subRes = await axios.get<ArrayBuffer>(downloadRes.data.link, {
-          responseType: 'arraybuffer',
-          timeout: 10000,
-          headers: { 'User-Agent': BROWSER_USER_AGENT, 'Accept': '*/*' }
-        });
-        if (subRes.data && subRes.data.byteLength > 0) {
-          rawBuffer = Buffer.from(subRes.data);
-        }
+      if (!downloadRes.data?.link) {
+        failures.push('api: no download link');
+        return null;
       }
+      const subRes = await axios.get<ArrayBuffer>(downloadRes.data.link, {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+        headers: { 'User-Agent': BROWSER_USER_AGENT, 'Accept': '*/*' }
+      });
+      if (subRes.data && subRes.data.byteLength > 0) return Buffer.from(subRes.data);
+      failures.push('api: empty file');
     } catch (err) {
-      lastError = err;
+      failures.push(`api: ${failureReason(err)}`);
     }
-  }
+    return null;
+  };
 
   // 2. Fallback: dl.opensubtitles.org / subs5.strem.io mirrors
-  if (!rawBuffer) {
+  const fromMirrors = async (): Promise<Buffer | null> => {
     const candidateUrls: string[] = [];
     if (/^\d+$/.test(legacyId)) {
       candidateUrls.push(`https://dl.opensubtitles.org/en/download/sub/${legacyId}`);
@@ -449,7 +471,9 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
     candidateUrls.push(`https://dl.opensubtitles.org/en/download/sub/${fileId}`);
     candidateUrls.push(`https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/${fileId}`);
 
+    const legacyUrl = /^\d+$/.test(legacyId) ? candidateUrls[0] : null;
     for (const mirrorUrl of candidateUrls) {
+      const label = `${new URL(mirrorUrl).hostname}${mirrorUrl === legacyUrl ? ' (legacy id)' : ''}`;
       try {
         const mirrorRes = await axios.get<ArrayBuffer>(mirrorUrl, {
           responseType: 'arraybuffer',
@@ -459,21 +483,27 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
         if (mirrorRes.data && mirrorRes.data.byteLength > 50) {
           const tempBuf = Buffer.from(mirrorRes.data);
           const preview = tempBuf.subarray(0, 100).toString('utf8').toLowerCase();
-          if (!preview.includes('<!doctype') && !preview.includes('<html')) {
-            rawBuffer = tempBuf;
-            break;
-          }
+          if (!preview.includes('<!doctype') && !preview.includes('<html')) return tempBuf;
+          failures.push(`${label}: a web page instead of a subtitle`);
+        } else {
+          failures.push(`${label}: empty answer`);
         }
       } catch (err) {
-        lastError = err;
+        failures.push(`${label}: ${failureReason(err)}`);
       }
     }
+    return null;
+  };
+
+  rawBuffer = mirrorFirst ? (await fromMirrors()) || (await fromApi()) : (await fromApi()) || (await fromMirrors());
+  if (rawBuffer && failures.length) {
+    Logger.info(`[DOWNLOAD] OpenSubtitles file ${fileId} downloaded after: ${failures.join('; ')}`);
   }
 
   if (!rawBuffer) {
-    const errorMsg = lastError instanceof Error ? lastError.message : String(lastError || 'Failed to download the subtitle from OpenSubtitles');
-    Logger.error(`OpenSubtitles download failed for file ${fileId}: ${errorMsg}`, lastError);
-    sendError(res, 502, `Error downloading the subtitle from OpenSubtitles: ${errorMsg}`);
+    const summary = failures.join('; ') || 'no source';
+    Logger.error(`OpenSubtitles download failed for file ${fileId}${mirrorFirst ? ' (Subsync reference)' : ''}: ${summary}`);
+    sendError(res, 502, `Error downloading the subtitle from OpenSubtitles: ${summary}`);
     return;
   }
 

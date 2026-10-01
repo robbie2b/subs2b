@@ -32,6 +32,10 @@ export class SubtitleCache {
     this.cache.set(key, subtitles, { ttl: (ttlMinutes || 30) * 60 * 1000 });
   }
 
+  clear(): void {
+    this.cache.clear();
+  }
+
   get size(): number {
     return this.cache.size;
   }
