@@ -8,10 +8,17 @@ function debugBase() {
   return state.uuid && isUuid(state.uuid) ? `/${state.uuid}/debug` : null;
 }
 
-// 'service' (built into subs2b) or 'addon' (imported Stremio addon) as a small tag
-function kindTag(kind) {
+// The same icons as the main menu: a server for a built-in service, a puzzle piece for an imported addon
+const KIND_ICON_PATHS = {
+  service: 'M13,19H14A1,1 0 0,1 15,20H22V22H15A1,1 0 0,1 14,23H10A1,1 0 0,1 9,22H2V20H9A1,1 0 0,1 10,19H11V17H4A1,1 0 0,1 3,16V12A1,1 0 0,1 4,11H20A1,1 0 0,1 21,12V16A1,1 0 0,1 20,17H13V19M4,3H20A1,1 0 0,1 21,4V8A1,1 0 0,1 20,9H4A1,1 0 0,1 3,8V4A1,1 0 0,1 4,3M9,7H10V5H9V7M9,15H10V13H9V15M5,5V7H7V5H5M5,13V15H7V13H5Z',
+  addon: 'M20.5,11H19V7C19,5.89 18.1,5 17,5H13V3.5A2.5,2.5 0 0,0 10.5,1A2.5,2.5 0 0,0 8,3.5V5H4A2,2 0 0,0 2,7V10.8H3.5C5,10.8 6.2,12 6.2,13.5C6.2,15 5,16.2 3.5,16.2H2V20A2,2 0 0,0 4,22H7.8V20.5C7.8,19 9,17.8 10.5,17.8C12,17.8 13.2,19 13.2,20.5V22H17A2,2 0 0,0 19,20V16H20.5A2.5,2.5 0 0,0 23,13.5A2.5,2.5 0 0,0 20.5,11Z'
+};
+
+function kindIcon(kind) {
   if (kind !== 'service' && kind !== 'addon') return '';
-  return `<span class="dbg-tag ${kind}">${kind}</span>`;
+  const label = kind === 'service' ? 'Service (built into subs2b)' : 'Addon (imported Stremio addon)';
+  return `<span class="dbg-kind-icon ${kind}" title="${label}" aria-label="${label}">`
+    + `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${KIND_ICON_PATHS[kind]}"/></svg></span>`;
 }
 
 function escapeHtmlDebug(text) {
@@ -297,7 +304,7 @@ function renderProviders(data) {
     const wins = ranked ? `${p.wins} <span class="dbg-muted">(${pct(p.wins / ranked)})</span>` : '-';
     const inTop = ranked ? `${p.inTop} <span class="dbg-muted">(${pct(p.inTop / ranked)})</span>` : '-';
     return `<tr>`
-      + `<td class="dbg-prov-name">${escapeHtmlDebug(p.name)} ${kindTag(p.kind)}<div class="dbg-muted">${escapeHtmlDebug(p.id)}</div></td>`
+      + `<td class="dbg-prov-name"><div class="dbg-name-row">${kindIcon(p.kind)}<span>${escapeHtmlDebug(p.name)}</span></div><div class="dbg-muted dbg-name-id">${escapeHtmlDebug(p.id)}</div></td>`
       + `<td>${status}</td>`
       + `<td class="${rateClass}">${p.searches ? pct(p.successRate) : '-'}<div class="dbg-muted">${p.searches ? `${p.searches - p.failures}/${p.searches}` : ''}</div></td>`
       + `<td>${p.searches ? ms(p.avgMs) : '-'}<div class="dbg-muted">${p.searches ? `max ${ms(p.maxMs)}` : ''}</div></td>`
@@ -332,7 +339,7 @@ function renderRequest(e, tz) {
       const reasons = t.reasons.map(r => `<span class="dbg-chip">${escapeHtmlDebug(r)}</span>`).join('');
       return `<div class="dbg-sub${t.rejected ? ' rejected' : ''}">`
         + `<span class="dbg-rank">#${t.rank}</span>`
-        + `<div class="dbg-sub-main"><div class="dbg-sub-name">${escapeHtmlDebug(t.release) || '(no name)'}</div><div class="dbg-sub-meta"><span class="dbg-prov">${escapeHtmlDebug(t.provider)}</span>${kindTag(debugState.kinds[t.provider])}${reasons}</div></div>`
+        + `<div class="dbg-sub-main"><div class="dbg-sub-name">${escapeHtmlDebug(t.release) || '(no name)'}</div><div class="dbg-sub-meta">${kindIcon(debugState.kinds[t.provider])}<span class="dbg-prov">${escapeHtmlDebug(t.provider)}</span>${reasons}</div></div>`
         + `<span class="dbg-score">${t.score}</span>`
         + `<span class="dbg-sent${sent ? ' yes' : ''}">${t.rejected ? 'rejected' : sent ? 'sent' : 'not sent'}</span>`
         + `</div>`;

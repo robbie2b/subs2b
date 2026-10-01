@@ -3195,3 +3195,11 @@ button:active {
   .dbg-head { gap: 8px; }
   .dbg-log { height: 300px; font-size: 10.5px; }
 }
+
+/* Service / addon icons (same as the main menu) next to the names in Debug */
+.dbg-kind-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 18px; height: 18px; }
+.dbg-kind-icon.service { color: #a78bfa; }
+.dbg-kind-icon.addon { color: #fbbf24; }
+.dbg-name-row { display: flex; align-items: center; gap: 8px; }
+.dbg-name-id { margin-left: 26px; }
+.dbg-sub-meta .dbg-kind-icon { width: 16px; height: 16px; }
