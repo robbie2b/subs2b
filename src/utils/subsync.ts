@@ -176,11 +176,34 @@ export interface AlignOptions {
   topRatios?: number;      // how many ratios the split search is run for, default 3
   splitRange?: number;     // the split search looks this many seconds around the single shift, default 20
   exhaustive?: boolean;    // try every frame-rate ratio even when ratio 1 already fits (default false)
+  cache?: AlignCache;      // shared work between alignments of the same subtitle (same results, less time)
 }
 
 const COARSE = 0.1; // seconds per sample of the coarse search
 
 interface RatioScore { ratio: number; lag: number; score: number }
+
+interface Spectrum { re: Float64Array; im: Float64Array }
+
+/**
+ * Work shared by the alignments of one subtitle: it is aligned against several references, twice (single shift,
+ * then split), so the same spectra and correlations come back again and again. They are kept per cue array (the
+ * arrays are not changed after reading). The cache is meant to live for one decision only: the spectra are big.
+ */
+export class AlignCache {
+  readonly referenceSpectra = new WeakMap<TimedCue[], Map<string, Spectrum>>();
+  readonly candidateSpectra = new WeakMap<TimedCue[], Map<string, Spectrum>>();
+  readonly integrals = new WeakMap<TimedCue[], Map<number, SpeechIntegral>>();
+  readonly ratioScores = new WeakMap<TimedCue[], WeakMap<TimedCue[], Map<string, RatioScore>>>();
+}
+
+function memo<K extends object, IK, V>(map: WeakMap<K, Map<IK, V>>, owner: K, key: IK, make: () => V): V {
+  let inner = map.get(owner);
+  if (!inner) { inner = new Map(); map.set(owner, inner); }
+  let v = inner.get(key);
+  if (v === undefined) { v = make(); inner.set(key, v); }
+  return v;
+}
 
 export function alignToReference(candidate: TimedCue[], reference: TimedCue[], options: AlignOptions = {}): AlignResult | null {
   const maxOffset = options.maxOffset ?? 60;
@@ -207,29 +230,43 @@ export function alignToReference(candidate: TimedCue[], reference: TimedCue[], o
   const candEnd = Math.max(...cIv.map(i => i.end)) * Math.max(...ratios);
   const lr = Math.ceil(refEnd / COARSE) + 2;
   const lsMax = Math.ceil(candEnd / COARSE) + 2;
-  const N = nextPow2(lr + lsMax + 2);
   const maxLag = Math.round(maxOffset / COARSE);
+  // Only shifts up to maxLag are read, so the circular correlation needs room for the longer signal plus maxLag
+  // (the other shifts may wrap around, they are never looked at)
+  const N = nextPow2(Math.max(lr, lsMax) + maxLag + 2);
 
-  const refCov = coverage(rIv, COARSE, lr);
-  const br = new Float64Array(N), bi = new Float64Array(N);
-  for (let k = 0; k < lr; k++) br[k] = 2 * refCov[k] - 1;
-  fft(br, bi, false);
+  const cache = options.cache ?? new AlignCache();
+  const ref = memo(cache.referenceSpectra, reference, `${N}|${lr}`, () => {
+    const refCov = coverage(rIv, COARSE, lr);
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let k = 0; k < lr; k++) re[k] = 2 * refCov[k] - 1;
+    fft(re, im, false);
+    return { re, im };
+  });
+  const br = ref.re, bi = ref.im;
 
-  const P = new SpeechIntegral(rIv, refEnd + maxOffset + 10);
+  const P = memo(cache.integrals, reference, maxOffset, () => new SpeechIntegral(rIv, refEnd + maxOffset + 10));
 
-  const scoreRatio = (ratio: number): RatioScore => {
-    const ivs = intervalsOf(candidate, cFlags, ratio);
-    const ls = Math.ceil(Math.max(...ivs.map(i => i.end)) / COARSE) + 2;
-    const cov = coverage(ivs, COARSE, ls);
-    const amp = Math.min(1 / ratio, 1);
-    const ar = new Float64Array(N), ai = new Float64Array(N);
-    for (let k = 0; k < ls; k++) ar[k] = 2 * cov[k] * amp - 1;
-    fft(ar, ai, false);
+  let pairScores = cache.ratioScores.get(candidate);
+  if (!pairScores) { pairScores = new WeakMap(); cache.ratioScores.set(candidate, pairScores); }
+  const scoresOf = pairScores;
+
+  const scoreRatio = (ratio: number): RatioScore => memo(scoresOf, reference, `${ratio}|${N}|${maxLag}`, () => {
+    const cand = memo(cache.candidateSpectra, candidate, `${ratio}|${N}`, () => {
+      const ivs = intervalsOf(candidate, cFlags, ratio);
+      const ls = Math.ceil(Math.max(...ivs.map(i => i.end)) / COARSE) + 2;
+      const cov = coverage(ivs, COARSE, ls);
+      const amp = Math.min(1 / ratio, 1);
+      const re = new Float64Array(N), im = new Float64Array(N);
+      for (let k = 0; k < ls; k++) re[k] = 2 * cov[k] * amp - 1;
+      fft(re, im, false);
+      return { re, im };
+    });
     // conj(A) * B
+    const ar = new Float64Array(N), ai = new Float64Array(N);
     for (let k = 0; k < N; k++) {
-      const re = ar[k] * br[k] + ai[k] * bi[k];
-      const im = ar[k] * bi[k] - ai[k] * br[k];
-      ar[k] = re; ai[k] = im;
+      ar[k] = cand.re[k] * br[k] + cand.im[k] * bi[k];
+      ai[k] = cand.re[k] * bi[k] - cand.im[k] * br[k];
     }
     fft(ar, ai, true);
     let bestLag = 0, bestScore = -Infinity;
@@ -238,7 +275,7 @@ export function alignToReference(candidate: TimedCue[], reference: TimedCue[], o
       if (v > bestScore) { bestScore = v; bestLag = lag; }
     }
     return { ratio, lag: bestLag, score: bestScore };
-  };
+  });
 
   // Ratio 1 first: when it already puts nearly all the dialogue on the reference's dialogue, the other ratios are skipped
   const first = scoreRatio(1);

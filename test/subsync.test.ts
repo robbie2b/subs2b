@@ -6,14 +6,15 @@ import path from 'path';
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'subs2b-subsync-'));
 process.env.DATA_DIR = dataDir;
 delete process.env.DATABASE_URL;
-process.env.SUBSYNC_BUDGET_MS = '1500';
+process.env.SUBSYNC_MAX_WAIT_MS = '4000';
 
 import axios from 'axios';
 import { parseCues } from '../src/utils/timeline';
 import { shiftSubtitle } from '../src/utils/subtitleFormat';
 import { needsReference, fromFileGroup, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree } from '../src/core/alignment';
 import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
-import { createAlignedHandler } from '../src/proxy/alignedProxy';
+import { createAlignedHandler, clearAlignmentDecisions } from '../src/proxy/alignedProxy';
+import { stopAlignWorker } from '../src/core/alignPool';
 import { decodeAlignedToken } from '../src/core/alignedToken';
 import { OpenSubtitlesProvider } from '../src/providers/openSubtitles';
 import { SubDLProvider } from '../src/providers/subdl';
@@ -264,6 +265,9 @@ async function main() {
     Buffer.from(JSON.stringify({ u, id: 'tt13146488:1:1', t: 'series', f: CRU, r: name })).toString('base64url');
 
   {
+    // (the list above already started aligning its first subtitle: start from nothing here)
+    await new Promise(r2 => setTimeout(r2, 300));
+    clearAlignmentDecisions();
     clearReferenceCache();
     providerCalls = 0;
     const before = parseCues(RO_HD);
@@ -329,21 +333,50 @@ async function main() {
   }
 
   {
-    // slow search: over budget, the player gets the original at once and the next request gets the result
+    // slow search (2.5 s): the player waits and gets the aligned subtitle from the first try
     clearReferenceCache();
     searchDelayMs = 2500;
-    const link = linkFor(baseUrl + '/ro-hd?slow=1');
     const r = respond();
     const t0 = Date.now();
-    await handler({ params: { config: uuid, data: link }, query: {} } as any, r.res);
+    await handler({ params: { config: uuid, data: linkFor(baseUrl + '/ro-hd?slow=1') }, query: {} } as any, r.res);
     const took = Date.now() - t0;
-    check('over budget: answered within the budget (1.5 s) with the original', took < 2200 && Math.abs(parseCues(r.out.body)[10].start - parseCues(RO_HD)[10].start) < 0.002, took);
-    check('and not cached by the player', r.out.headers['Cache-Control'] === 'no-store', r.out.headers);
+    check('slow search: the first answer is already aligned (the player waits)', took >= 2400 && Math.abs(parseCues(r.out.body)[10].start - (parseCues(RO_HD)[10].start - 5)) < 0.15, { took, start: parseCues(r.out.body)[10]?.start });
+    check('and the aligned answer may be kept by the player', r.out.headers['Cache-Control'] === 'public, max-age=3600', r.out.headers);
+
+    // stuck search (past the safety limit, 4 s in this test): the original, then the next request gets the result
+    clearReferenceCache();
+    searchDelayMs = 5000;
+    const link = linkFor(baseUrl + '/ro-hd?stuck=1');
+    const s1 = respond();
+    const t1 = Date.now();
+    await handler({ params: { config: uuid, data: link }, query: {} } as any, s1.res);
+    const took1 = Date.now() - t1;
+    check('past the safety limit: answered with the original', took1 < 4600 && Math.abs(parseCues(s1.out.body)[10].start - parseCues(RO_HD)[10].start) < 0.002, took1);
+    check('not cached by the player', s1.out.headers['Cache-Control'] === 'no-store', s1.out.headers);
     check('the outcome is "timeout"', (await getAlignments(uuid))[0].outcome === 'timeout');
-    await new Promise(r2 => setTimeout(r2, 2600));
+    await new Promise(r2 => setTimeout(r2, 1500));
     const next = respond();
     await handler({ params: { config: uuid, data: link }, query: {} } as any, next.res);
     check('the next request finds it aligned', Math.abs(parseCues(next.out.body)[10].start - (parseCues(RO_HD)[10].start - 5)) < 0.15, parseCues(next.out.body)[10].start);
+    searchDelayMs = 0;
+  }
+
+  {
+    // the list starts the alignment of the first subtitle at once: the player's request then finds it under way
+    clearAlignmentDecisions();
+    clearReferenceCache();
+    globalSubtitleCache.clear?.();
+    providerCalls = 0;
+    searchDelayMs = 800;
+    const q = parseSubtitleQuery('series', 'tt13146488:1:1', { filename: CRU });
+    const list = await getAggregatedSubtitles(q, stored, baseUrl, uuid);
+    const wrapped = list.subtitles.find(s => s.url.includes('/sub/aligned/'))!;
+    await new Promise(r2 => setTimeout(r2, 1500));
+    const callsAfterList = providerCalls;
+    const r = respond();
+    const t0 = Date.now();
+    await handler({ params: { config: uuid, data: wrapped.url.split('/sub/aligned/')[1].replace('.srt', '') }, query: {} } as any, r.res);
+    check('prepared in advance: the player gets the aligned subtitle without waiting for a search', Date.now() - t0 < 500 && providerCalls === callsAfterList && Math.abs(parseCues(r.out.body)[10].start - (parseCues(RO_HD)[10].start - 5)) < 0.15, { ms: Date.now() - t0, calls: providerCalls - callsAfterList });
     searchDelayMs = 0;
   }
 
@@ -366,6 +399,7 @@ async function main() {
   }
 
   (axios as any).get = realGet;
+  await stopAlignWorker();
   fs.rmSync(dataDir, { recursive: true, force: true });
 
   if (failed) {

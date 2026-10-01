@@ -42,7 +42,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     (disc = remux/bluray, web = webdl/webrip, tv = hdtv, dvd).
   - Linkurile verificate trec prin `/:config/sub/aligned/<token>.srt`. La descărcare caută referințe în orice limbă,
     de același tip cu fișierul, și aliniază: decalaj, raport de cadre (ex. ×1.043 pentru 25 vs 23.976 fps), split pe bucăți.
-    Bugetul e de 5 s, altfel se trimite originalul.
+    Playerul AȘTEAPTĂ decizia (cererea utilizatorului: subtitrarea bună din prima, chiar dacă durează). Originalul se
+    trimite doar dacă nu există referințe, la eroare, sau peste limita de siguranță de 60 s (`SUBSYNC_MAX_WAIT_MS`).
+  - Pornire din timp: lista pornește deja pregătirea primei subtitrări din fiecare limbă (max 2), cât se deschide filmul
+    (`src/core/alignedPrepare.ts`, partajată cu cererea playerului).
+  - Calculul rulează pe un fir separat (`src/core/alignPool.ts` + `alignWorker.ts`, cod pur în `alignDecision.ts`), ca
+    serverul să nu se blocheze; dacă firul nu pornește, se calculează pe firul principal. `SUBSYNC_WORKER=0` îl oprește.
   - Candidat verificat: linkul poartă până la 3 alternative din aceeași limbă. Dacă subtitrarea nu se potrivește cu
     nicio referință, dar referințele se potrivesc între ele, se servește prima alternativă care se potrivește.
     Debug-ul arată „replaced by …”.
@@ -73,6 +78,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     → Schimbare pe ramură (nedeployată): se verifică orice subtitrare care nu e de la același grup.
   - **De verificat:** sincronizarea pe ecran (Big Bang, Friends, The Chaser după deploy); timpul de răspuns, acum că
     mult mai multe filme trec prin verificare.
+  - The Chaser la play: subtitrarea a venit după 20 s (calcul de ~18 s pe Render, care bloca serverul; bugetul de 5 s nu
+    funcționa fiindcă ceasul nu putea porni). Bufferingul de 7–10 s de la început a fost al fișierului video.
+    → Pe ramură (nedeployat): motor ~3.5× mai rapid (spectre refolosite, FFT pe jumătate; 582/582 decizii identice),
+    fir separat, pornire din timp, playerul așteaptă decizia.
   - Idei: Debug să arate toate respinsele, nu doar primele 12; titlu lipit de rezoluție („amb-friends720p”) e respins greșit.
 
 ## De făcut (în ordinea discutată)

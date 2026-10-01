@@ -10,8 +10,12 @@ import { rankSubtitles } from '../utils/scorer';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
 import { recordUsage } from '../storage/usageStore';
 import { needsReference, fromFileGroup, archivePickParams as buildArchivePickParams } from './alignment';
-import { encodeAlignedToken, MAX_ALTERNATIVES } from './alignedToken';
+import { encodeAlignedToken, AlignedToken, MAX_ALTERNATIVES } from './alignedToken';
+import { prepareAligned } from './alignedPrepare';
 import { isAllowedDownloadUrl, addonHostsOf } from '../proxy/subtitleProxy';
+
+/** How many languages get their first subtitle aligned in advance */
+const MAX_PREPARED_LANGUAGES = 2;
 
 function toNumberOrNull(value: string | undefined): number | null {
   const n = parseInt(value ?? '', 10);
@@ -251,6 +255,7 @@ export async function getAggregatedSubtitles(
     const filename = query.extra.filename;
     const alignable = subtitles.map(s => s.url.startsWith(baseUrl + '/') || isAllowedDownloadUrl(s.url, addonHosts));
     const directUrls = subtitles.map(s => s.url);
+    const firstOfLanguage = new Map<string, AlignedToken>();
     subtitles.forEach((sub, idx) => {
       // a subtitle from the file's own release group is trusted and served directly
       if (!alignable[idx] || fromFileGroup(filename, orderedItems[idx].release)) return;
@@ -258,12 +263,20 @@ export async function getAggregatedSubtitles(
       for (let j = idx + 1; j < subtitles.length && alternatives.length < MAX_ALTERNATIVES; j++) {
         if (alignable[j] && orderedItems[j].lang === orderedItems[idx].lang) alternatives.push({ u: directUrls[j], r: orderedItems[j].release });
       }
-      const token = encodeAlignedToken({
+      const token: AlignedToken = {
         u: directUrls[idx], id: query.id, t: query.type, f: filename, r: orderedItems[idx].release,
         ...(alternatives.length ? { a: alternatives } : {})
-      });
-      sub.url = `${baseUrl}/${configId}/sub/aligned/${token}.srt`;
+      };
+      if (!firstOfLanguage.has(orderedItems[idx].lang)) firstOfLanguage.set(orderedItems[idx].lang, token);
+      sub.url = `${baseUrl}/${configId}/sub/aligned/${encodeAlignedToken(token)}.srt`;
     });
+
+    // The player usually picks the first subtitle of the language: its alignment starts now, while the video is
+    // still opening (several seconds), so the subtitle is ready, or nearly, when the player asks for it
+    const prepQuery = parseSubtitleQuery(query.type, query.id, { filename });
+    for (const token of [...firstOfLanguage.values()].slice(0, MAX_PREPARED_LANGUAGES)) {
+      prepareAligned(token, prepQuery, config, baseUrl);
+    }
   }
 
   return { subtitles };
