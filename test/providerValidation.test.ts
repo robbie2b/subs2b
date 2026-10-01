@@ -59,13 +59,13 @@ async function main(): Promise<void> {
   // 1. Registered built-in providers
   section('Test 1: built-in providers');
   const providers = getAllProviders();
-  const expectedIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'podnapisi'];
+  const expectedIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
   check(providers.length === expectedIds.length, `exactly ${expectedIds.length} built-in providers`, providers.map(p => p.id));
   for (const p of providers) {
     check(expectedIds.includes(p.id), `provider [${p.id}] is expected`);
     check(Boolean(p.name && p.name.trim()), `provider [${p.id}] has a name ("${p.name}")`);
-    // RegieLive works with a shared key (a personal key is optional), Podnapisi needs none
-    check(p.requiresApiKey === !['regielive', 'podnapisi'].includes(p.id), `provider [${p.id}] key requirement is right`);
+    // RegieLive works with a shared key, so a personal key is optional there
+    check(p.requiresApiKey === (p.id !== 'regielive'), `provider [${p.id}] key requirement is right`);
   }
 
   // 2. Imported Stremio addons
@@ -122,12 +122,14 @@ async function main(): Promise<void> {
 
   // 5. Services default state and API key rules
   section('Test 5: services start disabled and need an API key');
-  for (const id of ['opensubtitles', 'subdl', 'subsource', 'regielive', 'podnapisi']) {
+  for (const id of ['opensubtitles', 'subdl', 'subsource', 'regielive']) {
     check(DEFAULT_USER_CONFIG.providers[id]?.enabled === false, `provider ${id} starts disabled`);
   }
   const mergedNoKey = mergeWithDefaults({
     providers: { opensubtitles: { enabled: true, apiKey: '' }, subdl: { enabled: true, apiKey: '   ' } }
   });
+  const withPodnapisi = mergeWithDefaults({ providers: { podnapisi: { enabled: true, apiKey: '' } } as any, providerPriority: ['regielive', 'podnapisi', 'subdl'] });
+  check(!('podnapisi' in withPodnapisi.providers) && !withPodnapisi.providerPriority.includes('podnapisi'), 'a saved configuration with Podnapisi (closed) is cleaned up', withPodnapisi.providerPriority);
   const regie = mergeWithDefaults({ providers: { regielive: { enabled: true, apiKey: '' } } });
   check(regie.providers.regielive?.enabled === true, 'RegieLive can be enabled without a key (optional key)');
   check(

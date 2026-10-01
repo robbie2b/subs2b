@@ -12,16 +12,14 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
     'subsource': { enabled: false, apiKey: '' },
-    'regielive': { enabled: false, apiKey: '' },
-    'podnapisi': { enabled: false, apiKey: '' }
+    'regielive': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
     'subdl',
     'subsource',
-    'regielive',
-    'podnapisi'
+    'regielive'
   ],
   languages: ['pob', 'por', 'eng'],
   allowUnknownLanguages: false,
@@ -59,7 +57,7 @@ function upgradeLegacyName(name: string): string {
 const LEGACY_LOGO = '/assets/AIOsubs_logo_wordmark.png';
 
 /** Providers that work without a personal API key (a shared one is used) */
-const KEY_OPTIONAL_PROVIDERS = ['regielive', 'podnapisi'];
+const KEY_OPTIONAL_PROVIDERS = ['regielive'];
 
 /**
  * Decodes a configuration passed directly in the URL (base64 JSON). Kept for old install links;
@@ -149,8 +147,8 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
   if (Array.isArray(partial.providerPriority)) {
     for (const item of partial.providerPriority) {
       const mapped = item === 'opensubtitles-rest' || item === 'opensubtitles-v3' ? 'opensubtitles' : item;
-      // addic7ed and the removed direct Subs.ro provider are dropped from saved priority lists
-      if (mapped !== 'addic7ed' && mapped !== 'subsro' && !providerPriority.includes(mapped)) {
+      // addic7ed, the removed direct Subs.ro provider and Podnapisi (closed in 2026) are dropped from saved priority lists
+      if (mapped !== 'addic7ed' && mapped !== 'subsro' && mapped !== 'podnapisi' && !providerPriority.includes(mapped)) {
         providerPriority.push(mapped);
       }
     }
@@ -183,8 +181,7 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
       'opensubtitles': { enabled: false, apiKey: '' },
       'subdl': { enabled: false, apiKey: '' },
       'subsource': { enabled: false, apiKey: '' },
-      'regielive': { enabled: false, apiKey: '' },
-      'podnapisi': { enabled: false, apiKey: '' }
+      'regielive': { enabled: false, apiKey: '' }
     },
     customAddons,
     providerPriority,

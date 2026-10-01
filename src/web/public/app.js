@@ -47,16 +47,14 @@ const DEFAULT_CONFIG = {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
     'subsource': { enabled: false, apiKey: '' },
-    'regielive': { enabled: false, apiKey: '' },
-    'podnapisi': { enabled: false, apiKey: '' }
+    'regielive': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
     'subdl',
     'subsource',
-    'regielive',
-    'podnapisi'
+    'regielive'
   ],
   languages: ['pob', 'por', 'eng'],
   allowUnknownLanguages: false,
@@ -82,7 +80,7 @@ const DEFAULT_CONFIG = {
 };
 
 // Services that work without a personal key (the key is optional)
-const KEY_OPTIONAL_SERVICES = new Set(['regielive', 'podnapisi']);
+const KEY_OPTIONAL_SERVICES = new Set(['regielive']);
 
 const SERVICES_META = {
   opensubtitles: {
@@ -94,11 +92,6 @@ const SERVICES_META = {
     id: 'regielive',
     name: 'RegieLive',
     helpText: 'Works without a key (a shared one is used). To get your own request budget, ask RegieLive for a personal API key and paste it here; it is optional.'
-  },
-  podnapisi: {
-    id: 'podnapisi',
-    name: 'Podnapisi',
-    helpText: 'No key needed: podnapisi.net is free.'
   },
   subdl: {
     id: 'subdl',
@@ -830,7 +823,7 @@ function renderHomeBranding() {
 }
 
 function setupServicesActions() {
-  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'podnapisi'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
 
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
@@ -1071,7 +1064,7 @@ function triggerAutoValidation(serviceId, apiKey) {
 }
 
 function renderServicesState() {
-  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'podnapisi'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
     if (toggle) {
@@ -2076,7 +2069,7 @@ function renderFiltersPriority() {
 
   const activeItemsMap = new Map();
 
-  const nativeKeys = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'podnapisi'];
+  const nativeKeys = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
   for (const id of nativeKeys) {
     const prov = state.config.providers[id];
     // ONLY show native services that are enabled AND have an API key
@@ -2347,7 +2340,7 @@ function setupInstallPageActions() {
 
     // Check credentials on active services
     const missingCreds = [];
-    const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'podnapisi'];
+    const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
     for (const id of nativeIds) {
       const prov = state.config.providers[id];
       if (prov && prov.enabled === true && !KEY_OPTIONAL_SERVICES.has(id) && (!prov.apiKey || prov.apiKey.trim() === '')) {
@@ -2492,7 +2485,7 @@ function setupInstallPageActions() {
 
 async function saveCurrentConfiguration(andShowInstall = false) {
   const missingCreds = [];
-  const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'podnapisi'];
+  const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
   for (const id of nativeIds) {
     const prov = state.config.providers[id];
     if (prov && prov.enabled === true && !KEY_OPTIONAL_SERVICES.has(id)) {

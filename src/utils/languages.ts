@@ -486,18 +486,6 @@ export function mapWhitelistToOpenSubtitles(
   });
 }
 
-/** Podnapisi codes: two letters (e.g. 'ron' -> 'ro'), Brazilian Portuguese 'pt-br' */
-export function mapWhitelistToPodnapisi(
-  languages: string[],
-  remapRules?: Record<string, string>
-): string[] {
-  return expandWhitelist(languages, remapRules, norm => {
-    if (norm === 'pob') return ['pt-br'];
-    const info = LOOKUP_MAP.get(norm);
-    return info?.iso639_1 ? [info.iso639_1] : [];
-  });
-}
-
 /** SubDL codes (e.g. 'pob' -> 'PT-BR,POB', 'eng' -> 'EN,ENG') */
 export function mapWhitelistToSubDL(
   languages: string[],

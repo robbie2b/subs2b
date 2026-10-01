@@ -20,7 +20,7 @@ const MAX_SUBTITLE_BYTES = 10 * 1024 * 1024;
 const BROWSER_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) subs2b/${APP_VERSION}`;
 
 /** Sites the generic proxy is allowed to download from (prevents it from being used as an open proxy) */
-const ALLOWED_DOWNLOAD_HOSTS = ['subdl.com', 'subsource.net', 'opensubtitles.org', 'opensubtitles.com', 'strem.io', 'podnapisi.net'];
+const ALLOWED_DOWNLOAD_HOSTS = ['subdl.com', 'subsource.net', 'opensubtitles.org', 'opensubtitles.com', 'strem.io'];
 
 function isAllowedHost(hostname: string, extraHosts: string[] = []): boolean {
   const host = hostname.toLowerCase();
