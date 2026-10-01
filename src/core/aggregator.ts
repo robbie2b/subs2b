@@ -12,7 +12,17 @@ import { recordUsage } from '../storage/usageStore';
 import { needsReference, fromFileGroup, archivePickParams as buildArchivePickParams } from './alignment';
 import { encodeAlignedToken, encodeFallbackToken, AlignedToken, MAX_ALTERNATIVES, MAX_BACKUPS } from './alignedToken';
 import { prepareAligned } from './alignedPrepare';
-import { isAllowedDownloadUrl, addonHostsOf } from '../proxy/subtitleProxy';
+import { isAllowedDownloadUrl, addonHostsOf, serverCanDownload } from '../proxy/subtitleProxy';
+
+/** The copy kept for a subtitle: itself, or its first backup this server can download when it cannot */
+function preferDownloadable(item: RawSubtitleItem): RawSubtitleItem {
+  if (!item.backups?.length || serverCanDownload(item)) return item;
+  const k = item.backups.findIndex(b => serverCanDownload(b));
+  if (k < 0) return item;
+  const { backups, ...main } = item;
+  const rest = backups.filter((_, i) => i !== k);
+  return { ...backups[k], backups: [main, ...rest] };
+}
 
 /** How many languages get their first subtitle aligned in advance */
 const MAX_PREPARED_LANGUAGES = 2;
@@ -125,7 +135,9 @@ export async function getAggregatedSubtitles(
     // Exact file-hash matches must never be merged away as "duplicates" of a similar release
     const hashMatched = orderedItems.filter(i => i.hashMatch === true);
     const others = orderedItems.filter(i => i.hashMatch !== true);
-    orderedItems = [...hashMatched, ...deduplicateSubtitles(others, 0.85, config.deduplicationStrategy || 'both')];
+    // of the copies of one subtitle the one kept is the first this server can download (Subsync needs the file):
+    // a copy from a source refusing this server for now gives its place to a working backup
+    orderedItems = [...hashMatched, ...deduplicateSubtitles(others, 0.85, config.deduplicationStrategy || 'both').map(preferDownloadable)];
     Logger.info(
       `Deduplication: ${beforeDedupItems.length} -> ${orderedItems.length} subtitles${hashMatched.length ? ` (${hashMatched.length} hash match)` : ''}`
     );
@@ -167,7 +179,17 @@ export async function getAggregatedSubtitles(
   const subsyncVerdict = config.subsync !== false && configId
     ? needsReference(query.extra?.filename, orderedItems)
     : { needed: false, reason: configId ? 'subsync is switched off' : 'no configuration id' };
-  if (subsyncVerdict.needed) Logger.info(`[SUBSYNC] a timing reference is needed: ${subsyncVerdict.reason}`);
+  if (subsyncVerdict.needed) {
+    Logger.info(`[SUBSYNC] a timing reference is needed: ${subsyncVerdict.reason}`);
+    // A subtitle this server cannot download cannot be checked: it goes after the ones that can (the player picks
+    // the first), still offered to be chosen by hand
+    const filename = query.extra?.filename;
+    const unreachable = orderedItems.filter(i => !fromFileGroup(filename, i.release) && !serverCanDownload(i));
+    if (unreachable.length) {
+      orderedItems = [...orderedItems.filter(i => !unreachable.includes(i)), ...unreachable];
+      Logger.info(`[SUBSYNC] ${unreachable.length} subtitle(s) moved down: their source refuses this server for now, they cannot be checked`);
+    }
+  }
 
   // All subtitles are always searched and scored; the limit only trims what is shown to the player
   const afterScoringCount = orderedItems.length;

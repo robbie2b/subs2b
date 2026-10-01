@@ -12,6 +12,7 @@ import { parseRelease, rankSubtitles } from '../utils/scorer';
 import { configStorage } from '../storage/configStore';
 import { UserConfig } from '../types/config';
 import { USER_AGENT, APP_VERSION } from '../config/version';
+import { isBlocked, noteRefusal, recoveryFromMessage, statusOf } from '../utils/sourceHealth';
 
 /** A subtitle is a small text file: anything bigger inside an archive is ignored (protects the server's memory) */
 const MAX_SUBTITLE_BYTES = 10 * 1024 * 1024;
@@ -385,8 +386,34 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
     sendSubtitleResponse(res, validation.content, validation.format, extractedFilename || rawFilename);
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    noteRefusal(new URL(targetUrl).hostname, statusOf(err), errorMsg);
     Logger.error(`Subtitle proxy fetch failed for ${new URL(targetUrl).hostname}: ${errorMsg}`, err);
     sendError(res, 502, `Could not reach the subtitle provider: ${errorMsg}`);
+  }
+}
+
+/** The hosts an OpenSubtitles download can come from (API, then mirrors) */
+export const OPENSUBTITLES_SOURCES = ['api.opensubtitles.com', 'dl.opensubtitles.org', 'subs5.strem.io'];
+
+/** Can this server download from OpenSubtitles right now (at least one way is not refusing it)? */
+export const openSubtitlesDownloadable = (): boolean => OPENSUBTITLES_SOURCES.some(s => !isBlocked(s));
+
+/**
+ * Can this server download the subtitle right now? (Subsync needs the file itself.) False only when every way to it
+ * is known to refuse this server for now: an OpenSubtitles quota reached, a host answering 403/469...
+ */
+export function serverCanDownload(item: { url: string }): boolean {
+  const url = item.url;
+  if (url.startsWith('/proxy/download/os-rest/')) return openSubtitlesDownloadable();
+  try {
+    if (url.startsWith('/sub/proxy?')) {
+      const inner = new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('url');
+      return !inner || !isBlocked(new URL(inner).hostname);
+    }
+    if (url.startsWith('/')) return true;
+    return !isBlocked(new URL(url).hostname);
+  } catch {
+    return true;
   }
 }
 
@@ -431,6 +458,10 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
   // 1. Official API: POST /api/v1/download returns a temporary link
   const fromApi = async (): Promise<Buffer | null> => {
     if (!apiKey) return null;
+    if (isBlocked('api.opensubtitles.com')) {
+      failures.push('api: skipped (refusing this server for now)');
+      return null;
+    }
     try {
       const downloadRes = await axios.post<{ link: string }>(
         'https://api.opensubtitles.com/api/v1/download',
@@ -457,7 +488,11 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
       if (subRes.data && subRes.data.byteLength > 0) return Buffer.from(subRes.data);
       failures.push('api: empty file');
     } catch (err) {
-      failures.push(`api: ${failureReason(err)}`);
+      const reason = failureReason(err);
+      failures.push(`api: ${reason}`);
+      const body = (err as { response?: { data?: { message?: string; reset_time_utc?: string } } })?.response?.data;
+      noteRefusal('api.opensubtitles.com', statusOf(err), reason,
+        recoveryFromMessage(typeof body === 'object' ? body?.message : undefined, typeof body === 'object' ? body?.reset_time_utc : undefined));
     }
     return null;
   };
@@ -473,7 +508,12 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
 
     const legacyUrl = /^\d+$/.test(legacyId) ? candidateUrls[0] : null;
     for (const mirrorUrl of candidateUrls) {
-      const label = `${new URL(mirrorUrl).hostname}${mirrorUrl === legacyUrl ? ' (legacy id)' : ''}`;
+      const host = new URL(mirrorUrl).hostname;
+      const label = `${host}${mirrorUrl === legacyUrl ? ' (legacy id)' : ''}`;
+      if (isBlocked(host)) {
+        failures.push(`${label}: skipped (refusing this server for now)`);
+        continue;
+      }
       try {
         const mirrorRes = await axios.get<ArrayBuffer>(mirrorUrl, {
           responseType: 'arraybuffer',
@@ -489,7 +529,9 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
           failures.push(`${label}: empty answer`);
         }
       } catch (err) {
-        failures.push(`${label}: ${failureReason(err)}`);
+        const reason = failureReason(err);
+        failures.push(`${label}: ${reason}`);
+        noteRefusal(host, statusOf(err), reason);
       }
     }
     return null;

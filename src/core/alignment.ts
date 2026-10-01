@@ -7,6 +7,8 @@ import { readCues } from '../utils/subtitleCues';
 import { speechFlags, TimedCue } from '../utils/subsync';
 import { MIN_REFERENCE_CUES, Reference } from './alignDecision';
 import { executeParallelSearch } from '../providers';
+import { loadStoredReferences, storeReferences } from '../storage/referenceStore';
+import { serverCanDownload } from '../proxy/subtitleProxy';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
 
@@ -56,6 +58,15 @@ function sameKind(sub: ParsedRelease, video: ParsedRelease): boolean {
     (videoFamily === null || sourceFamily(sub.source) === videoFamily);
 }
 
+/**
+ * The cut of the film named in a release (extended, director's cut...): another cut has scenes more or less, so
+ * another timeline. "Theatrical" is the usual cut, the same as none. (IMAX and remastered keep the cut.)
+ */
+const CUTS = new Set(['extended', 'unrated', 'directors', 'uncut', 'finalcut', 'special']);
+export function cutOf(p: ParsedRelease): string {
+  return p.edition.filter(e => CUTS.has(e)).sort().join(',');
+}
+
 const kindLabel = (p: ParsedRelease): string =>
   [resolutionClass(p.resolution), sourceFamily(p.source)].filter(Boolean).join(' ');
 
@@ -64,12 +75,15 @@ export interface TriggerVerdict {
   reason: string;
 }
 
-/** Is the subtitle made by the playing file's own release group (the only label trusted without checking)? */
+/**
+ * Is the subtitle made by the playing file's own release group, for the same cut of the film (the only label
+ * trusted without checking)?
+ */
 export function fromFileGroup(filename: string | undefined | null, release: string | undefined | null): boolean {
   if (!filename) return false;
   const video = parseRelease(filename);
   const sub = parseRelease(release || '');
-  return Boolean(sub.group && video.group && sub.group === video.group);
+  return Boolean(sub.group && video.group && sub.group === video.group) && cutOf(sub) === cutOf(video);
 }
 
 /**
@@ -154,6 +168,10 @@ export function pickReferenceCandidates(
     const release = item.release || '';
     const parsed = parseRelease(release);
     if (!sameKind(parsed, video)) continue;
+    // another cut of the film has another timeline
+    if (cutOf(parsed) !== cutOf(video)) continue;
+    // a source refusing this server for now (a quota reached...) would only waste time
+    if (!serverCanDownload(item)) continue;
     if (parsed.badQuality || looksForced(release) || looksMachineTranslated(release)) continue;
     if (item.forced || item.aiTranslated) continue;
     const key = `${item.provider}|${item.lang}|${release.toLowerCase()}`;
@@ -228,13 +246,27 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
   return references;
 }
 
-/** References for one episode/file kind (cached, and shared by concurrent requests) */
+/** What the references depend on: the content and the kind of file (class, source, service, group, cut) */
+export function referenceKey(id: string, filename: string): string {
+  const video = parseRelease(filename);
+  return `${id}|${resolutionClass(video.resolution)}|${sourceFamily(video.source) || ''}|${video.service || ''}|${video.group || ''}|${cutOf(video)}`;
+}
+
+/**
+ * References for one episode/file kind: from memory, else from the database (kept once found, so they are never
+ * downloaded twice), else searched and downloaded. Shared by concurrent requests.
+ */
 export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
-  const video = parseRelease(ctx.filename);
-  const key = `${ctx.query.id}|${resolutionClass(video.resolution)}|${sourceFamily(video.source) || ''}|${video.service || ''}|${video.group || ''}`;
+  const key = referenceKey(ctx.query.id, ctx.filename);
   let pending = referenceCache.get(key);
   if (!pending) {
-    pending = buildReferences(ctx).then(refs => {
+    pending = loadStoredReferences(key).then(stored => {
+      if (stored && stored.length) {
+        Logger.info(`[SUBSYNC] ${stored.length} stored reference(s) for ${ctx.query.id} (nothing downloaded)`, { references: stored.map(r => r.label) });
+        return stored;
+      }
+      return buildReferences(ctx).then(refs => { storeReferences(key, refs); return refs; });
+    }).then(refs => {
       // "nothing found" is remembered for a shorter time, so a later try can succeed
       if (refs.length === 0) referenceCache.set(key, pending!, { ttl: 15 * 60 * 1000 });
       return refs;

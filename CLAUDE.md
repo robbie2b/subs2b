@@ -98,7 +98,20 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     ca înlocuitori; referințele OpenSubtitles se iau întâi de pe mirroare (`mirrorFirst=1`), API-ul e rezervă.
   - Log `[DOWNLOAD]`: motivul fiecărui pas (inclusiv mesajul OpenSubtitles despre limită, `remaining`, `reset`).
 
+- Test live v1.4.4 (2026-10-01): cheia OpenSubtitles a utilizatorului are **100 descărcări / 24 h** (consumate azi, în
+  mare de referințele Subsync). De pe Render: `dl.opensubtitles.org` → 403, `subs5.strem.io` (addonul v3) → 469.
+  Addonul PRO (`opensubtitles.stremio.homes`) merge de pe server. Utopia S01E02: 5 referințe OS picate → original după 6.6 s.
+- Pe ramură (nedeployat, pentru 1.4.5):
+  - `src/utils/sourceHealth.ts`: serverul ține minte sursele care îl refuză (406 până la ora de resetare din mesajul
+    OpenSubtitles; 403/469 30 min; 429 15 min; 503 5 min) și nu le mai încearcă. Log `[SOURCES]`.
+  - `serverCanDownload(item)`: la deduplicare rămâne copia descărcabilă (cea blocată devine rezervă); subtitrările
+    nedescărcabile (deci neverificabile) coboară la final când Subsync e necesar; referințele blocate nu se încearcă.
+  - Referințele Subsync salvate în Postgres (`subsync_references`, doar timpii la ms, gzip, 60 zile, comune tuturor).
+  - Ediția filmului (cut: extended, unrated, directors, uncut, finalcut, special; theatrical = normal) intră în încredere
+    (același grup + aceeași ediție), în alegerea referințelor și în cheia lor. Punctajul o folosea deja (+10 / −12 / −3).
+
 ## De făcut (în ordinea discutată)
+- Surse noi, în ordine: Podnapisi (referințe în multe limbi, fără limită zilnică), apoi Titrari.ro și Subtitrari-noi.ro.
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
 - „PGS” la prima subtitrare. Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.
   Direcție: linkuri care se termină în `.srt`, cu `application/x-subrip`.

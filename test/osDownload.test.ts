@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { handleOpenSubtitlesRestDownload } from '../src/proxy/subtitleProxy';
+import { handleOpenSubtitlesRestDownload, serverCanDownload } from '../src/proxy/subtitleProxy';
+import { clearSourceHealth, isBlocked, recoveryFromMessage } from '../src/utils/sourceHealth';
 
 // OpenSubtitles download: the order of the sources and the reasons that reach the log
 
@@ -66,6 +67,20 @@ async function main(): Promise<void> {
   check(failure.includes('api: HTTP 406') && failure.includes('allowed 5 subtitles') && failure.includes('remaining 0') && failure.includes('reset 2026-10-02'), 'the log has the API reason with the quota message', failure);
   check(failure.includes('dl.opensubtitles.org (legacy id): HTTP 469') && failure.includes('subs5.strem.io: HTTP 469'), 'and the reason of every mirror', failure);
 
+  const back = recoveryFromMessage('You have downloaded your allowed 100 subtitles for 24h.Your quota will be renewed in 15 hours and 49 minutes (2026-10-02 00:00:00 UTC)');
+  check(back !== null && Math.abs(back - (Date.now() + (15 * 60 + 50) * 60000)) < 5000, 'the quota message tells when it comes back (15 h 49 min)', back && new Date(back).toISOString());
+
+  // the refusals are remembered: the next download does not try them again, and fails at once
+  check(isBlocked('api.opensubtitles.com') && isBlocked('dl.opensubtitles.org') && isBlocked('subs5.strem.io'), 'the refusing sources are remembered');
+  check(!serverCanDownload({ url: '/proxy/download/os-rest/1?apiKey=k' }), 'an OpenSubtitles subtitle counts as not downloadable by this server for now');
+  calls.length = 0;
+  const t0 = Date.now();
+  r = respond();
+  await handleOpenSubtitlesRestDownload(req({}), r.res);
+  check(r.out.status === 502 && calls.length === 0 && Date.now() - t0 < 100, 'the next download skips them (no request, no waiting)', calls);
+  clearSourceHealth();
+  check(serverCanDownload({ url: '/proxy/download/os-rest/1?apiKey=k' }), 'once they recover, it is downloadable again');
+
   // Subsync reference: the mirrors first, the API is not used when a mirror works
   calls.length = 0;
   apiAnswer = () => ({ data: { link: 'https://dl.example/api-file' } });
@@ -75,6 +90,7 @@ async function main(): Promise<void> {
   check(r.out.status === 200 && calls[0] === 'dl.opensubtitles.org' && !calls.includes('api'), 'a reference download (mirrorFirst) does not spend the API quota', calls);
 
   // ... and still falls back to the API when the mirrors fail
+  clearSourceHealth();
   calls.length = 0;
   mirrorsWork = false;
   r = respond();

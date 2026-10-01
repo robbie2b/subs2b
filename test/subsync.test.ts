@@ -11,10 +11,12 @@ process.env.SUBSYNC_MAX_WAIT_MS = '4000';
 import axios from 'axios';
 import { parseCues } from '../src/utils/timeline';
 import { shiftSubtitle } from '../src/utils/subtitleFormat';
-import { needsReference, fromFileGroup, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree } from '../src/core/alignment';
+import { needsReference, fromFileGroup, referenceKey, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree } from '../src/core/alignment';
 import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
 import { createAlignedHandler, createFallbackHandler, clearAlignmentDecisions } from '../src/proxy/alignedProxy';
 import { deduplicateSubtitles } from '../src/utils/deduplicator';
+import { packReferences, unpackReferences } from '../src/storage/referenceStore';
+import { noteRefusal, clearSourceHealth } from '../src/utils/sourceHealth';
 import { decodeFallbackToken } from '../src/core/alignedToken';
 import { stopAlignWorker } from '../src/core/alignPool';
 import { decodeAlignedToken } from '../src/core/alignedToken';
@@ -163,6 +165,40 @@ async function main() {
     ];
     const betterPicked = pickReferenceCandidates(better, CRU, 1, 1).map(i => i.provider);
     check('a better match from OpenSubtitles still goes first (the score decides)', betterPicked[0] === 'opensubtitles', betterPicked);
+  }
+
+  console.log('Cut of the film (extended, director\'s cut...)');
+  {
+    const EXT = 'Movie.2010.Extended.1080p.BluRay.x264-GRP.mkv';
+    check('same group but another cut: not trusted, checked', !fromFileGroup(EXT, 'Movie.2010.1080p.BluRay.x264-GRP') && fromFileGroup(EXT, 'Movie.2010.EXTENDED.720p.BluRay.x264-GRP'));
+    check('theatrical counts as the usual cut', fromFileGroup('Movie.2010.1080p.BluRay.x264-GRP.mkv', 'Movie.2010.Theatrical.1080p.BluRay.x264-GRP'));
+    const refs = pickReferenceCandidates([
+      item('Movie.2010.1080p.BluRay.x264-AAA', 'subdl', 'eng'),
+      item('Movie.2010.Extended.1080p.BluRay.x264-BBB', 'subdl', 'spa')
+    ], EXT, null, null).map(i => i.lang);
+    check('references only of the same cut', refs.length === 1 && refs[0] === 'spa', refs);
+    check('the cut is part of the reference key', referenceKey('tt1', EXT) !== referenceKey('tt1', 'Movie.2010.1080p.BluRay.x264-GRP.mkv'));
+  }
+
+  console.log('Stored references');
+  {
+    const ref = { label: '[en] X', lang: 'eng', provider: 'subdl', cues: [{ start: 1.234, end: 2.5, speech: true }, { start: 3.001, end: 3.999, speech: false }, { start: 4, end: 4, speech: true }] };
+    const back = unpackReferences(packReferences([ref]))[0];
+    check('stored and read back with the same times (to the millisecond) and dialogue flags',
+      back.label === ref.label && back.cues.length === 3 && Math.abs(back.cues[0].start - 1.234) < 1e-9 && Math.abs(back.cues[1].end - 3.999) < 1e-9 && back.cues[1].speech === false && back.cues[0].speech === true, back);
+  }
+
+  console.log('Sources refusing this server');
+  {
+    noteRefusal('api.opensubtitles.com', 406, 'quota');
+    noteRefusal('dl.opensubtitles.org', 403, 'blocked');
+    noteRefusal('subs5.strem.io', 469, 'too many');
+    const picked = pickReferenceCandidates([
+      item('Peacemaker.2022.S01E01.2160p.WEB.HEVC-AAA', 'opensubtitles', 'eng', { url: '/proxy/download/os-rest/1?apiKey=k' }),
+      item('Peacemaker.2022.S01E01.2160p.WEB.HEVC-BBB', 'subdl', 'spa')
+    ], CRU, 1, 1).map(i => i.provider);
+    check('an OpenSubtitles reference is not even tried while its quota is reached', picked.join() === 'subdl', picked);
+    clearSourceHealth();
   }
 
   console.log('Deduplication keeps backups');
@@ -446,6 +482,30 @@ async function main() {
     const tok = fb ? decodeFallbackToken(fb.url.split('/sub/fallback/')[1].replace('.srt', '')) : null;
     check('a duplicate becomes a backup: the link goes through the fallback endpoint', list.subtitles.filter(x => x.lang === 'ron').length === list.subtitles.filter(x => x.lang === 'ron' && !x.url.includes('?dup=1')).length && Boolean(tok && tok.b.length === 1), list.subtitles.map(x => x.url.slice(0, 70)));
     providerItems.splice(providerItems.indexOf(dup), 1);
+  }
+
+  {
+    // the list: a copy from a source refusing this server gives its place to a working backup,
+    // and a subtitle that cannot be downloaded at all goes after the ones that can be checked
+    clearAlignmentDecisions();
+    globalSubtitleCache.clear?.();
+    noteRefusal('blocked.example', 469, 'too many');
+    const saved = providerItems.splice(0, providerItems.length);
+    providerItems.push(
+      { id: 'ro-blocked', provider: 'opensubtitles', providerName: 'OS', url: 'https://blocked.example/a.srt', lang: 'ron', release: 'Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL.DD5.1.H.264-AAA' },
+      { id: 'ro-blocked-copy', provider: 'opensubtitles', providerName: 'OS', url: baseUrl + '/ro-hd?copy=1', lang: 'ron', release: 'Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL.DD5.1.H.264-AAA' },
+      { id: 'ro-only-blocked', provider: 'opensubtitles', providerName: 'OS', url: 'https://blocked.example/b.srt', lang: 'ron', release: 'Peacemaker.S01E01.2160p.PL.HMAX.WEB-DL.DDPA5.1.HDR.DV.HEVC-XYZ' },
+      { id: 'ro-ok', provider: 'opensubtitles', providerName: 'OS', url: baseUrl + '/ro-other?ok=1', lang: 'ron', release: 'Peacemaker.2022.S01E01.720p.WEBRip.x264-ION10' }
+    );
+    const list = await getAggregatedSubtitles(parseSubtitleQuery('series', 'tt13146488:1:1', { filename: CRU }), { ...stored, addons: stored.addons, customAddons: [{ url: 'https://blocked.example/manifest.json' } as any] }, baseUrl, uuid);
+    const inner = list.subtitles.map(x => {
+      const t = x.url.includes('/sub/aligned/') ? decodeAlignedToken(x.url.split('/sub/aligned/')[1].replace('.srt', '')) : null;
+      return t ? t.u : x.url;
+    });
+    check('the working copy is the one kept (the refusing one becomes its backup)', inner.includes(baseUrl + '/ro-hd?copy=1') && !inner.includes('https://blocked.example/a.srt'), inner);
+    check('the subtitle only available from a refusing source goes last', inner[inner.length - 1] === 'https://blocked.example/b.srt', inner);
+    providerItems.splice(0, providerItems.length, ...saved);
+    clearSourceHealth();
   }
 
   {

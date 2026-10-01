@@ -4,6 +4,7 @@ import { UserConfig } from '../types/config';
 import { SubtitleQuery } from '../types/provider';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
+import { isBlocked, noteRefusal, statusOf } from '../utils/sourceHealth';
 import { AlignedToken, linksOf } from './alignedToken';
 import { getReferences, fitsReferences, AlignmentResult, Reference } from './alignment';
 import { alignInWorker, referencesAgreeInWorker } from './alignPool';
@@ -71,13 +72,21 @@ const describe = (err: unknown): string => {
 export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl: string): Promise<{ text: string; url: string }> {
   const failures: string[] = [];
   for (const url of urls) {
-    if (!url.startsWith(baseUrl + '/') && !isAllowedDownloadUrl(url, allowedHosts)) continue;
+    const own = url.startsWith(baseUrl + '/');
+    if (!own && !isAllowedDownloadUrl(url, allowedHosts)) continue;
+    const host = new URL(url).hostname;
+    const label = `${host}${new URL(url).pathname.split('/').slice(0, 4).join('/')}`;
+    if (!own && isBlocked(host)) {
+      failures.push(`${label}: skipped (refusing this server for now)`);
+      continue;
+    }
     try {
       const text = await loadOriginal(url, allowedHosts);
-      if (failures.length) Logger.info(`[DOWNLOAD] served from a backup source (${new URL(url).hostname}) after: ${failures.join('; ')}`);
+      if (failures.length) Logger.info(`[DOWNLOAD] served from a backup source (${host}) after: ${failures.join('; ')}`);
       return { text, url };
     } catch (err: unknown) {
-      failures.push(`${new URL(url).hostname}${new URL(url).pathname.split('/').slice(0, 4).join('/')}: ${describe(err)}`);
+      failures.push(`${label}: ${describe(err)}`);
+      if (!own) noteRefusal(host, statusOf(err), describe(err));
     }
   }
   Logger.warn(`[DOWNLOAD] no source of the subtitle could be downloaded: ${failures.join('; ') || 'no allowed link'}`);
