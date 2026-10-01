@@ -17,6 +17,8 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   Versiunea se schimbă în `package.json` și pe 2 linii în `package-lock.json` (liniile 3 și 9), cu tag `vX.Y.Z`.
   Din cloud tagurile NU se pot împinge (proxy-ul le blochează): utilizatorul le pune de pe calculatorul lui
   (`C:\Users\rober\subs2b`: `git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`).
+- Mesajele de commit (și descrierile de PR) NU conțin nimic despre Claude sau sesiune: fără `Co-Authored-By`,
+  fără `Claude-Session`, fără „Generated with Claude Code”. Doar descrierea schimbării.
 - Înainte de commit: `npm run build` și `npm test` (autonom, fără rețea; toate trebuie să treacă).
 - Nu pune UUID-ul configurației sau chei în cod, în commituri sau în chat.
 
