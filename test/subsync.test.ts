@@ -259,7 +259,7 @@ async function main() {
     check('and lines up with the real timeline (max error under 0.2 s)', worst < 0.2, worst);
     check('the text is untouched', r.out.body.includes('romana 10') && r.out.body.includes('romana 300'));
     check('it was quick', Date.now() - t0 < 1500, Date.now() - t0);
-    const log = getAlignments(uuid)[0];
+    const log = (await getAlignments(uuid))[0];
     check('the decision is recorded for the Debug page', log?.outcome === 'shifted' && Math.abs(log.offset - -5) < 0.2 && log.references.length === 2, log);
     check('an all-language search was made once', providerCalls === 1, providerCalls);
 
@@ -280,7 +280,7 @@ async function main() {
     await handler({ params: { config: uuid, data: linkFor(baseUrl + '/ro-hd?x=2') }, query: {} } as any, r2.res);
     check('no reference found: the subtitle is sent unchanged', r2.out.status === 200 && r2.out.body === RO_HD.replace(/\r\n/g, '\n').trim() + '\n' || r2.out.body.includes('romana 10'), r2.out.status);
     check('unchanged means the same times', Math.abs(parseCues(r2.out.body)[10].start - parseCues(RO_HD)[10].start) < 0.002);
-    check('the outcome says why', getAlignments(uuid)[0].outcome === 'unchanged' && /no reference/.test(getAlignments(uuid)[0].reason), getAlignments(uuid)[0]);
+    check('the outcome says why', (await getAlignments(uuid))[0].outcome === 'unchanged' && /no reference/.test((await getAlignments(uuid))[0].reason), (await getAlignments(uuid))[0]);
     providerItems.push(...saved);
   }
 
@@ -295,7 +295,7 @@ async function main() {
     const took = Date.now() - t0;
     check('over budget: answered within the budget (1.5 s) with the original', took < 2200 && Math.abs(parseCues(r.out.body)[10].start - parseCues(RO_HD)[10].start) < 0.002, took);
     check('and not cached by the player', r.out.headers['Cache-Control'] === 'no-store', r.out.headers);
-    check('the outcome is "timeout"', getAlignments(uuid)[0].outcome === 'timeout');
+    check('the outcome is "timeout"', (await getAlignments(uuid))[0].outcome === 'timeout');
     await new Promise(r2 => setTimeout(r2, 2600));
     const next = respond();
     await handler({ params: { config: uuid, data: link }, query: {} } as any, next.res);

@@ -213,32 +213,6 @@ export function alignAgainst(candidateText: string, references: Reference[]): Al
   };
 }
 
-// ---------------------------------------------------------------------------
-// What the Debug page shows: the latest decisions (in memory, per configuration)
-// ---------------------------------------------------------------------------
-
-export interface AlignmentLogEntry {
-  at: string;
-  id: string;
-  filename: string;
-  subtitle: string;
-  outcome: 'shifted' | 'unchanged' | 'timeout' | 'error';
-  offset: number;
-  confidence: number;
-  reason: string;
-  references: Array<{ label: string; offset: number; score: number }>;
-  ms: number;
-}
-
-const alignmentLog = new Map<string, AlignmentLogEntry[]>();
-
-export function recordAlignment(configKey: string, entry: AlignmentLogEntry): void {
-  const list = alignmentLog.get(configKey) || [];
-  list.unshift(entry);
-  if (list.length > 100) list.length = 100;
-  alignmentLog.set(configKey, list);
-}
-
-export function getAlignments(configKey: string): AlignmentLogEntry[] {
-  return alignmentLog.get(configKey) || [];
-}
+// What the Debug page shows (kept in the database when there is one): see storage/alignmentLogStore.ts
+export { recordAlignment, getAlignments } from '../storage/alignmentLogStore';
+export type { AlignmentLogEntry } from '../storage/alignmentLogStore';

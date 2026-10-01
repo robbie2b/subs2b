@@ -458,7 +458,7 @@ export function createServer(): express.Application {
     const key = await requireStoredConfig(req, res);
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ entries: getAlignments(key) });
+    res.json({ entries: await getAlignments(key) });
   });
 
   // Live server log (poll with ?after=<last seq received>)

@@ -431,7 +431,7 @@ function applyConfigWithMigration(parsed) {
   if (Array.isArray(parsed.customAddons)) {
     merged.customAddons = parsed.customAddons.filter(a => a && a.manifestUrl).map(a => ({
       id: a.id || `custom-${Math.random().toString(36).substring(2, 8)}`,
-      name: a.name || 'Addon Importado',
+      name: a.name || 'Imported Addon',
       manifestUrl: a.manifestUrl,
       logo: a.logo || '',
       enabled: typeof a.enabled === 'boolean' ? a.enabled : true,
@@ -586,7 +586,7 @@ function setupNavigation() {
 
   btnNext?.addEventListener('click', () => {
     const curIdx = PAGES_ORDER.indexOf(state.activePage);
-    if (curIdx < PAGES_ORDER.length - 1) {
+    if (state.activePage !== 'install' && curIdx < PAGES_ORDER.length - 1) {
       navigateToPage(PAGES_ORDER[curIdx + 1]);
     }
   });
@@ -646,7 +646,8 @@ function navigateToPage(pageId) {
   const btnPrev = document.getElementById('btn-prev');
   const btnNext = document.getElementById('btn-next');
   if (btnPrev) btnPrev.disabled = newIdx === 0;
-  if (btnNext) btnNext.disabled = newIdx === PAGES_ORDER.length - 1;
+  // The Next button walks through the setup steps and stops at Install; Debug is opened from the menu only
+  if (btnNext) btnNext.disabled = pageId === 'install' || pageId === 'debug';
 
   if (currentView && currentView !== targetView && currentView.classList.contains('active')) {
     currentView.style.opacity = '0';
@@ -1087,7 +1088,7 @@ function setupAddonsActions() {
       }
 
       btnImport.disabled = true;
-      btnImport.textContent = 'Importando...';
+      btnImport.textContent = 'Importing...';
       feedbackMsg.textContent = '';
 
       try {
@@ -1257,7 +1258,7 @@ function renderInstalledAddons(query = '') {
         </div>
       </div>
       <div class="addon-right">
-        <label class="compact-switch" title="Ativar ou desativar este addon">
+        <label class="compact-switch" title="Enable or disable this addon">
           <input type="checkbox" class="toggle-addon" data-id="${addon.id}" ${addon.enabled !== false ? 'checked' : ''}>
           <span class="compact-slider"></span>
         </label>
@@ -1284,7 +1285,7 @@ function renderInstalledAddons(query = '') {
     });
 
     row.querySelector('.btn-delete-addon').addEventListener('click', () => {
-      if (confirm(`Deseja remover o addon "${addon.name}"?`)) {
+      if (confirm(`Remove the addon "${addon.name}"?`)) {
         row.classList.add('row-fade-out');
         setTimeout(() => {
           state.config.customAddons = state.config.customAddons.filter(a => a.id !== addon.id);
@@ -1661,9 +1662,10 @@ function renderWhitelistTags() {
     tag.className = 'selected-lang-tag';
     tag.dataset.code = cleanCode;
     tag.innerHTML = `
+      <span class="tag-flag">${found && found.flag ? found.flag : '🌐'}</span>
       <span class="tag-label">${escapeHtml(label)}</span>
       <span class="tag-code">${escapeHtml(cleanCode.toUpperCase())}</span>
-      <button class="btn-remove-tag" data-code="${escapeHtml(cleanCode)}" title="Remover ${escapeHtml(label)}" type="button">${MDI_ICONS.closeSm}</button>
+      <button class="btn-remove-tag" data-code="${escapeHtml(cleanCode)}" title="Remove ${escapeHtml(label)}" type="button">${MDI_ICONS.closeSm}</button>
     `;
 
     tag.querySelector('.btn-remove-tag').addEventListener('click', (e) => {
@@ -1686,6 +1688,14 @@ function renderLanguageChips(filterQuery = '') {
   const container = document.getElementById('language-chips-container');
   if (!container) return;
 
+  // The list of languages is only shown while searching for one
+  if (!String(filterQuery || '').trim()) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = '';
+
   const currentLangs = new Set((state.config.languages || []).map(l => l.toLowerCase()));
   let list = state.languagesList || FALLBACK_LANGUAGES;
 
@@ -1707,6 +1717,7 @@ function renderLanguageChips(filterQuery = '') {
     item.style.animationDelay = `${Math.min(idx * 15, 120)}ms`;
     item.innerHTML = `
       <span class="item-check">${isSelected ? MDI_ICONS.check16 : ''}</span>
+      <span class="item-flag">${l.flag || '🌐'}</span>
       <span class="item-name">${escapeHtml(l.name || l.code)}</span>
       <span class="item-code">${l.code.toUpperCase()}</span>
     `;
@@ -2077,7 +2088,7 @@ function renderFiltersPriority() {
         activeItemsMap.set(addon.id, {
           id: addon.id,
           name: addon.name || 'Subtitle Addon',
-          type: 'Addon Importado'
+          type: 'Imported Addon'
         });
       }
     }
@@ -2137,6 +2148,43 @@ function renderFiltersPriority() {
 
     row.addEventListener('dragend', () => {
       row.classList.remove('dragging');
+    });
+
+    // Touch screens do not fire the drag events above: the handle reorders with pointer events instead
+    const handle = row.querySelector('.drag-handle');
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return; // desktop uses the native drag and drop
+      e.preventDefault();
+      try { handle.setPointerCapture(e.pointerId); } catch (err) { /* the move events then come from the document: still fine */ }
+      row.classList.add('dragging');
+      let target = index;
+
+      const onMove = (ev) => {
+        container.querySelectorAll('.priority-item').forEach(r => r.classList.remove('drag-over'));
+        const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.priority-item');
+        if (over && container.contains(over)) {
+          target = parseInt(over.dataset.index, 10);
+          if (target !== index) over.classList.add('drag-over');
+        }
+      };
+      const finish = (commit) => {
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        handle.removeEventListener('pointercancel', onCancel);
+        container.querySelectorAll('.priority-item').forEach(r => r.classList.remove('drag-over'));
+        row.classList.remove('dragging');
+        if (commit && !isNaN(target) && target !== index) {
+          const movedItem = state.config.providerPriority.splice(index, 1)[0];
+          state.config.providerPriority.splice(target, 0, movedItem);
+          renderFiltersPriority();
+          notifyConfigChanged();
+        }
+      };
+      const onUp = () => finish(true);
+      const onCancel = () => finish(false);
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+      handle.addEventListener('pointercancel', onCancel);
     });
 
     row.addEventListener('dragover', (e) => {

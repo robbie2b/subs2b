@@ -95,6 +95,58 @@ function stopDebugPage() {
   debugState.usageTimer = null;
 }
 
+// One log line as colored pieces: dim time, level, tags like [SUBSYNC] and a few key words highlighted.
+// Everything is added as text (never as HTML), so log content cannot inject markup.
+function buildLogLine(raw) {
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  let rest = String(raw);
+
+  const add = (text, cls) => {
+    if (!text) return;
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    span.textContent = text;
+    line.appendChild(span);
+  };
+
+  const m = rest.match(/^\[(\d{4}-\d\d-\d\dT[\d:.]+Z)\] \[(INFO|WARN|ERROR)\] ?/);
+  if (m) {
+    add(m[1].slice(11, 19) + ' ', 'log-time');
+    add(m[2].padEnd(5) + ' ', 'log-level log-' + m[2].toLowerCase());
+    line.classList.add('lvl-' + m[2].toLowerCase());
+    rest = rest.slice(m[0].length);
+  }
+
+  // [TAG] pieces at the start of the message
+  for (let guard = 0; guard < 3; guard++) {
+    const t = rest.match(/^\[([A-Za-z0-9_ .:-]+)\] ?/);
+    if (!t) break;
+    const name = t[1].toUpperCase();
+    let cls = 'log-tag';
+    if (name === 'SUBSYNC') cls += ' log-subsync';
+    else if (name === 'SUCCESS') cls += ' log-ok';
+    else if (name === 'FAILED') cls += ' log-bad';
+    else if (name === 'FALLBACK') cls += ' log-warn-tag';
+    else if (name === 'SCORE') cls += ' log-score';
+    else if (name === 'PROVIDER') cls += ' log-provider';
+    add(`[${t[1]}] `, cls);
+    rest = rest.slice(t[0].length);
+  }
+
+  // key words inside the message
+  const parts = rest.split(/(shifted [+-]?[\d.]+ s|Request tt\S*|over budget|sending the subtitle unchanged|already aligned|no reference[^,{]*|failed|timed out|ECONNRESET|ENOTFOUND)/i);
+  for (const p of parts) {
+    if (!p) continue;
+    if (/^shifted/i.test(p)) add(p, 'log-ok');
+    else if (/^Request tt/.test(p)) add(p, 'log-request');
+    else if (/^(over budget|sending the subtitle unchanged|no reference|already aligned)/i.test(p)) add(p, 'log-warn-text');
+    else if (/^(failed|timed out|ECONNRESET|ENOTFOUND)/i.test(p)) add(p, 'log-bad');
+    else add(p);
+  }
+  return line;
+}
+
 async function refreshLogs() {
   const base = debugBase();
   const box = document.getElementById('dbg-log');
@@ -111,9 +163,10 @@ async function refreshLogs() {
     }
     debugState.lastSeq = data.last;
     if (!data.lines.length) return;
-    box.textContent += data.lines.map(l => l.text).join('\n') + '\n';
-    const lines = box.textContent.split('\n');
-    if (lines.length > 1500) box.textContent = lines.slice(-1000).join('\n');
+    const fragment = document.createDocumentFragment();
+    for (const l of data.lines) fragment.appendChild(buildLogLine(l.text));
+    box.appendChild(fragment);
+    while (box.childElementCount > 1500) box.removeChild(box.firstElementChild);
     if (document.getElementById('dbg-autoscroll')?.checked) box.scrollTop = box.scrollHeight;
   } catch (err) {
     // the server may be waking up; try again on the next tick
@@ -250,7 +303,7 @@ function renderProviders(data) {
       + `<td>${p.searches ? ms(p.avgMs) : '-'}<div class="dbg-muted">${p.searches ? `max ${ms(p.maxMs)}` : ''}</div></td>`
       + `<td>${p.searches ? ms(p.medianMs) : '-'}</td>`
       + `<td>${p.searches ? p.avgFound : '-'}<div class="dbg-muted">${p.searches ? `${pct(p.emptyRate)} empty` : ''}</div></td>`
-      + `<td>${wins}</td><td>${inTop}</td><td>${ranked ? p.avgSent : '-'}</td>`
+      + `<td>${wins}</td><td>${inTop}</td><td>${ranked ? Number(p.avgSent).toFixed(1) : '-'}</td>`
       + `<td>${p.avgBestScore === null ? '-' : p.avgBestScore}</td>`
       + `</tr>`;
   }).join('');

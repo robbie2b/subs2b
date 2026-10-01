@@ -52,7 +52,7 @@ const RECENT_LIMIT = 150;
 const memory = new Map<string, UsageEvent[]>();
 let tableReady: Promise<boolean> | null = null;
 
-const ownerOf = (configKey: string): string =>
+export const ownerOf = (configKey: string): string =>
   crypto.createHash('sha256').update(configKey.toLowerCase()).digest('hex').slice(0, 16);
 
 async function ensureTable(): Promise<boolean> {

@@ -827,6 +827,37 @@
                     </div>
                   </div>
                 </div>
+
+                <div class="card card-filter-pane" style="margin-top: 14px;">
+                  <div class="filter-section-header">
+                    <div>
+                      <h3>Connector timeout</h3>
+                      <p class="panel-subtitle">How long each native service may take to answer before it is skipped. A longer timeout finds more subtitles from slow services, a shorter one makes the list appear sooner.</p>
+                    </div>
+                  </div>
+                    <div class="card card-timeout-box">
+                      <div class="timeout-field-group">
+                        <label for="install-addon-timeout" class="timeout-field-label">Timeout (ms)</label>
+                        <div class="timeout-input-wrap">
+                          <input type="number" id="install-addon-timeout" class="form-input form-input-number" min="2000"
+                            max="15000" step="500" value="6000">
+                          <div class="custom-stepper-btns">
+                            <button type="button" class="stepper-btn" id="btn-timeout-up" aria-label="Increase timeout">
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" />
+                              </svg>
+                            </button>
+                            <button type="button" class="stepper-btn" id="btn-timeout-down" aria-label="Decrease timeout">
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7.41,8.59L12,13.17L16.59,8.59L18,10L12,16L6,10L7.41,8.59Z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                        <span class="timeout-field-desc">The timeout for this request</span>
+                      </div>
+                    </div>
+                </div>
               </div>
 
             </div>
@@ -839,66 +870,6 @@
             <div>
               <h1 class="view-title">Install Addon</h1>
               <p class="view-subtitle">Configure and install your personalized addon</p>
-            </div>
-          </div>
-
-          <!-- SECTION 1: TWO COLUMNS: CONNECTOR TIMEOUT + BACKUPS -->
-          <div class="install-two-cols-row">
-            <!-- Left Column: CONNECTOR TIMEOUT -->
-            <div class="install-section-group">
-              <div class="section-badge-header">CONNECTOR TIMEOUT</div>
-              <p class="section-desc-subtle">Sets how long each native provider can take before timing out.</p>
-
-              <div class="card card-timeout-box">
-                <div class="timeout-field-group">
-                  <label for="install-addon-timeout" class="timeout-field-label">Timeout (ms)</label>
-                  <div class="timeout-input-wrap">
-                    <input type="number" id="install-addon-timeout" class="form-input form-input-number" min="2000"
-                      max="15000" step="500" value="6000">
-                    <div class="custom-stepper-btns">
-                      <button type="button" class="stepper-btn" id="btn-timeout-up" aria-label="Increase timeout">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" />
-                        </svg>
-                      </button>
-                      <button type="button" class="stepper-btn" id="btn-timeout-down" aria-label="Decrease timeout">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M7.41,8.59L12,13.17L16.59,8.59L18,10L12,16L6,10L7.41,8.59Z" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  <span class="timeout-field-desc">The timeout for this request</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Right Column: BACKUPS -->
-            <div class="install-section-group">
-              <div class="section-badge-header">BACKUPS</div>
-              <p class="section-desc-subtle">Export your settings or restore from a backup file</p>
-
-              <div class="card card-backups-box">
-                <div class="backups-buttons-row">
-                  <button class="btn btn-secondary btn-pill-nav btn-backup" id="btn-export-backup" type="button"
-                    title="Download JSON file with current configuration">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                      <path
-                        d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M12,18L8,14H11V10H13V14H16L12,18M13,9V3.5L18.5,9H13Z" />
-                    </svg>
-                    <span>Export</span>
-                  </button>
-                  <button class="btn btn-secondary btn-pill-nav btn-backup" id="btn-import-backup" type="button"
-                    title="Select JSON file to restore configuration">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                      <path
-                        d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M12,10L16,14H13V18H11V14H8L12,10M13,9V3.5L18.5,9H13Z" />
-                    </svg>
-                    <span>Import</span>
-                  </button>
-                  <input type="file" id="file-import-backup" accept=".json,application/json" style="display: none;">
-                </div>
-              </div>
             </div>
           </div>
 
@@ -1117,6 +1088,34 @@
               </div>
             </div>
           </div>
+
+          <!-- SECTION 4: BACKUPS -->
+          <div class="install-section-group">
+            <div class="section-badge-header">BACKUPS</div>
+            <p class="section-desc-subtle">Export your settings or restore from a backup file</p>
+
+            <div class="card card-backups-box">
+              <div class="backups-buttons-row">
+                <button class="btn btn-secondary btn-pill-nav btn-backup" id="btn-export-backup" type="button"
+                  title="Download JSON file with current configuration">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                      d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M12,18L8,14H11V10H13V14H16L12,18M13,9V3.5L18.5,9H13Z" />
+                  </svg>
+                  <span>Export</span>
+                </button>
+                <button class="btn btn-secondary btn-pill-nav btn-backup" id="btn-import-backup" type="button"
+                  title="Select JSON file to restore configuration">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                      d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M12,10L16,14H13V18H11V14H8L12,10M13,9V3.5L18.5,9H13Z" />
+                  </svg>
+                  <span>Import</span>
+                </button>
+                <input type="file" id="file-import-backup" accept=".json,application/json" style="display: none;">
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Page 6: Debug -->
@@ -1177,8 +1176,16 @@
               <table class="dbg-prov-table">
                 <thead>
                   <tr>
-                    <th>Service</th><th>Status</th><th>Success</th><th>Avg time</th><th>Median</th>
-                    <th>Found / search</th><th>Ranked #1</th><th>In top</th><th>Sent / Play</th><th>Best score</th>
+                    <th>Service</th>
+                    <th title="Result of the latest search">Status</th>
+                    <th title="Searches that answered without an error">Success</th>
+                    <th title="Average time to answer">Avg time</th>
+                    <th title="Half of the searches were faster than this">Median</th>
+                    <th title="Average number of subtitles this service returns per search (before any filtering)">Avg. found</th>
+                    <th title="Requests where the best-ranked subtitle came from this service">Ranked #1</th>
+                    <th title="Requests where this service had at least one subtitle among the ranked ones">In ranking</th>
+                    <th title="Average number of this service&#39;s subtitles that end up in the list your player receives, per Play">Avg. in your list</th>
+                    <th title="Average score of this service&#39;s best subtitle (higher = closer match to your file)">Best score</th>
                   </tr>
                 </thead>
                 <tbody id="dbg-prov-body"><tr><td colspan="10" class="dbg-empty">Loading...</td></tr></tbody>
@@ -1186,8 +1193,10 @@
             </div>
             <p class="section-desc-subtle" style="margin-bottom:0">
               Measured over the latest requests that really asked the services (answers served from the cache are not counted).
-              <strong>Ranked #1</strong>: how often the service supplied the best-scored subtitle; <strong>In top</strong>: requests where it had a subtitle among the ranked ones;
-              <strong>Sent / Play</strong>: average number of its subtitles that reached the player; <strong>Best score</strong>: average score of its best subtitle.
+              The numbers with a decimal are <strong>averages</strong>. <strong>Avg. found</strong>: how many subtitles the service returns per search
+              (14.2 = about 14). <strong>Ranked #1</strong>: how often its subtitle is the best one. <strong>In ranking</strong>: requests where it had a
+              subtitle among the ranked ones. <strong>Avg. in your list</strong>: how many of its subtitles reach your player per Play (1.9 = about 2 of the
+              subtitles shown). <strong>Best score</strong>: average score of its best subtitle.
             </p>
           </div>
 
@@ -1239,7 +1248,7 @@
                 </button>
               </div>
             </div>
-            <pre id="dbg-log" class="dbg-log"></pre>
+            <div id="dbg-log" class="dbg-log" role="log" aria-live="off"></div>
           </div>
         </section>
 
