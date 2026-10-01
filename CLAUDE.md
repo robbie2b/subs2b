@@ -166,6 +166,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
 - „PGS” la prima subtitrare. Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.
   Direcție: linkuri care se termină în `.srt`, cu `application/x-subrip`.
+  Nou (2026-10-01, 1.4.8, telefon): Peacemaker S01E01 2160p HMAX WEB-DL CRU → prima subtitrare a addonului apare „PGS”,
+  următoarele 4 „SRT”. Toate 5 sunt linkuri `/sub/aligned/<token>.srt` (deci nu pista video și nu lipsa `.srt`).
+  Prima a fost pregătită din timp (servită în 0 ms, −5 s, 2 referințe). Răspunsul are `Content-Type: text/plain`.
+  De verificat ce face Stremio diferit cu prima (auto-selectată) și dacă `application/x-subrip` schimbă eticheta.
 - Mesaj custom la începutul filmului (oprit / tehnic / text propriu; `{\an8}` doar dacă nu există gol; de testat pe dispozitive).
 - Cache scurt (1–2 min) pentru răspunsuri goale sau incomplete, normal (30 min) pentru liste bune.
 - Feedback la alegerea manuală a altei subtitrări (pentru clasament).
