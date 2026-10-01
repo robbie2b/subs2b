@@ -137,7 +137,16 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   - Log `[SUBSYNC] reference candidates` (și motivele celor sărite) și `[SUBSYNC] timing` (subtitrare / referințe /
     calcul). Subtitrarea și referințele se descarcă în paralel. Firul de calcul pornește odată cu serverul.
 
+- Downton Abbey S03E02 pe 1.4.6 (REMUX FraMeSToR): subtitrarea SHORTBREHD n-a mai fost „confirmată” de propriul release;
+  n-a fitat referințele independente → înlocuită cu alternativa DKV (HMAX WEB-DL), mutată +1.5 s după referințele
+  SHORTBREHD pt-PT + Dansk (Blu-ray). Tot nesincronizat: nu există nicio subtitrare pentru REMUX/FraMeSToR, iar Blu-ray-urile
+  găsite au alt timing (RARBG chiar ~41 s). Primul răspuns a durat 12.8 s (calcul 11.3 s). Pe WEB-DL playWEB merge.
+  Utilizatorul: „avem ceva funcțional, revenim altădată”.
+
 ## De făcut (în ordinea discutată)
+- Subsync pe REMUX: încredere doar în referințe REMUX (sau ale grupului fișierului); altfel subtitrarea neschimbată.
+- Limită de timp pentru calculul suplimentar (verificarea pe bucăți + alternative) când prima verificare a durat mult.
+- Semn vizibil în Stremio când serverul trimite altă subtitrare decât cea aleasă („replaced by”), legat de mesajul custom.
 - Surse noi (mai târziu, la cererea utilizatorului): Titrari.ro și Subtitrari-noi.ro, de verificat întâi în browser.
   Addic7ed (Cloudflare, limită mică, scos deja înainte de 1.0.0) și YIFY (doar filme, multe clone) — nerecomandate.
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
