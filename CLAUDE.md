@@ -56,9 +56,13 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.4.5 (deploy 2026-10-01):** surse care refuză serverul ținute minte (`sourceHealth`), copii descărcabile preferate,
+  subtitrări neverificabile mai jos, referințe în Postgres, ediția filmului în Subsync, **Podnapisi** (serviciu nou,
+  fără cheie, pornit din Services; `src/providers/podnapisi.ts`, căutarea `search/old?sXML=1` din subliminal/Bazarr,
+  descărcare zip prin `/sub/proxy`). Netestat încă live: din cloud nu se poate ajunge la podnapisi.net.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2, v1.4.3 și v1.4.4 de pus de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.5 de pus de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
@@ -111,7 +115,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     (același grup + aceeași ediție), în alegerea referințelor și în cheia lor. Punctajul o folosea deja (+10 / −12 / −3).
 
 ## De făcut (în ordinea discutată)
-- Surse noi, în ordine: Podnapisi (referințe în multe limbi, fără limită zilnică), apoi Titrari.ro și Subtitrari-noi.ro.
+- Surse noi: Titrari.ro și Subtitrari-noi.ro (Podnapisi e făcut în 1.4.5).
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
 - „PGS” la prima subtitrare. Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.
   Direcție: linkuri care se termină în `.srt`, cu `application/x-subrip`.

@@ -12,14 +12,16 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
     'subsource': { enabled: false, apiKey: '' },
-    'regielive': { enabled: false, apiKey: '' }
+    'regielive': { enabled: false, apiKey: '' },
+    'podnapisi': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
     'subdl',
     'subsource',
-    'regielive'
+    'regielive',
+    'podnapisi'
   ],
   languages: ['pob', 'por', 'eng'],
   allowUnknownLanguages: false,
@@ -57,7 +59,7 @@ function upgradeLegacyName(name: string): string {
 const LEGACY_LOGO = '/assets/AIOsubs_logo_wordmark.png';
 
 /** Providers that work without a personal API key (a shared one is used) */
-const KEY_OPTIONAL_PROVIDERS = ['regielive'];
+const KEY_OPTIONAL_PROVIDERS = ['regielive', 'podnapisi'];
 
 /**
  * Decodes a configuration passed directly in the URL (base64 JSON). Kept for old install links;
@@ -181,7 +183,8 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
       'opensubtitles': { enabled: false, apiKey: '' },
       'subdl': { enabled: false, apiKey: '' },
       'subsource': { enabled: false, apiKey: '' },
-      'regielive': { enabled: false, apiKey: '' }
+      'regielive': { enabled: false, apiKey: '' },
+      'podnapisi': { enabled: false, apiKey: '' }
     },
     customAddons,
     providerPriority,

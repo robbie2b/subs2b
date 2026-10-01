@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { LRUCache } from 'lru-cache';
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
+import { titleInfoOf, TitleInfo, titleTokens, jaccard } from '../utils/titleInfo';
 
 /**
  * RegieLive (Romanian subtitles) through the same search API that Bazarr uses.
@@ -109,21 +109,6 @@ export function decodeTicket(data: string): DownloadTicket | null {
   }
 }
 
-function titleTokens(text: string): string[] {
-  return text
-    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ').split(' ')
-    .filter(t => t && !['the', 'a', 'an', 'of', 'and'].includes(t));
-}
-
-function jaccard(a: string[], b: string[]): number {
-  const sa = new Set(a);
-  const sb = new Set(b);
-  if (!sa.size || !sb.size) return 0;
-  let inter = 0;
-  sa.forEach(t => { if (sb.has(t)) inter++; });
-  return inter / (sa.size + sb.size - inter);
-}
 
 /**
  * Turns a search response into subtitle items.
@@ -174,12 +159,6 @@ export function parseRegieLiveResponse(
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
-interface TitleInfo {
-  name: string;
-  year: number | null;
-}
-
-const titleCache = new LRUCache<string, TitleInfo>({ max: 500, ttl: 24 * 60 * 60 * 1000 });
 const inFlight = new Map<string, Promise<RawSubtitleItem[]>>();
 
 export class RegieLiveProvider extends BaseSubtitleProvider {
@@ -282,26 +261,8 @@ export class RegieLiveProvider extends BaseSubtitleProvider {
     });
   }
 
-  private async titleInfo(query: SubtitleQuery, signal: AbortSignal): Promise<TitleInfo | null> {
-    const cacheKey = `${query.type}:${query.imdbId}`;
-    const cached = titleCache.get(cacheKey);
-    if (cached) return cached;
-    try {
-      const kind = query.type === 'movie' ? 'movie' : 'series';
-      const res = await axios.get<{ meta?: { name?: string; year?: string | number; releaseInfo?: string } }>(
-        `https://v3-cinemeta.strem.io/meta/${kind}/${query.imdbId}.json`,
-        { timeout: 5000, signal, headers: { 'User-Agent': USER_AGENT } }
-      );
-      const meta = res.data?.meta;
-      if (!meta?.name) return null;
-      const yearMatch = String(meta.year || meta.releaseInfo || '').match(/(19|20)\d{2}/);
-      const info: TitleInfo = { name: meta.name, year: yearMatch ? parseInt(yearMatch[0], 10) : null };
-      titleCache.set(cacheKey, info);
-      return info;
-    } catch (err) {
-      Logger.warn(`RegieLive: could not get the title of ${query.imdbId} from Cinemeta`, { reason: err instanceof Error ? err.message : String(err) });
-      return null;
-    }
+  private titleInfo(query: SubtitleQuery, signal: AbortSignal): Promise<TitleInfo | null> {
+    return titleInfoOf(query, signal, 'RegieLive');
   }
 }
 

@@ -1,5 +1,5 @@
 /** Native services (with their own integration in subs2b) versus Stremio addons imported by the user */
-export const BUILTIN_PROVIDER_IDS: readonly string[] = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
+export const BUILTIN_PROVIDER_IDS: readonly string[] = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'podnapisi'];
 
 export type ProviderKind = 'service' | 'addon';
 

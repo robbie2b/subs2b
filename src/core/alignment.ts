@@ -82,8 +82,16 @@ export interface TriggerVerdict {
 export function fromFileGroup(filename: string | undefined | null, release: string | undefined | null): boolean {
   if (!filename) return false;
   const video = parseRelease(filename);
-  const sub = parseRelease(release || '');
-  return Boolean(sub.group && video.group && sub.group === video.group) && cutOf(sub) === cutOf(video);
+  return variantsOf(release).some(v => {
+    const sub = parseRelease(v);
+    return Boolean(sub.group && video.group && sub.group === video.group) && cutOf(sub) === cutOf(video);
+  });
+}
+
+/** The releases a subtitle is made for: several are listed with ";" (Podnapisi, Subs.ro packs) */
+export function variantsOf(release: string | undefined | null): string[] {
+  const list = (release || '').split(';').map(v => v.trim()).filter(Boolean);
+  return list.length ? list : [''];
 }
 
 /**
@@ -166,10 +174,9 @@ export function pickReferenceCandidates(
   const seen = new Set<string>();
   for (const { item } of order) {
     const release = item.release || '';
-    const parsed = parseRelease(release);
-    if (!sameKind(parsed, video)) continue;
-    // another cut of the film has another timeline
-    if (cutOf(parsed) !== cutOf(video)) continue;
+    // of several listed releases, the one of the file's kind and cut counts
+    const parsed = variantsOf(release).map(v => parseRelease(v)).find(p => sameKind(p, video) && cutOf(p) === cutOf(video));
+    if (!parsed) continue;
     // a source refusing this server for now (a quota reached...) would only waste time
     if (!serverCanDownload(item)) continue;
     if (parsed.badQuality || looksForced(release) || looksMachineTranslated(release)) continue;
