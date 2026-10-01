@@ -56,8 +56,9 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2 și v1.4.3 de pus de pe calculatorul utilizatorului.
+  Tagurile v1.4.2, v1.4.3 și v1.4.4 de pus de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
