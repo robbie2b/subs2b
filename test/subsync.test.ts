@@ -17,7 +17,7 @@ import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregat
 import { createAlignedHandler, createFallbackHandler, clearAlignmentDecisions } from '../src/proxy/alignedProxy';
 import { deduplicateSubtitles } from '../src/utils/deduplicator';
 import { packReferences, unpackReferences } from '../src/storage/referenceStore';
-import { noteRefusal, clearSourceHealth } from '../src/utils/sourceHealth';
+import { noteRefusal, clearSourceHealth, isBlocked, restoreRefusals, attachRefusalStore } from '../src/utils/sourceHealth';
 import { decodeFallbackToken } from '../src/core/alignedToken';
 import { stopAlignWorker } from '../src/core/alignPool';
 import { decodeAlignedToken } from '../src/core/alignedToken';
@@ -550,6 +550,51 @@ async function main() {
     check('the subtitle only available from a refusing source goes last', inner[inner.length - 1] === 'https://blocked.example/b.srt', inner);
     providerItems.splice(0, providerItems.length, ...saved);
     clearSourceHealth();
+  }
+
+  {
+    // Downton Abbey S03E03: an exact hash match from OpenSubtitles direct, while its quota is reached
+    const OS_URL = '/proxy/download/os-rest/1541522?apiKey=k';
+    const PRO_URL = baseUrl + '/ro-hd?pro=1';
+    const SHORT = 'Downton.Abbey.S03E03.1080p.BluRay.x264-SHORTBREHD.mkv';
+    const saved = providerItems.splice(0, providerItems.length);
+    providerItems.push(
+      { id: 'os-hash', provider: 'opensubtitles', providerName: 'OS', url: OS_URL, lang: 'ron', release: 'downton.abbey.s03e03.720p.bluray.x264-shortbrehd', hashMatch: true },
+      { id: 'pro-copy', provider: 'community.opensubtitlesv3.pro', providerName: 'PRO', url: PRO_URL, lang: 'ron', release: 'downton.abbey.s03e03.720p.bluray.x264-shortbrehd' },
+      { id: 'os-dead', provider: 'opensubtitles', providerName: 'OS', url: '/proxy/download/os-rest/999?apiKey=k', lang: 'ron', release: 'Downton.Abbey.S03E03.1080p.BluRay.x264-SHORTBREHD.Retail', hashMatch: true }
+    );
+    const q3 = parseSubtitleQuery('series', 'tt1606375:3:3', { filename: SHORT });
+
+    // quota not known (just after a restart): the hash match keeps first place but carries its copy as a backup
+    clearSourceHealth();
+    globalSubtitleCache.clear?.();
+    const before = await getAggregatedSubtitles(q3, stored, baseUrl, uuid);
+    const first = before.subtitles[0];
+    const fb = first.url.includes('/sub/fallback/') ? decodeFallbackToken(first.url.split('/sub/fallback/')[1].replace('.srt', '')) : null;
+    check('a hash match carries its copies as backups (served through the fallback link)', Boolean(fb && fb.u === baseUrl + OS_URL && fb.b.includes(PRO_URL)), before.subtitles.map(x => x.url.slice(0, 80)));
+
+    // quota known: the working copy takes the place of the hash match (still a hash match), the one with no copy goes last
+    noteRefusal('api.opensubtitles.com', 406, 'quota');
+    noteRefusal('dl.opensubtitles.org', 403, 'blocked');
+    noteRefusal('subs5.strem.io', 469, 'too many');
+    globalSubtitleCache.clear?.();
+    const after = await getAggregatedSubtitles({ ...q3 }, { ...stored, subsync: false }, baseUrl, uuid);
+    const urls = after.subtitles.map(x => x.url);
+    const firstAfter = urls[0].includes('/sub/fallback/') ? decodeFallbackToken(urls[0].split('/sub/fallback/')[1].replace('.srt', ''))!.u : urls[0];
+    check('quota reached: the copy that works is served first', firstAfter === PRO_URL, urls.map(u => u.slice(0, 80)));
+    check('a subtitle nobody can download goes last, even with Subsync off', urls[urls.length - 1] === baseUrl + '/proxy/download/os-rest/999?apiKey=k', urls.map(u => u.slice(0, 80)));
+
+    // remembered across a restart through the store
+    const savedBlocks: string[] = [];
+    attachRefusalStore({ save: (src) => { savedBlocks.push(src); } });
+    noteRefusal('example.host', 469, 'x');
+    attachRefusalStore(null);
+    clearSourceHealth();
+    restoreRefusals([{ source: 'api.opensubtitles.com', until: Date.now() + 60000, reason: 'quota' }, { source: 'old.host', until: Date.now() - 1, reason: 'old' }]);
+    check('refusals are saved to the store and read back at start (expired ones ignored)', savedBlocks.includes('example.host') && isBlocked('api.opensubtitles.com') && !isBlocked('old.host'));
+    clearSourceHealth();
+    providerItems.splice(0, providerItems.length, ...saved);
+    globalSubtitleCache.clear?.();
   }
 
   {

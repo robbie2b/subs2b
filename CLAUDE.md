@@ -143,6 +143,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   găsite au alt timing (RARBG chiar ~41 s). Primul răspuns a durat 12.8 s (calcul 11.3 s). Pe WEB-DL playWEB merge.
   Utilizatorul: „avem ceva funcțional, revenim altădată”.
 
+- **Eroare Downton Abbey S03E03 (SHORTBREHD BluRay) pe 1.4.6:** primul loc era OpenSubtitles direct cu HASH MATCH, dar
+  limita era terminată; deploy-ul șterge memoria surselor blocate (doar RAM) și hash match-urile nu primeau rezerve →
+  playerul a primit eroare. Reparat pe ramură (pentru 1.4.7): `source_blocks` în Postgres (`storage/sourceBlockStore.ts`,
+  citit la pornire), `copiesOf` dă rezerve și hash match-urilor (copia care merge îi ia locul, rămâne hash match),
+  o subtitrare cu link prin server la o sursă blocată, fără copie, coboară ultima mereu (și cu Subsync oprit).
+
 ## De făcut (în ordinea discutată)
 - Subsync pe REMUX: încredere doar în referințe REMUX (sau ale grupului fișierului); altfel subtitrarea neschimbată.
 - Limită de timp pentru calculul suplimentar (verificarea pe bucăți + alternative) când prima verificare a durat mult.

@@ -4,6 +4,7 @@ import { APP_NAME, APP_VERSION } from './config/version';
 import { Logger } from './utils/logger';
 import { configStorage } from './storage/configStore';
 import { warmUpAlignWorker } from './core/alignPool';
+import { startSourceBlockStore } from './storage/sourceBlockStore';
 
 async function bootstrap(): Promise<void> {
   try {
@@ -11,6 +12,9 @@ async function bootstrap(): Promise<void> {
   } catch (err) {
     Logger.error('Storage initialization warning:', err);
   }
+
+  // the sources refusing this server are remembered across restarts (before the first request is answered)
+  await startSourceBlockStore();
 
   const app = createServer();
 

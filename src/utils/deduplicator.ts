@@ -89,6 +89,19 @@ export function deduplicateSubtitles(
 }
 
 /**
+ * The copies of one subtitle among other items (same language and hearing-impaired status, a very similar release
+ * name, another link), in order: download backups for an item that deduplication leaves alone (an exact hash match).
+ */
+export function copiesOf(item: RawSubtitleItem, others: RawSubtitleItem[], similarityThreshold = 0.85): RawSubtitleItem[] {
+  if (!item.release) return [];
+  const tokens = tokenize(item.release);
+  if (tokens.size === 0) return [];
+  return others.filter(o => o !== item && o.url && o.url !== item.url && o.lang === item.lang &&
+    Boolean(o.hearingImpaired) === Boolean(item.hearingImpaired) && o.release &&
+    similarity(tokens, tokenize(o.release)) >= similarityThreshold);
+}
+
+/**
  * Sorts subtitles by provider priority defined by the user
  */
 export function prioritizeSubtitles(

@@ -2,9 +2,22 @@ import { Logger } from './logger';
 
 /**
  * Which download sources refuse this server for now (a daily quota reached, a rate limit, a block), so they are
- * not tried again and again until they recover. Kept in memory: after a restart a source is tried once and, if it
- * still refuses, remembered again.
+ * not tried again and again until they recover. Kept in memory and, when a store is attached (the database), saved
+ * there too, so a restart or a deploy does not forget them (forgetting an OpenSubtitles quota put a subtitle nobody
+ * could download in first place).
  */
+
+/** Where the refusals are kept beyond this process (attached at start; none in tests) */
+export interface RefusalStore {
+  save(source: string, until: number, reason: string): void;
+}
+let store: RefusalStore | null = null;
+export function attachRefusalStore(s: RefusalStore | null): void { store = s; }
+
+/** Refusals read back at start (only the ones still running) */
+export function restoreRefusals(list: Array<{ source: string; until: number; reason: string }>): void {
+  for (const r of list) if (r.until > Date.now()) blocks.set(r.source, { until: r.until, reason: r.reason });
+}
 
 interface Block { until: number; reason: string }
 
@@ -39,6 +52,7 @@ export function noteRefusal(source: string, status: number | undefined, reason: 
   if (!known || known.until < Date.now()) {
     Logger.warn(`[SOURCES] ${source} refuses this server until ${new Date(until).toISOString()} (${reason})`);
   }
+  store?.save(source, until, reason);
   return true;
 }
 
