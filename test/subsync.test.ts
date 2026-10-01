@@ -11,7 +11,8 @@ process.env.SUBSYNC_MAX_WAIT_MS = '4000';
 import axios from 'axios';
 import { parseCues } from '../src/utils/timeline';
 import { shiftSubtitle } from '../src/utils/subtitleFormat';
-import { needsReference, fromFileGroup, referenceKey, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree } from '../src/core/alignment';
+import { needsReference, fromFileGroup, referenceKey, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree, alignAgainst } from '../src/core/alignment';
+import { rankSubtitles } from '../src/utils/scorer';
 import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
 import { createAlignedHandler, createFallbackHandler, clearAlignmentDecisions } from '../src/proxy/alignedProxy';
 import { deduplicateSubtitles } from '../src/utils/deduplicator';
@@ -214,6 +215,49 @@ async function main() {
       (out[0].backups || []).map(x => x.url).join(',') === 'https://b/1,https://c/1', out[0].backups);
     check('a subtitle without duplicates has no backups', !out[1].backups);
     check('the input items are not changed', !a.backups);
+  }
+
+  console.log('Release names in brackets (Subs.ro)');
+  {
+    const PLAYWEB = 'Downton Abbey S03E01 1080p DSNP WEB-DL AAC2 0 H 264-playWEB.mkv';
+    const subsro = 'Downton Abbey - S3E1 Episode One.ro [Downton.Abbey.S03.1080p.DSNP.WEB-DL.AAC2.0.H.264-playWEB]';
+    check('the release in brackets is the file\'s group: trusted, served directly', fromFileGroup(PLAYWEB, subsro));
+    const ranked = rankSubtitles([
+      item('Downton.Abbey.S03E01.Episode.1.1080p.SKST.WEB-DL.AAC2.0.x264-VELUN.ro-RO'),
+      item(subsro),
+      item('Downton Abbey - S3E2 Episode Two.ro [Downton.Abbey.S03.1080p.DSNP.WEB-DL.AAC2.0.H.264-playWEB]')
+    ], { filename: PLAYWEB, season: 3, episode: 1 });
+    const top = ranked.details[0];
+    check('the score counts the group in brackets', top.release === subsro && top.reasons.some(r => /group/.test(r)), top);
+    check('a release in brackets never lets another episode through', ranked.details.find(d => /S3E2/.test(d.release))?.rejected === true, ranked.details.map(d => [d.release.slice(0, 30), d.rejected]));
+  }
+
+  console.log('Independent references (Downton Abbey)');
+  {
+    const REMUX = 'Downton.Abbey.S03E01.1080p.BluRay.REMUX.AVC.FLAC.2.0-FraMeSToR.mkv';
+    const found = [
+      item('Downton.Abbey.Season3.1080p.BluRay.x264-SHORTBREHD', 'subdl', 'per'),
+      item('Downton.Abbey.S03.1080p.BluRay.x264-SHORTBREHD', 'subdl', 'ara'),
+      item('Downton.Abbey.S03.1080p.BluRay.HEVC.x265.10bit.AAC.2.0-Joy', 'subsource', 'per')
+    ];
+    const picked = pickReferenceCandidates(found, REMUX, 3, 1).map(i => i.release);
+    check('different releases first: SHORTBREHD, Joy, then the second SHORTBREHD', picked[1]?.includes('Joy') && picked.length === 3, picked);
+
+    // the file's timeline is TRUTH; SHORTBREHD (the subtitle and two references) is 2.2 s early on it
+    const ref = (cues: Array<{ start: number; end: number }>, label: string) => ({ label, lang: 'x', provider: 'x', cues: cues.map(c => ({ ...c, speech: true })) });
+    const early = BASE.map(c => ({ start: c.start - 2.2, end: c.end - 2.2 }));
+    const refs = [
+      ref(early, '[per] Downton.Abbey.Season3.1080p.BluRay.x264-SHORTBREHD'),
+      ref(early.filter((_, i) => i % 5 !== 1), '[ara] Downton.Abbey.S03.1080p.BluRay.x264-SHORTBREHD'),
+      ref(BASE.filter((_, i) => i % 12 !== 2), '[per] Downton.Abbey.S03.1080p.BluRay.HEVC.x265.10bit.AAC.2.0-Joy')
+    ];
+    const candidate = toSrt(early, 0, 'romana');
+    const before = alignAgainst(candidate, refs);
+    check('BEFORE: without knowing the subtitle\'s release, its own references "confirm" it', before.decision.reason === 'already aligned', before.decision);
+    const after = alignAgainst(candidate, refs, 'Downton.Abbey.S03E01.1080p.BluRay.x264-SHORTBREHD');
+    check('AFTER: its own release is left out, the independent reference moves it +2.2 s', after.decision.apply && Math.abs(after.decision.offset - 2.2) < 0.15 && /left out/.test(after.note || ''), { d: after.decision, note: after.note });
+    const none = alignAgainst(candidate, refs.slice(0, 2), 'Downton.Abbey.S03E01.1080p.BluRay.x264-SHORTBREHD');
+    check('only references of its own release: "no independent reference", nothing changed', !none.decision.apply && none.decision.reason === 'no independent reference', none.decision);
   }
 
   console.log('References agree');

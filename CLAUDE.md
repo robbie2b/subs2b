@@ -120,6 +120,19 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   - Ediția filmului (cut: extended, unrated, directors, uncut, finalcut, special; theatrical = normal) intră în încredere
     (același grup + aceeași ediție), în alegerea referințelor și în cheia lor. Punctajul o folosea deja (+10 / −12 / −3).
 
+- Downton Abbey S03E01 (2026-10-01): pe REMUX FraMeSToR, subtitrarea SHORTBREHD a fost „already aligned” (94%) fiindcă
+  2 din 3 referințe erau tot SHORTBREHD (s-au confirmat singure); utilizatorul a avut nevoie de +2.2 s, iar spre final
+  nici asta nu mai mergea (versiuni ușor diferite, 1h06). Pe WEB-DL playWEB a mers: subtitrarea Subs.ro era chiar pentru
+  playWEB (scris în paranteze drepte), dar n-a fost recunoscută ca același grup; prima cerere a durat 10.7 s (calcul ~8 s).
+- Pe ramură (nedeployat, pentru 1.4.6):
+  - `variantsOf`/`bracketedReleases` (scorer.ts): release-urile din paranteze drepte contează la punctaj (doar adaugă, nu
+    pot salva alt episod) și la „același grup”.
+  - Referințe independente: în `alignAgainst` se scot referințele de la release-ul subtitrării verificate (nota apare în
+    Debug); „no independent reference” dacă nu rămâne niciuna. Oprirea după 2 referințe de acord doar dacă vin de la
+    release-uri diferite. Alegerea referințelor: întâi câte una pe grup. Cheia referințelor: `v2|...`.
+  - Log `[SUBSYNC] reference candidates` (și motivele celor sărite) și `[SUBSYNC] timing` (subtitrare / referințe /
+    calcul). Subtitrarea și referințele se descarcă în paralel. Firul de calcul pornește odată cu serverul.
+
 ## De făcut (în ordinea discutată)
 - Surse noi: Titrari.ro și Subtitrari-noi.ro (Podnapisi e făcut în 1.4.5).
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.

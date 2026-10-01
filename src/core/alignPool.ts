@@ -78,12 +78,17 @@ function run<T>(job: Omit<AlignJob, 'id'>, inline: () => T): Promise<T> {
     .finally(() => { if (pending.size === 0) worker?.unref(); });
 }
 
-export function alignInWorker(text: string, references: Reference[]): Promise<AlignmentResult> {
-  return run({ op: 'align', text, references } as Omit<AlignJob, 'id'>, () => alignAgainst(text, references));
+export function alignInWorker(text: string, references: Reference[], release?: string): Promise<AlignmentResult> {
+  return run({ op: 'align', text, references, release } as Omit<AlignJob, 'id'>, () => alignAgainst(text, references, release));
 }
 
 export function referencesAgreeInWorker(references: Reference[]): Promise<boolean> {
   return run({ op: 'agree', references } as Omit<AlignJob, 'id'>, () => referencesAgree(references));
+}
+
+/** Starts the worker ahead of time (at server start), so the first alignment does not wait for it to load */
+export function warmUpAlignWorker(): void {
+  getWorker();
 }
 
 /** Stops the worker (tests) */

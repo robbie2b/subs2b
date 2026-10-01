@@ -170,6 +170,40 @@ function detectGroup(raw: string): string | null {
   return g;
 }
 
+/**
+ * Release names written in brackets after a title (Subs.ro: "Title - S3E1.ro [Show.S03.1080p.WEB-DL-GRP]"),
+ * nested brackets included. Short labels ("[Lektor PL]") are left out.
+ */
+export function bracketedReleases(text: string): string[] {
+  const out: string[] = [];
+  const walk = (t: string) => {
+    let depth = 0, start = -1;
+    for (let i = 0; i < t.length; i++) {
+      if (t[i] === '[') { if (depth === 0) start = i + 1; depth++; }
+      else if (t[i] === ']' && depth > 0) {
+        depth--;
+        if (depth === 0) {
+          const inner = t.slice(start, i);
+          const flat = inner.replace(/\[[^\]]*\]/g, ' ').trim();
+          if (/[.\- ]/.test(flat) && /[a-z]{2}/i.test(flat) && flat.length >= 8) out.push(flat);
+          if (inner.includes('[')) walk(inner);
+        }
+      }
+    }
+  };
+  walk(text);
+  return out.filter((v, i) => out.indexOf(v) === i && v !== text);
+}
+
+/** Every release a subtitle name stands for: the parts separated by ";" and the release names in brackets */
+export function variantsOf(release: string | undefined | null): string[] {
+  const list: string[] = [];
+  for (const part of (release || '').split(';').map(v => v.trim()).filter(Boolean)) {
+    list.push(part, ...bracketedReleases(part));
+  }
+  return list.length ? list : [''];
+}
+
 export function parseRelease(raw: string): ParsedRelease {
   const norm = normalize(raw || '');
 
@@ -538,15 +572,26 @@ export function rankSubtitles(items: RawSubtitleItem[], ctx: ScoringContext): Ra
   const reference: Reference = { titleTokens: refTokens, year: refYear };
 
   const details = items.map((item, idx) => {
-    const variants = ruleOn(ctx, 'multiVariant') ? (item.release || '').split(';').map(v => v.trim()).filter(Boolean) : [];
-    if (variants.length < 2) return scoreOne(item, parsedItems[idx], video, reference, ctx);
-    // several releases listed in one name: the subtitle fits all of them, so the best variant counts
-    let best: ScoreDetail | null = null;
-    for (const variant of variants) {
-      const d = scoreOne({ ...item, release: variant }, parseRelease(variant), video, reference, ctx);
-      if (!best || d.score > best.score) best = d;
+    if (!ruleOn(ctx, 'multiVariant')) return scoreOne(item, parsedItems[idx], video, reference, ctx);
+    // several releases listed in one name ("A; B", or "Title.ro [Release-GRP]"): the subtitle fits all of them, so
+    // the best variant counts. A release in brackets only adds to a name that is not rejected itself (it often has
+    // no episode, so it must never let another episode through).
+    const parts = (item.release || '').split(';').map(v => v.trim()).filter(Boolean);
+    const scored: ScoreDetail[] = [];
+    const consider = (d: ScoreDetail) => { scored.push(d); };
+    for (const part of parts.length > 1 ? parts : [item.release || '']) {
+      const whole = parts.length > 1 ? scoreOne({ ...item, release: part }, parseRelease(part), video, reference, ctx)
+        : scoreOne(item, parsedItems[idx], video, reference, ctx);
+      consider(whole);
+      if (whole.rejected) continue;
+      for (const inner of bracketedReleases(part)) {
+        const d = scoreOne({ ...item, release: inner }, parseRelease(inner), video, reference, ctx);
+        if (!d.rejected) consider(d);
+      }
     }
-    return { ...best!, release: item.release || '', reasons: ['best of ' + variants.length + ' variants', ...best!.reasons] };
+    const b = scored.reduce((x, y) => (y.score > x.score ? y : x));
+    if (scored.length < 2) return b;
+    return { ...b, release: item.release || '', reasons: ['best of ' + scored.length + ' variants', ...b.reasons] };
   });
 
   const order = items.map((_, idx) => idx);

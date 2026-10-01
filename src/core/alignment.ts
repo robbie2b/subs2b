@@ -2,7 +2,7 @@ import axios from 'axios';
 import { LRUCache } from 'lru-cache';
 import { RawSubtitleItem, SubtitleQuery } from '../types/provider';
 import { UserConfig } from '../types/config';
-import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated, ParsedRelease, Source } from '../utils/scorer';
+import { parseRelease, variantsOf, rankSubtitles, looksForced, looksMachineTranslated, ParsedRelease, Source } from '../utils/scorer';
 import { readCues } from '../utils/subtitleCues';
 import { speechFlags, TimedCue } from '../utils/subsync';
 import { MIN_REFERENCE_CUES, Reference } from './alignDecision';
@@ -88,11 +88,6 @@ export function fromFileGroup(filename: string | undefined | null, release: stri
   });
 }
 
-/** The releases a subtitle is made for: several are listed with ";" (Podnapisi, Subs.ro packs) */
-export function variantsOf(release: string | undefined | null): string[] {
-  const list = (release || '').split(';').map(v => v.trim()).filter(Boolean);
-  return list.length ? list : [''];
-}
 
 /**
  * Is a timing reference needed? Whenever a subtitle in the list is not from the file's own release group.
@@ -156,7 +151,8 @@ export function pickReferenceCandidates(
   filename: string,
   season: number | null,
   episode: number | null,
-  limit = MAX_REFERENCES + 2
+  limit = MAX_REFERENCES + 2,
+  stats: { skipped: { kind: number; blocked: number; quality: number } } = { skipped: { kind: 0, blocked: 0, quality: 0 } }
 ): RawSubtitleItem[] {
   const video = parseRelease(filename);
   const videoClass = resolutionClass(video.resolution);
@@ -170,22 +166,36 @@ export function pickReferenceCandidates(
     .map((item, i) => ({ item, i, score: ranked.details[i]?.score ?? 0 }))
     .sort((a, b) => b.score - a.score || quota(a.item) - quota(b.item) || a.i - b.i);
 
-  const chosen: RawSubtitleItem[] = [];
+  // usable candidates, closest to the file first (the score knows the group, REMUX vs BluRay, the service...)
+  const usable: Array<{ item: RawSubtitleItem; group: string }> = [];
   const seen = new Set<string>();
   for (const { item } of order) {
     const release = item.release || '';
     // of several listed releases, the one of the file's kind and cut counts
     const parsed = variantsOf(release).map(v => parseRelease(v)).find(p => sameKind(p, video) && cutOf(p) === cutOf(video));
-    if (!parsed) continue;
+    if (!parsed) { stats.skipped.kind++; continue; }
     // a source refusing this server for now (a quota reached...) would only waste time
-    if (!serverCanDownload(item)) continue;
-    if (parsed.badQuality || looksForced(release) || looksMachineTranslated(release)) continue;
-    if (item.forced || item.aiTranslated) continue;
+    if (!serverCanDownload(item)) { stats.skipped.blocked++; continue; }
+    if (parsed.badQuality || looksForced(release) || looksMachineTranslated(release) || item.forced || item.aiTranslated) { stats.skipped.quality++; continue; }
     const key = `${item.provider}|${item.lang}|${release.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    chosen.push(item);
+    usable.push({ item, group: (parsed.group || '').toLowerCase() });
+  }
+
+  // Different releases first: references of one release confirm each other whatever the file is (one per group,
+  // then the rest in order)
+  const chosen: RawSubtitleItem[] = [];
+  const groups = new Set<string>();
+  for (const u of usable) {
     if (chosen.length >= limit) break;
+    if (u.group && groups.has(u.group)) continue;
+    if (u.group) groups.add(u.group);
+    chosen.push(u.item);
+  }
+  for (const u of usable) {
+    if (chosen.length >= limit) break;
+    if (!chosen.includes(u.item)) chosen.push(u.item);
   }
   return chosen;
 }
@@ -217,11 +227,16 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
     providers: { ...ctx.config.providers, regielive: { enabled: false, apiKey: '' } }
   };
   const raw = await executeParallelSearch({ ...ctx.query, allLanguages: true }, referenceConfig);
-  const candidates = pickReferenceCandidates(raw, ctx.filename, ctx.query.season, ctx.query.episode);
+  const stats = { skipped: { kind: 0, blocked: 0, quality: 0 } };
+  const candidates = pickReferenceCandidates(raw, ctx.filename, ctx.query.season, ctx.query.episode, undefined, stats);
+  const skipped = `skipped: ${stats.skipped.kind} of another kind or cut, ${stats.skipped.blocked} from a source refusing this server, ${stats.skipped.quality} forced/machine/low quality`;
   if (candidates.length === 0) {
-    Logger.info(`[SUBSYNC] no reference candidates for ${ctx.query.id} (${raw.length} subtitles searched)`);
+    Logger.info(`[SUBSYNC] no reference candidates for ${ctx.query.id} (${raw.length} subtitles searched; ${skipped})`);
     return [];
   }
+  Logger.info(`[SUBSYNC] reference candidates for ${ctx.query.id} (${skipped})`, {
+    candidates: candidates.map(c => `[${c.provider}] [${c.lang}] ${c.release || c.id}`)
+  });
 
   const load = async (item: RawSubtitleItem): Promise<Reference> => {
     const text = await fetchText(absoluteUrl(item, ctx), REFERENCE_DOWNLOAD_TIMEOUT_MS);
@@ -256,7 +271,7 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
 /** What the references depend on: the content and the kind of file (class, source, service, group, cut) */
 export function referenceKey(id: string, filename: string): string {
   const video = parseRelease(filename);
-  return `${id}|${resolutionClass(video.resolution)}|${sourceFamily(video.source) || ''}|${video.service || ''}|${video.group || ''}|${cutOf(video)}`;
+  return `v2|${id}|${resolutionClass(video.resolution)}|${sourceFamily(video.source) || ''}|${video.service || ''}|${video.group || ''}|${cutOf(video)}`;
 }
 
 /**

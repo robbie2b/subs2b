@@ -23,6 +23,8 @@ export interface Served {
   result: AlignmentResult;
   text?: string;
   replacedBy?: string;
+  /** where the time went (ms): downloading the subtitle, finding the references, computing */
+  timing?: { original: number; references: number; compute: number };
 }
 
 export interface Prepared {
@@ -99,12 +101,13 @@ export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl:
  */
 async function alignOrReplace(
   text: string,
+  release: string | undefined,
   refs: Reference[],
   alternatives: Array<{ u: string; r?: string; b?: string[] }>,
   hosts: string[],
   baseUrl: string
 ): Promise<Served> {
-  const result = await alignInWorker(text, refs);
+  const result = await alignInWorker(text, refs, release);
   if (fitsReferences(result) || result.references.length === 0 || alternatives.length === 0 || !(await referencesAgreeInWorker(refs))) {
     return { result };
   }
@@ -112,7 +115,7 @@ async function alignOrReplace(
     if (!alt.u.startsWith(baseUrl + '/') && !isAllowedDownloadUrl(alt.u, hosts)) continue;
     try {
       const altText = (await loadFirst(linksOf(alt), hosts, baseUrl)).text;
-      const altResult = await alignInWorker(altText, refs);
+      const altResult = await alignInWorker(altText, refs, alt.r);
       if (fitsReferences(altResult)) {
         return { result: altResult, text: altText, replacedBy: alt.r || alt.u };
       }
@@ -133,10 +136,18 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
   if (existing) return existing;
 
   const hosts = addonHostsOf(config);
-  const original = loadFirst(linksOf(token), hosts, baseUrl).then(r => r.text);
-  const served = original.then(text =>
-    getReferences({ query, config, baseUrl, filename: token.f })
-      .then(refs => alignOrReplace(text, refs, token.a || [], hosts, baseUrl)));
+  const started = Date.now();
+  const timing = { original: 0, references: 0, compute: 0 };
+  // the subtitle and the references are fetched at the same time
+  const original = loadFirst(linksOf(token), hosts, baseUrl).then(r => { timing.original = Date.now() - started; return r.text; });
+  const references = getReferences({ query, config, baseUrl, filename: token.f })
+    .then(refs => { timing.references = Date.now() - started; return refs; });
+  const served = Promise.all([original, references]).then(async ([text, refs]) => {
+    const computeStart = Date.now();
+    const s = await alignOrReplace(text, token.r, refs, token.a || [], hosts, baseUrl);
+    timing.compute = Date.now() - computeStart;
+    return { ...s, timing };
+  });
   const entry: Prepared = { original, served, startedAt: Date.now() };
   prepared.set(key, entry);
   // a failure is not kept: the next request tries again (and a preparation nobody waits for never throws)

@@ -81,7 +81,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
         ratio: result?.decision.apply ? result.decision.ratio : 1,
         segments: result?.decision.apply ? result.decision.segments : 0,
         confidence: result?.decision.confidence ?? 0,
-        reason: reason || result?.decision.reason || '',
+        reason: reason || (result ? result.decision.reason + (result.note ? ` (${result.note})` : '') : ''),
         references: result?.references || [],
         ...(replacedBy ? { replacedBy } : {}),
         ms: Date.now() - started
@@ -99,6 +99,10 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       }
       const served: Served = raced;
       const { result, replacedBy } = served;
+      if (served.timing) {
+        const t = served.timing;
+        Logger.info(`[SUBSYNC] timing for ${token.id}: subtitle ${t.original} ms, references ${t.references} ms (both from the start, in parallel), computation ${t.compute} ms; the player waited ${Date.now() - started} ms`);
+      }
       const body = served.text ?? text;
       if (replacedBy) Logger.info(`[SUBSYNC] the subtitle does not fit the references, serving an alternative instead`, { id: token.id, subtitle: token.r, replacedBy });
       if (result.decision.apply) {

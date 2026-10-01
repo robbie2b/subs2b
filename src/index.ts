@@ -3,6 +3,7 @@ import { ENV } from './config/env';
 import { APP_NAME, APP_VERSION } from './config/version';
 import { Logger } from './utils/logger';
 import { configStorage } from './storage/configStore';
+import { warmUpAlignWorker } from './core/alignPool';
 
 async function bootstrap(): Promise<void> {
   try {
@@ -17,6 +18,7 @@ async function bootstrap(): Promise<void> {
     Logger.info(`🚀 ${APP_NAME} v${APP_VERSION} listening on http://${ENV.HOST}:${ENV.PORT}`);
     Logger.info(`👉 Configure UI: http://localhost:${ENV.PORT}/configure`);
     Logger.info(`👉 Manifest: http://localhost:${ENV.PORT}/manifest.json`);
+    warmUpAlignWorker();
   });
 }
 

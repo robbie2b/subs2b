@@ -1,5 +1,6 @@
 import { readCues } from '../utils/subtitleCues';
 import { alignToReference, decide, AlignCache, Decision, RefAlignment, TimedCue } from '../utils/subsync';
+import { parseRelease, variantsOf } from '../utils/scorer';
 
 /**
  * Deciding how to re-time one subtitle against the references. Pure computation (no network, no storage), so it can
@@ -23,6 +24,32 @@ export interface Reference {
 export interface AlignmentResult {
   decision: Decision;
   references: Array<{ label: string; offset: number; score: number; ratio: number; segments: number }>;
+  /** what else the Debug page should know (references left out...) */
+  note?: string;
+}
+
+/** Release groups a name stands for (several when it lists several releases); a reference label is "[lang] name" */
+export function groupsOf(name: string | undefined | null): Set<string> {
+  const groups = new Set<string>();
+  for (const v of variantsOf((name || '').replace(/^\[[^\]]*\]\s*/, ''))) {
+    const g = parseRelease(v).group;
+    if (g) groups.add(g.toLowerCase());
+  }
+  return groups;
+}
+
+const shareGroup = (a: Set<string>, b: Set<string>): boolean => [...a].some(g => b.has(g));
+
+/** How many different releases the references of a list come from (a reference without a known group counts alone) */
+function distinctReleases(list: RefAlignment[]): number {
+  const seen = new Set<string>();
+  let unknown = 0;
+  for (const a of list) {
+    const g = groupsOf(a.label);
+    if (g.size === 0) unknown++;
+    else seen.add([...g].sort().join('+'));
+  }
+  return seen.size + unknown;
 }
 
 const alignOne = (cues: TimedCue[], r: Reference, split: boolean, topRatios: number, cache: AlignCache): RefAlignment | null => {
@@ -39,12 +66,26 @@ const medianOf = (a: number[]): number => {
  * Aligns a subtitle against the references. First with one single shift per reference (fast); only when that is not
  * convincing, with shifts that may change along the subtitle (and the frame-rate ratio).
  */
-export function alignAgainst(candidateText: string, references: Reference[]): AlignmentResult {
+export function alignAgainst(candidateText: string, allReferences: Reference[], candidateRelease?: string): AlignmentResult {
+  // A reference made for the subtitle's own release only repeats the subtitle's timing: it says nothing about the
+  // playing file (Downton Abbey: a SHORTBREHD subtitle "confirmed" by SHORTBREHD references on a FraMeSToR REMUX)
+  const own = groupsOf(candidateRelease);
+  const references = own.size ? allReferences.filter(r => !shareGroup(groupsOf(r.label), own)) : allReferences;
+  const leftOut = allReferences.length - references.length;
+  const note = leftOut ? `${leftOut} reference(s) of the subtitle's own release (${[...own].join(', ')}) left out` : undefined;
+  if (allReferences.length > 0 && references.length === 0) {
+    return {
+      decision: { apply: false, offset: 0, ratio: 1, segments: 0, confidence: 0, agreeing: 0, reason: 'no independent reference' },
+      references: [],
+      note
+    };
+  }
   const cues = readCues(candidateText);
   if (cues.length < MIN_REFERENCE_CUES || references.length === 0) {
     return {
       decision: { apply: false, offset: 0, ratio: 1, segments: 0, confidence: 0, agreeing: 0, reason: references.length === 0 ? 'no reference found' : 'the subtitle has too few cues' },
-      references: []
+      references: [],
+      ...(note ? { note } : {})
     };
   }
 
@@ -58,7 +99,8 @@ export function alignAgainst(candidateText: string, references: Reference[]): Al
       const a = alignOne(cues, r, split, topRatios, cache);
       if (a) list.push(a);
       d = decide(cues, list);
-      if (list.length >= 2 && d.agreeing >= 2 && d.confidence >= 0.9) break;
+      // (two references of one release agreeing prove less: then the next one is looked at too)
+      if (list.length >= 2 && d.agreeing >= 2 && d.confidence >= 0.9 && distinctReleases(list) >= 2) break;
     }
     return { list, decision: d };
   };
@@ -78,6 +120,7 @@ export function alignAgainst(candidateText: string, references: Reference[]): Al
 
   return {
     decision,
+    ...(note ? { note } : {}),
     references: used.map(a => ({
       label: a.label,
       offset: Math.round(medianOf(a.result.offsets) * 10) / 10,
