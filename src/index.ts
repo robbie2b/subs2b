@@ -13,9 +13,6 @@ async function bootstrap(): Promise<void> {
     Logger.error('Storage initialization warning:', err);
   }
 
-  // the sources refusing this server are remembered across restarts (before the first request is answered)
-  await startSourceBlockStore();
-
   const app = createServer();
 
   app.listen(ENV.PORT, ENV.HOST, () => {
@@ -23,6 +20,12 @@ async function bootstrap(): Promise<void> {
     Logger.info(`👉 Configure UI: http://localhost:${ENV.PORT}/configure`);
     Logger.info(`👉 Manifest: http://localhost:${ENV.PORT}/manifest.json`);
     warmUpAlignWorker();
+    // the sources refusing this server are remembered across restarts; read in the background, so the database can
+    // never keep the server from starting (Render only switches to a new version once it answers)
+    void Promise.race([
+      startSourceBlockStore(),
+      new Promise<void>(resolve => setTimeout(() => { Logger.warn('[SOURCES] the saved source blocks were not read within 5 s, going on without them'); resolve(); }, 5000).unref())
+    ]);
   });
 }
 
