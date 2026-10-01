@@ -33,9 +33,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   an sau episod. Titlu: jaccard ≥ 0.5 SAU titlul scurt e sfârșitul celui lung (max 3 cuvinte în față, prefixe de limbă
   ca „21_Romanian” ignorate). Reguli opționale în `RuleFlags` (fuzzyGroup și multiVariant pornite, sourceTiers oprită).
 - **Subsync** (re-sincronizare automată, `src/core/alignment.ts`, `src/proxy/alignedProxy.ts`, motor în `src/utils/subsync.ts`):
-  - Se declanșează (`needsReference`) când nicio subtitrare nu e compatibilă cu fișierul. Compatibil înseamnă același grup
-    SAU aceeași clasă de rezoluție (uhd/hd) ȘI aceeași familie de sursă (disc = remux/bluray, web = webdl/webrip, tv = hdtv, dvd).
-  - Atunci linkurile trec prin `/:config/sub/aligned/<token>.srt`. La descărcare caută referințe în orice limbă,
+  - Se declanșează (`needsReference`) pentru orice subtitrare care NU e de la același grup cu fișierul (`fromFileGroup`).
+    Eticheta („1080p BluRay”) nu mai e crezută: la The Chaser o subtitrare „REMUX FraMeSToR” pe un fișier REMUX Shamir
+    era desincronizată. Subtitrările de la același grup merg direct, celelalte se verifică (dacă sunt bune: „already aligned”).
+  - Referințele rămân de același tip cu fișierul: aceeași clasă de rezoluție (uhd/hd) ȘI aceeași familie de sursă
+    (disc = remux/bluray, web = webdl/webrip, tv = hdtv, dvd).
+  - Linkurile verificate trec prin `/:config/sub/aligned/<token>.srt`. La descărcare caută referințe în orice limbă,
     de același tip cu fișierul, și aliniază: decalaj, raport de cadre (ex. ×1.043 pentru 25 vs 23.976 fps), split pe bucăți.
     Bugetul e de 5 s, altfel se trimite originalul.
   - Candidat verificat: linkul poartă până la 3 alternative din aceeași limbă. Dacă subtitrarea nu se potrivește cu
@@ -54,8 +57,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   - The Chaser (REMUX): corect nedeclanșat (există subtitrare FraMeSToR).
   - Andor S01E01 (Star.Wars.Andor UHD REMUX HYPERION): „21_Romanian---Andor” și „Star.Wars.Andor…NTb” sunt acum păstrate.
     Declanșat, 3 referințe UHD REMUX. Decizia de aliniere nu era încă în log.
-  - **De verificat:** sincronizarea pe ecran la mijlocul și finalul episodului (Big Bang, Friends); decizia Subsync la Andor;
-    de ce Andor a avut „Scoring: 15 → 5” (motivele celor 10 respinse).
+  - Andor: decizia a fost „already aligned” (97%, 2 referințe). Big Bang: 2 referințe agree. Friends: o singură referință (88%).
+    „Scoring: 15 → 5” la Andor: 7 vizibile sunt alt episod (E6–E12 SubDL); 3 nu se văd (Debug arată doar primele 12).
+  - The Chaser: utilizatorul a raportat subtitrarea desincronizată, deși era nedeclanșat. Comparând 12 subtitrări din alte
+    limbi: edițiile Blu-ray (KOR/GER/AUS) se potrivesc între ele (≤0.7 s), dar una „BluRay CHD” era ×1.043 și una NF −12 s.
+    → Schimbare pe ramură (nedeployată): se verifică orice subtitrare care nu e de la același grup.
+  - **De verificat:** sincronizarea pe ecran (Big Bang, Friends, The Chaser după deploy); timpul de răspuns, acum că
+    mult mai multe filme trec prin verificare.
+  - Idei: Debug să arate toate respinsele, nu doar primele 12; titlu lipit de rezoluție („amb-friends720p”) e respins greșit.
 
 ## De făcut (în ordinea discutată)
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.

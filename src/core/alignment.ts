@@ -13,9 +13,9 @@ import { USER_AGENT } from '../config/version';
  * Automatic re-timing ("subsync").
  *
  * Releases of the same episode can have a different start (a 2160p file with a few extra seconds, for instance),
- * so a subtitle made for a 1080p release is late or early by a constant amount. When none of the subtitles found
- * fits the playing file, a subtitle of the playing file's own kind (same resolution class and source family, any language) is used as
- * a timing reference, and the subtitle that is served is shifted by the measured difference.
+ * so a subtitle made for a 1080p release is late or early by a constant amount. Every subtitle not made by the playing
+ * file's own group is checked against subtitles of the playing file's own kind (same resolution class and source family,
+ * any language) used as timing references, and the subtitle that is served is shifted by the measured difference.
  */
 
 export type ResolutionClass = 'uhd' | 'hd';
@@ -63,10 +63,20 @@ export interface TriggerVerdict {
   reason: string;
 }
 
+/** Is the subtitle made by the playing file's own release group (the only label trusted without checking)? */
+export function fromFileGroup(filename: string | undefined | null, release: string | undefined | null): boolean {
+  if (!filename) return false;
+  const video = parseRelease(filename);
+  const sub = parseRelease(release || '');
+  return Boolean(sub.group && video.group && sub.group === video.group);
+}
+
 /**
- * Is a timing reference needed? Only when no subtitle in the list is "compatible" with the file
- * (same release group, or same resolution class and source family) AND at least one subtitle is known to be of
- * another kind. If nothing is known about the file (no name) or about the subtitles, nothing changes.
+ * Is a timing reference needed? Whenever a subtitle in the list is not from the file's own release group.
+ * The kind written in a subtitle's name is not trusted: a subtitle labelled "1080p BluRay" can be made for a
+ * sped-up (x1.043) or a differently cut release (The Chaser), so it is checked against the references; one that
+ * already lines up is served unchanged ("already aligned"). Subtitles from the file's own group are not checked.
+ * If nothing is known about the file (no name, no resolution), nothing changes.
  */
 export function needsReference(filename: string | undefined | null, items: RawSubtitleItem[]): TriggerVerdict {
   if (!filename || !filename.trim()) return { needed: false, reason: 'the player sent no file name' };
@@ -74,21 +84,15 @@ export function needsReference(filename: string | undefined | null, items: RawSu
   const videoClass = resolutionClass(video.resolution);
   if (!videoClass) return { needed: false, reason: 'the resolution of the file is unknown' };
   if (items.length === 0) return { needed: false, reason: 'no subtitles' };
-  const videoFamily = sourceFamily(video.source);
 
-  let knownOther = 0;
-  for (const item of items) {
-    const sub = parseRelease(item.release || '');
-    const sameGroup = Boolean(sub.group && video.group && sub.group === video.group);
-    if (sameGroup || sameKind(sub, video)) {
-      return { needed: false, reason: sameGroup ? `a subtitle from the same group (${video.group})` : `a subtitle of the same kind (${kindLabel(video)})` };
-    }
-    const subClass = resolutionClass(sub.resolution);
-    const subFamily = sourceFamily(sub.source);
-    if (subClass && (subClass !== videoClass || (videoFamily && subFamily && subFamily !== videoFamily))) knownOther++;
-  }
-  if (knownOther === 0) return { needed: false, reason: 'no subtitle is known to be of another kind' };
-  return { needed: true, reason: `no subtitle of the same group or kind (${kindLabel(video)}) among ${items.length}` };
+  const unchecked = items.filter(item => !fromFileGroup(filename, item.release)).length;
+  if (unchecked === 0) return { needed: false, reason: `all subtitles are from the same group (${video.group})` };
+  const own = items.length - unchecked;
+  return {
+    needed: true,
+    reason: `${unchecked} of ${items.length} subtitle(s) not from the file's group are checked against references (${kindLabel(video)})` +
+      (own ? `; ${own} from the same group (${video.group}) are served as they are` : '')
+  };
 }
 
 /** Season/episode/file-name parameters that let an archive download choose the right file inside a season pack */

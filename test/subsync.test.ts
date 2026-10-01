@@ -11,7 +11,7 @@ process.env.SUBSYNC_BUDGET_MS = '1500';
 import axios from 'axios';
 import { parseCues } from '../src/utils/timeline';
 import { shiftSubtitle } from '../src/utils/subtitleFormat';
-import { needsReference, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree } from '../src/core/alignment';
+import { needsReference, fromFileGroup, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree } from '../src/core/alignment';
 import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
 import { createAlignedHandler } from '../src/proxy/alignedProxy';
 import { decodeAlignedToken } from '../src/core/alignedToken';
@@ -97,30 +97,29 @@ async function main() {
     const v1 = needsReference(CRU, hdOnly);
     check('Peacemaker case: 2160p file, only HD subtitles of other groups -> a reference is needed', v1.needed, v1);
 
-    const v2 = needsReference('Movie.2020.2160p.WEB-DL.HEVC-FLUX.mkv', [item('Movie.2020.1080p.WEB-DL.x264-FLUX'), item('Movie.2020.1080p.BluRay-OTHER')]);
-    check('2160p-FLUX file with a 1080p-FLUX subtitle -> no reference (the rule you set)', !v2.needed, v2);
+    const v2 = needsReference('Movie.2020.2160p.WEB-DL.HEVC-FLUX.mkv', [item('Movie.2020.1080p.WEB-DL.x264-FLUX')]);
+    check('2160p-FLUX file with only a 1080p-FLUX subtitle -> no reference (same group is trusted)', !v2.needed, v2);
+    const v2b = needsReference('Movie.2020.2160p.WEB-DL.HEVC-FLUX.mkv', [item('Movie.2020.1080p.WEB-DL.x264-FLUX'), item('Movie.2020.1080p.BluRay-OTHER')]);
+    check('same-group subtitle plus another group -> the other one is checked', v2b.needed && /1 of 2/.test(v2b.reason), v2b);
 
     const v3 = needsReference(CRU, [...hdOnly, item('Peacemaker.S01E01.2160p.WEB-DL.HEVC-SOMEONE')]);
-    check('a 2160p subtitle of another group is compatible (same class) -> no reference', !v3.needed, v3);
+    check('a 2160p subtitle of another group is checked too (its label is not trusted)', v3.needed, v3);
 
     const v4 = needsReference('Movie.2020.1080p.WEB-DL.x264-AAA.mkv', [item('Movie.2020.720p.WEBRip.x264-BBB')]);
-    check('HD web file with HD web subtitles -> no reference', !v4.needed, v4);
+    check('HD web file with HD web subtitles of another group -> checked', v4.needed, v4);
 
     const BBT = 'The.Big.Bang.Theory.S01E06.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-EPSiLON.mkv';
     const bbt = needsReference(BBT, [item('The.Big.Bang.Theory.S01E06.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb'), item('The.Big.Bang.Theory.S01E06.720p.WEBRip.x264-ION10')]);
-    check('Big Bang case: 1080p REMUX file, only WEB subtitles -> a reference is needed (other source family)', bbt.needed, bbt);
-    const bbtOk = needsReference(BBT, [item('The.Big.Bang.Theory.S01E06.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb'), item('The.Big.Bang.Theory.S01E06.720p.BluRay.x264-DEMAND')]);
-    check('REMUX file with a BluRay subtitle (same family) -> no reference', !bbtOk.needed, bbtOk);
-    check('HDTV file with WEB subtitles -> a reference is needed', needsReference('Show.S01E01.720p.HDTV.x264-KILLERS.mkv', [item('Show.S01E01.1080p.WEB-DL.x264-NTb')]).needed);
-    check('file without a known source: the class alone decides', !needsReference('Show.S01E01.1080p.x264-AAA.mkv', [item('Show.S01E01.1080p.WEB-DL.x264-NTb')]).needed);
-    check('subtitle of the same class but unknown source -> no reference (nothing known to differ)', !needsReference(BBT, [item('The.Big.Bang.Theory.S01E06.1080p.x264-XYZ')]).needed);
-
-    const v5 = needsReference('Movie.2020.1080p.WEB-DL.x264-AAA.mkv', [item('Movie.2020.2160p.WEB-DL.HEVC-BBB')]);
-    check('HD file with only 2160p subtitles of another group -> a reference is needed', v5.needed, v5);
+    check('Big Bang case: 1080p REMUX file, only WEB subtitles -> a reference is needed', bbt.needed, bbt);
+    const CHASER = 'The.Chaser.2008.MULTi.1080p.BluRay.Remux.AVC.DTS.HDMA.5.1-Shamir.mkv';
+    const chaser = needsReference(CHASER, [item('The.Chaser.2008.BluRay.1080p.DTS-HD.MA.5.1.AVC.REMUX-FraMeSToR')]);
+    check('The Chaser case: Shamir REMUX file with a FraMeSToR REMUX subtitle -> checked (same kind is not enough)', chaser.needed, chaser);
+    check('subtitle without any info -> checked', needsReference(CRU, [item('Peacemaker.WEBRip.x264-ION10'), item('Peacemaker XviD-AFG')]).needed);
+    check('fromFileGroup: same group', fromFileGroup(CHASER, 'The.Chaser.2008.720p.BluRay-Shamir') && !fromFileGroup(CHASER, 'The.Chaser.2008.1080p.REMUX-FraMeSToR'));
+    check('fromFileGroup: no file name or no group -> false', !fromFileGroup(undefined, 'X-Shamir') && !fromFileGroup(CHASER, 'The Chaser'));
 
     check('no file name -> nothing changes', !needsReference(undefined, hdOnly).needed);
     check('file name without resolution -> nothing changes', !needsReference('Peacemaker.S01E01.mkv', hdOnly).needed);
-    check('subtitles without any resolution info -> nothing changes', !needsReference(CRU, [item('Peacemaker.WEBRip.x264-ION10'), item('Peacemaker XviD-AFG')]).needed);
     check('nothing found -> nothing changes', !needsReference(CRU, []).needed);
   }
 
@@ -219,6 +218,12 @@ async function main() {
     globalSubtitleCache.clear?.();
     const list2 = await getAggregatedSubtitles(sameGroup, stored, baseUrl, uuid);
     check('same group (FLUX, other resolution): links are left alone', list2.subtitles.every(s => !s.url.includes('/sub/aligned/')), list2.subtitles.map(s => s.url));
+
+    // The Chaser case: same kind (HD web) but another group -> the label is not trusted, the link is checked
+    globalSubtitleCache.clear?.();
+    const sameKind = parseSubtitleQuery('series', 'tt13146488:1:1', { filename: 'Peacemaker.S01E01.1080p.HMAX.WEB-DL.H.264-OTHER.mkv' });
+    const list3 = await getAggregatedSubtitles(sameKind, stored, baseUrl, uuid);
+    check('same kind, other group: the link is wrapped (checked against references)', list3.subtitles.length === 1 && list3.subtitles[0].url.includes('/sub/aligned/'), list3.subtitles.map(s => s.url));
 
     globalSubtitleCache.clear?.();
     const off = await getAggregatedSubtitles(q, { ...stored, subsync: false }, baseUrl, uuid);

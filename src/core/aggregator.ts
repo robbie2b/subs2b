@@ -9,7 +9,7 @@ import { Logger } from '../utils/logger';
 import { rankSubtitles } from '../utils/scorer';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
 import { recordUsage } from '../storage/usageStore';
-import { needsReference, archivePickParams as buildArchivePickParams } from './alignment';
+import { needsReference, fromFileGroup, archivePickParams as buildArchivePickParams } from './alignment';
 import { encodeAlignedToken, MAX_ALTERNATIVES } from './alignedToken';
 import { isAllowedDownloadUrl, addonHostsOf } from '../proxy/subtitleProxy';
 
@@ -158,8 +158,8 @@ export async function getAggregatedSubtitles(
     Logger.error('Scoring failed, keeping provider order', err);
   }
 
-  // Subsync: when no subtitle fits the playing file (same group / same resolution class), the links go through the
-  // aligning endpoint, which re-times them to a reference of the file's own kind
+  // Subsync: the links of subtitles not made by the playing file's group go through the aligning endpoint, which
+  // checks them against references of the file's own kind and re-times them when needed
   const subsyncVerdict = config.subsync !== false && configId
     ? needsReference(query.extra?.filename, orderedItems)
     : { needed: false, reason: configId ? 'subsync is switched off' : 'no configuration id' };
@@ -252,7 +252,8 @@ export async function getAggregatedSubtitles(
     const alignable = subtitles.map(s => s.url.startsWith(baseUrl + '/') || isAllowedDownloadUrl(s.url, addonHosts));
     const directUrls = subtitles.map(s => s.url);
     subtitles.forEach((sub, idx) => {
-      if (!alignable[idx]) return;
+      // a subtitle from the file's own release group is trusted and served directly
+      if (!alignable[idx] || fromFileGroup(filename, orderedItems[idx].release)) return;
       const alternatives: Array<{ u: string; r?: string }> = [];
       for (let j = idx + 1; j < subtitles.length && alternatives.length < MAX_ALTERNATIVES; j++) {
         if (alignable[j] && orderedItems[j].lang === orderedItems[idx].lang) alternatives.push({ u: directUrls[j], r: orderedItems[j].release });
