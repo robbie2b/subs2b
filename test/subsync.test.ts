@@ -9,9 +9,9 @@ delete process.env.DATABASE_URL;
 process.env.SUBSYNC_BUDGET_MS = '1500';
 
 import axios from 'axios';
-import { parseCues, fitOffset, decideAlignment } from '../src/utils/timeline';
+import { parseCues } from '../src/utils/timeline';
 import { shiftSubtitle } from '../src/utils/subtitleFormat';
-import { needsReference, pickReferenceCandidates, clearReferenceCache, getAlignments } from '../src/core/alignment';
+import { needsReference, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree } from '../src/core/alignment';
 import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
 import { createAlignedHandler } from '../src/proxy/alignedProxy';
 import { decodeAlignedToken } from '../src/core/alignedToken';
@@ -59,41 +59,12 @@ function toSrt(cues: Array<{ start: number; end: number }>, shift = 0, word = 't
 const BASE = makeBase();
 
 async function main() {
-  // ============ timeline maths ============
-  console.log('Timeline');
+  // ============ reading cue times ============
+  console.log('Reading cue times');
   {
     const parsed = parseCues(toSrt(BASE));
     check('cue times are read', parsed.length === BASE.length && Math.abs(parsed[3].start - BASE[3].start) < 0.002);
     check('WebVTT times without hours are read', parseCues('WEBVTT\n\n01:02.500 --> 01:04.000\nhi').length === 1);
-
-    const truth = parseCues(toSrt(BASE));
-    const late = parseCues(toSrt(BASE, +5, 'outro text'));
-    const fit = fitOffset(late, truth);
-    check('a subtitle 5 s late needs -5 s to line up (sign check)', Math.abs(fit.offset - -5) <= 0.1 && fit.score > 0.95, fit);
-    const early = fitOffset(parseCues(toSrt(BASE, -3.4)), truth);
-    check('a subtitle 3.4 s early needs +3.4 s', Math.abs(early.offset - 3.4) <= 0.1, early);
-    const same = fitOffset(parseCues(toSrt(BASE)), truth);
-    check('an aligned subtitle gets 0', Math.abs(same.offset) <= 0.1 && same.score > 0.99, same);
-
-    // a different translation: some cues merged/split/missing, still the same timeline
-    const other = BASE.filter((_, i) => i % 9 !== 0).map(c => ({ start: c.start + 5 + (Math.random() - 0.5) * 0.2, end: c.end + 5 }));
-    const noisy = fitOffset(parseCues(toSrt(other)), truth);
-    check('missing cues and small jitter do not break it', Math.abs(noisy.offset - -5) <= 0.3 && noisy.score > 0.8, noisy);
-
-    const unrelated = fitOffset(parseCues(toSrt(makeBase(99, 320))), truth);
-    check('unrelated timelines score low', unrelated.score < 0.8, unrelated);
-  }
-
-  console.log('Decision');
-  {
-    check('two references that agree: shift', (() => { const d = decideAlignment([{ offset: -5, score: 0.99 }, { offset: -4.9, score: 0.87 }]); return d.apply && Math.abs(d.offset - -4.95) < 0.06; })());
-    check('two references that disagree: no shift', decideAlignment([{ offset: -5, score: 0.95 }, { offset: 12, score: 0.95 }]).apply === false);
-    check('one very good reference: shift', decideAlignment([{ offset: -5, score: 0.97 }]).apply === true);
-    check('one mediocre reference: no shift', decideAlignment([{ offset: -5, score: 0.84 }]).apply === false);
-    check('poor fits are ignored', decideAlignment([{ offset: -5, score: 0.5 }, { offset: -5, score: 0.6 }]).apply === false);
-    check('a tiny shift is not applied', decideAlignment([{ offset: 0.1, score: 0.99 }, { offset: 0.2, score: 0.99 }]).apply === false);
-    check('an absurd shift is refused', decideAlignment([{ offset: 200, score: 0.99 }, { offset: 200, score: 0.99 }]).apply === false);
-    check('no references: no shift', decideAlignment([]).apply === false);
   }
 
   console.log('Shifting text');
@@ -176,6 +147,15 @@ async function main() {
     check('a REMUX file takes only disc references (BluRay/REMUX), not WEB', bbtPicked.length === 2 && !bbtPicked.includes('eng'), bbtPicked);
   }
 
+  console.log('References agree');
+  {
+    const ref = (cues: Array<{ start: number; end: number }>, label: string) => ({ label, lang: 'eng', provider: 'x', cues: cues.map(c => ({ ...c, speech: true })) });
+    const same = BASE.filter((_, i) => i % 6 !== 2).map(c => ({ start: c.start + 0.08, end: c.end + 0.05 }));
+    check('two references of one timeline agree', referencesAgree([ref(BASE, 'a'), ref(same, 'b')]));
+    check('two references of different timelines do not (no alternative is tried then)', !referencesAgree([ref(BASE, 'a'), ref(makeBase(99, 320), 'b')]));
+    check('one reference alone is not enough', !referencesAgree([ref(BASE, 'a')]));
+  }
+
   // ============ the whole thing, with a faked network ============
   console.log('End to end');
   const TRUTH = BASE;                         // timeline of the playing 2160p file (what the references have)
@@ -183,6 +163,7 @@ async function main() {
   const REF_FIN = toSrt(TRUTH, 0.05, 'finnish');
   const REF_ARA = toSrt(TRUTH.filter((_, i) => i % 7 !== 3), -0.05, 'arabic');
   const RO_HD = toSrt(TRUTH, LATE, 'romana');
+  const RO_OTHER = toSrt(makeBase(99, 320), 0, 'alta');   // made for a release with a completely different timeline
 
   let providerCalls = 0;
   let searchDelayMs = 0;
@@ -207,6 +188,7 @@ async function main() {
     if (url.includes('fin.zip')) return body(REF_FIN);
     if (url.includes('ara.zip')) return body(REF_ARA);
     if (url.includes('/ro-hd')) return body(RO_HD);
+    if (url.includes('/ro-other')) return body(RO_OTHER);
     if (url.includes('/ro-empty')) return body('1\n00:00:01,000 --> 00:00:02,000\nshort\n');
     throw new Error('unexpected fetch ' + url);
   };
@@ -245,6 +227,19 @@ async function main() {
     globalSubtitleCache.clear?.();
     const noName = await getAggregatedSubtitles(parseSubtitleQuery('series', 'tt13146488:1:1', {}), stored, baseUrl, uuid);
     check('no file name from the player: links are left alone', noName.subtitles.every(s => !s.url.includes('/sub/aligned/')));
+
+    // several Romanian subtitles: each link carries the ones after it (same language) as alternatives
+    globalSubtitleCache.clear?.();
+    providerItems.push(
+      { id: 'ro-ntb', provider: 'subdl', providerName: 'SubDL', url: baseUrl + '/ro-hd?ntb', lang: 'ron', release: 'Peacemaker.2022.S01E01.720p.HMAX.WEB-DL.DD5.1.H.264-NTb' },
+      { id: 'en-ntb', provider: 'subdl', providerName: 'SubDL', url: baseUrl + '/en-hd', lang: 'eng', release: 'Peacemaker.2022.S01E01.720p.HMAX.WEB-DL.DD5.1.H.264-NTb' }
+    );
+    const multi = await getAggregatedSubtitles(q, mergeWithDefaults({ ...stored, languages: ['ron', 'eng'] }), baseUrl, uuid);
+    const tokens = multi.subtitles.map(s => decodeAlignedToken((s.url.split('/sub/aligned/')[1] || '').replace('.srt', '')));
+    const firstRo = tokens.find(t => t && t.u === baseUrl + '/ro-hd');
+    check('the first Romanian link carries the next Romanian subtitle as an alternative (and not the English one)',
+      firstRo?.a?.length === 1 && firstRo.a[0].u === baseUrl + '/ro-hd?ntb', tokens);
+    providerItems.splice(providerItems.findIndex(i => i.id === 'ro-ntb'), 2);
   }
 
   // -- the aligned link: what the player gets --
@@ -284,6 +279,33 @@ async function main() {
     const callsBefore = providerCalls;
     await handler({ params: { config: uuid, data: linkFor(baseUrl + '/ro-hd') }, query: {} } as any, again.res);
     check('the second request is served from the cache (no new search)', providerCalls === callsBefore && again.out.body === r.out.body);
+  }
+
+  {
+    // verified candidate: the first subtitle fits no reference, the references agree -> the first alternative that fits is served
+    const withAlts = (u: string, alts: Array<{ u: string; r?: string }>) =>
+      Buffer.from(JSON.stringify({ u, id: 'tt13146488:1:1', t: 'series', f: CRU, r: 'Peacemaker.S01E01.OTHER-RELEASE', a: alts })).toString('base64url');
+    const r = respond();
+    await handler({ params: { config: uuid, data: withAlts(baseUrl + '/ro-other', [
+      { u: 'https://169.254.169.254/x', r: 'not allowed' },
+      { u: baseUrl + '/ro-other?2', r: 'also wrong' },
+      { u: baseUrl + '/ro-hd?alt=1', r: 'Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL.DD5.1.H.264-FLUX' }
+    ]) }, query: {} } as any, r.res);
+    const served = parseCues(r.out.body);
+    check('a subtitle that fits no reference is replaced by the first alternative that does', r.out.body.includes('romana 10') && !r.out.body.includes('alta'), r.out.body.slice(0, 80));
+    check('and the alternative is re-timed too', Math.abs(served[10].start - TRUTH[10].start) < 0.2, served[10]);
+    const log = (await getAlignments(uuid))[0];
+    check('Debug notes the replacement', log?.replacedBy === 'Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL.DD5.1.H.264-FLUX' && log.outcome === 'shifted', log);
+    check('the not-allowed alternative was never fetched', !fetched.some(u => u.includes('169.254.169.254')));
+
+    const none = respond();
+    await handler({ params: { config: uuid, data: withAlts(baseUrl + '/ro-other?3', [{ u: baseUrl + '/ro-other?4' }]) }, query: {} } as any, none.res);
+    check('no alternative fits: the original is sent unchanged', none.out.body.includes('alta 10') && !(await getAlignments(uuid))[0].replacedBy);
+
+    const fitting = respond();
+    const fetchedBefore = fetched.length;
+    await handler({ params: { config: uuid, data: withAlts(baseUrl + '/ro-hd?fits=1', [{ u: baseUrl + '/ro-other?5' }]) }, query: {} } as any, fitting.res);
+    check('a subtitle that fits is never replaced (alternatives not even downloaded)', fitting.out.body.includes('romana 10') && !fetched.slice(fetchedBefore).some(u => u.includes('ro-other')));
   }
 
   {

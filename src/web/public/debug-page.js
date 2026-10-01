@@ -390,6 +390,7 @@ function renderSubsync() {
       return `<div class="dbg-req open"><div class="dbg-req-head" style="cursor:default">`
         + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(e.subtitle || '(subtitle)')}</div>`
         + `<div class="dbg-req-sub">for ${escapeHtmlDebug(e.filename)} · ${escapeHtmlDebug(e.reason)}</div>`
+        + (e.replacedBy ? `<div class="dbg-req-sub">did not fit the references → replaced by <b>${escapeHtmlDebug(e.replacedBy)}</b></div>` : '')
         + `<div class="dbg-sub-meta" style="margin-top:6px">${refs}</div></div>`
         + `<div class="dbg-req-side"><span class="dbg-tag ${cls}">${escapeHtmlDebug(label)}</span><div class="dbg-muted">${new Date(e.at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Bucharest', hour12: false })} · ${e.ms} ms</div></div>`
         + `</div></div>`;

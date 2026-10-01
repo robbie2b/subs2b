@@ -298,6 +298,25 @@ export function alignAgainst(candidateText: string, references: Reference[]): Al
   };
 }
 
+/** The subtitle can be served: it lines up with the references (as it is, or once shifted) */
+export function fitsReferences(result: AlignmentResult): boolean {
+  return result.decision.apply || result.decision.reason === 'already aligned';
+}
+
+/**
+ * Do (at least) two references share one timeline? Only then is a subtitle that fits none of them clearly made for
+ * another release, and worth replacing with an alternative.
+ */
+export function referencesAgree(references: Reference[]): boolean {
+  for (let i = 0; i < references.length; i++) {
+    for (let j = i + 1; j < references.length; j++) {
+      const r = alignToReference(references[j].cues, references[i].cues, { split: false, topRatios: 1 });
+      if (r && r.overlap >= 0.7 && Math.abs(r.ratio - 1) < 0.0005 && Math.abs(medianOf(r.offsets)) <= 0.5) return true;
+    }
+  }
+  return false;
+}
+
 // What the Debug page shows (kept in the database when there is one): see storage/alignmentLogStore.ts
 export { recordAlignment, getAlignments } from '../storage/alignmentLogStore';
 export type { AlignmentLogEntry } from '../storage/alignmentLogStore';

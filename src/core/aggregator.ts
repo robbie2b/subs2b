@@ -10,7 +10,7 @@ import { rankSubtitles } from '../utils/scorer';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
 import { recordUsage } from '../storage/usageStore';
 import { needsReference, archivePickParams as buildArchivePickParams } from './alignment';
-import { encodeAlignedToken } from './alignedToken';
+import { encodeAlignedToken, MAX_ALTERNATIVES } from './alignedToken';
 import { isAllowedDownloadUrl, addonHostsOf } from '../proxy/subtitleProxy';
 
 function toNumberOrNull(value: string | undefined): number | null {
@@ -236,12 +236,6 @@ export async function getAggregatedSubtitles(
       finalUrl = `${baseUrl}/sub/proxy?url=${encodeURIComponent(finalUrl)}&filename=${encodeURIComponent(safeFilename)}${archivePickParams}`;
     }
 
-    // Aligned: the player asks this server, which re-times the subtitle before sending it (only our own or allowed links)
-    if (subsyncVerdict.needed && configId && query.extra?.filename && (finalUrl.startsWith(baseUrl + '/') || isAllowedDownloadUrl(finalUrl, addonHosts))) {
-      const token = encodeAlignedToken({ u: finalUrl, id: query.id, t: query.type, f: query.extra.filename, r: item.release });
-      finalUrl = `${baseUrl}/${configId}/sub/aligned/${token}.srt`;
-    }
-
     return {
       id: uniqueId,
       lang: item.lang,
@@ -249,6 +243,27 @@ export async function getAggregatedSubtitles(
       title: item.release || `${item.providerName || item.provider} Subtitle`
     };
   });
+
+  // Aligned: the player asks this server, which re-times the subtitle before sending it (only our own or allowed links).
+  // Each link also carries the next subtitles of the same language: when it does not fit the references, the first
+  // alternative that does is served instead.
+  if (subsyncVerdict.needed && configId && query.extra?.filename) {
+    const filename = query.extra.filename;
+    const alignable = subtitles.map(s => s.url.startsWith(baseUrl + '/') || isAllowedDownloadUrl(s.url, addonHosts));
+    const directUrls = subtitles.map(s => s.url);
+    subtitles.forEach((sub, idx) => {
+      if (!alignable[idx]) return;
+      const alternatives: Array<{ u: string; r?: string }> = [];
+      for (let j = idx + 1; j < subtitles.length && alternatives.length < MAX_ALTERNATIVES; j++) {
+        if (alignable[j] && orderedItems[j].lang === orderedItems[idx].lang) alternatives.push({ u: directUrls[j], r: orderedItems[j].release });
+      }
+      const token = encodeAlignedToken({
+        u: directUrls[idx], id: query.id, t: query.type, f: filename, r: orderedItems[idx].release,
+        ...(alternatives.length ? { a: alternatives } : {})
+      });
+      sub.url = `${baseUrl}/${configId}/sub/aligned/${token}.srt`;
+    });
+  }
 
   return { subtitles };
 }

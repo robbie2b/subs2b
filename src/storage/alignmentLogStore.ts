@@ -20,6 +20,8 @@ export interface AlignmentLogEntry {
   confidence: number;
   reason: string;
   references: Array<{ label: string; offset: number; score: number; ratio?: number; segments?: number }>;
+  /** release name of the alternative served instead, when the subtitle did not fit the references */
+  replacedBy?: string;
   ms: number;
 }
 
@@ -54,6 +56,7 @@ async function ensureTable(): Promise<boolean> {
           );
           ALTER TABLE subsync_decisions ADD COLUMN IF NOT EXISTS ratio REAL NOT NULL DEFAULT 1;
           ALTER TABLE subsync_decisions ADD COLUMN IF NOT EXISTS segments INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE subsync_decisions ADD COLUMN IF NOT EXISTS replaced_by TEXT;
           CREATE INDEX IF NOT EXISTS idx_subsync_decisions_owner_at ON subsync_decisions(owner, at DESC);
         `);
         return true;
@@ -79,10 +82,10 @@ export function recordAlignment(configKey: string, entry: AlignmentLogEntry): vo
       if (!(await ensureTable())) return;
       const pool = await configStorage.getPool();
       await pool!.query(
-        `INSERT INTO subsync_decisions (owner, at, content_id, filename, subtitle, outcome, offset_sec, ratio, segments, confidence, reason, refs, ms)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        `INSERT INTO subsync_decisions (owner, at, content_id, filename, subtitle, outcome, offset_sec, ratio, segments, confidence, reason, refs, ms, replaced_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [owner, entry.at, entry.id, entry.filename.slice(0, 300), entry.subtitle.slice(0, 300), entry.outcome,
-          entry.offset, entry.ratio ?? 1, entry.segments ?? 0, entry.confidence, entry.reason.slice(0, 300), JSON.stringify(entry.references), entry.ms]
+          entry.offset, entry.ratio ?? 1, entry.segments ?? 0, entry.confidence, entry.reason.slice(0, 300), JSON.stringify(entry.references), entry.ms, entry.replacedBy ? entry.replacedBy.slice(0, 300) : null]
       );
       if (Math.random() < 0.02) {
         await pool!.query(
@@ -103,7 +106,7 @@ export async function getAlignments(configKey: string): Promise<AlignmentLogEntr
     if (await ensureTable()) {
       const pool = await configStorage.getPool();
       const res = await pool!.query(
-        `SELECT at, content_id, filename, subtitle, outcome, offset_sec, ratio, segments, confidence, reason, refs, ms
+        `SELECT at, content_id, filename, subtitle, outcome, offset_sec, ratio, segments, confidence, reason, refs, ms, replaced_by
          FROM subsync_decisions WHERE owner = $1 ORDER BY at DESC, id DESC LIMIT $2`,
         [owner, READ_LIMIT]
       );
@@ -119,6 +122,7 @@ export async function getAlignments(configKey: string): Promise<AlignmentLogEntr
         confidence: Number(r.confidence),
         reason: r.reason,
         references: r.refs || [],
+        ...(r.replaced_by ? { replacedBy: r.replaced_by } : {}),
         ms: r.ms
       }));
     }
