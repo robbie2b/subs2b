@@ -231,7 +231,7 @@ async function main() {
   await handleRegieLiveDownload({ params: { data: goodTicket }, query: {} } as any, ok.res);
   check('a temporary 429 is retried and then succeeds', ok.out.status === 200 && ok.out.body.includes('Ați putea') && attempts === 2, { status: ok.out.status, attempts });
   check('the download sends the session cookie and RegieLive headers', seenHeaders.every(h => h.Cookie === 'PHPSESSID=sess123' && Boolean(h['RL-API']) && h.Referer === 'https://subtitrari.regielive.ro'), seenHeaders[0]);
-  check('served as SRT text', /text\/plain/.test(ok.out.headers['Content-Type'] || ''), ok.out.headers);
+  check('served as SRT text', /application\/x-subrip/.test(ok.out.headers['Content-Type'] || ''), ok.out.headers);
 
   const evil = respond();
   attempts = 0;

@@ -128,7 +128,7 @@ async function integrationTests(): Promise<void> {
     check(viaPath.status === 200 && viaPath.data === '1\n00:00:01,000 --> 00:00:02,000\nHello', 'the same conversion works through the .srt path link', { status: viaPath.status, data: viaPath.data });
     const badPath = await client.get(`/${uuid}/sub/convert/${Buffer.from('http://example.com/sub.vtt').toString('base64url')}.srt`);
     check(badPath.status === 400, 'a forbidden host is refused through the path link too', badPath.status);
-    check(String(ok.headers['content-type']).startsWith('text/plain'), 'served as plain text', ok.headers['content-type']);
+    check(String(ok.headers['content-type']).startsWith('application/x-subrip'), 'served as an SRT subtitle (application/x-subrip)', ok.headers['content-type']);
     check(ok.data === '1\n00:00:01,000 --> 00:00:02,000\nHello', 'and the body is clean SRT', ok.data);
 
     const blocked = await client.get(`/${uuid}/sub/convert.srt`, { params: { url: 'http://example.com/sub.vtt' } });

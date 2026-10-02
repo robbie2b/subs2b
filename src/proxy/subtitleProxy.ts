@@ -323,7 +323,9 @@ export function sendSubtitleResponse(
   filename: string,
   cacheControl = 'public, max-age=86400'
 ): void {
-  const contentType = format === 'vtt' ? 'text/vtt; charset=utf-8' : 'text/plain; charset=utf-8';
+  // SRT goes out with its own media type, not as plain text: on a phone Stremio labelled the first subtitle of a list
+  // "PGS" while it was an SRT served as text/plain (Peacemaker S01E01)
+  const contentType = format === 'vtt' ? 'text/vtt; charset=utf-8' : 'application/x-subrip; charset=utf-8';
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
