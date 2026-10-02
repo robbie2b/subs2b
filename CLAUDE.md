@@ -56,6 +56,17 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.0 (deploy 2026-10-02):** (a doua cifră schimbată la cererea utilizatorului)
+  - Clasament: o subtitrare cu numele exact al release-ului fișierului (același grup, sursă, serviciu, ediție, episod;
+    orice rezoluție la WEB/TV, aceeași clasă UHD/HD la disc) intră în nivelul hash match-ului; între ele decide
+    Priority, apoi punctajul (`exactNameMatch` în scorer.ts, motiv „EXACT NAME MATCH”). Caz: Homecoming S01E01–E04
+    (fișier 1080p AMZN WEB-DL NTb): Subs.ro „…1080p…NTb” pierdea în fața hash match-urilor OpenSubtitles „720p…NTb”,
+    „XviD-AFG”, „iNSiDiOUS”. Subtitrările forced / traduse automat nu intră în nivel prin nume.
+  - Subsync: referința de la grupul fișierului decide prima (Gone Baby Gone, mai jos).
+  - Addic7ed nu mai e scos din lista Priority salvată (regulă veche, de când fusese eliminat).
+  - Interfață: Services grupate pliabil („No API key”, „Optional API key”, „Requires API key”, cu „x of y on”);
+    Addons: „Recommended addons by the developer” (Subs.ro și OpenSubtitles PRO cu Configure, OpenSubtitles v3 cu Add);
+    Debug: id-ul serviciului doar la hover / tap pe nume, ora din consolă în ora locală (24 h), buton „Copy logs”.
 - **v1.4.12 (deploy 2026-10-02):** 5 servicii noi: Titrari.ro, Subtitrari-noi.ro, YIFY, Addic7ed, Wyzie (detalii mai jos).
 - **v1.4.11 (deploy 2026-10-02):** probe cu `referer=`, `warm=` (cookie de sesiune), `form=` (POST), `ajax=1`.
   Constatări probe (de pe Render): Titrari.ro OK (căutare `index.php?page=cautamainaltaparte&z8=1&z5=<imdb fără tt>`,
@@ -112,7 +123,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12 și v1.5.0 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
@@ -192,7 +203,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 - **Gone Baby Gone (2026-10-02, 1.4.12):** fișier REMUX EPSiLON; subtitrarea TiMELORDS (Subs.ro) n-a fost mutată fiindcă
   referința `[zh-CN] …REMUX…-EPSiLON` (exact release-ul fișierului) zicea −7.9 s, iar `[pt-PT] …REMUX-FraMeSToR` −2.3 s
   („references disagree”). Primul răspuns a durat 12.7 s (calcul 10.3 s).
-  → Pe ramură (pentru 1.4.13): `alignAgainst(..., fileName)`: referințele de la grupul fișierului (nu și al subtitrării)
+  → În 1.5.0: `alignAgainst(..., fileName)`: referințele de la grupul fișierului (nu și al subtitrării)
   se încearcă primele, singure, cu prag 0.70 (`FILE_REFERENCE_MIN_OVERLAP`); dacă subtitrarea se potrivește cu ele,
   decizia e luată (nota „followed the reference(s) made for the file's own release”), altfel regulile obișnuite.
   Plus: avertismentul „not read within 5 s” nu mai apare când citirea a reușit.
@@ -201,8 +212,6 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 - Subsync pe REMUX: încredere doar în referințe REMUX (sau ale grupului fișierului); altfel subtitrarea neschimbată.
 - Limită de timp pentru calculul suplimentar (verificarea pe bucăți + alternative) când prima verificare a durat mult.
 - Semn vizibil în Stremio când serverul trimite altă subtitrare decât cea aleasă („replaced by”), legat de mesajul custom.
-- Surse noi (mai târziu, la cererea utilizatorului): Titrari.ro și Subtitrari-noi.ro, de verificat întâi în browser.
-  Addic7ed (Cloudflare, limită mică, scos deja înainte de 1.0.0) și YIFY (doar filme, multe clone) — nerecomandate.
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
 - „PGS” la prima subtitrare. Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.
   Direcție: linkuri care se termină în `.srt`, cu `application/x-subrip`.

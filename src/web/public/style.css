@@ -3201,5 +3201,106 @@ button:active {
 .dbg-kind-icon.service { color: #a78bfa; }
 .dbg-kind-icon.addon { color: #fbbf24; }
 .dbg-name-row { display: flex; align-items: center; gap: 8px; }
-.dbg-name-id { margin-left: 26px; }
+.dbg-name-id { margin-left: 26px; display: none; }
+.dbg-prov-name.show-id .dbg-name-id { display: block; }
+.dbg-prov-label { cursor: help; }
 .dbg-sub-meta .dbg-kind-icon { width: 16px; height: 16px; }
+
+/* Services grouped by key requirement (collapsible) */
+.services-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.service-group {
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-sm);
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+.service-group-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.service-group-head::-webkit-details-marker {
+  display: none;
+}
+
+.service-group-head::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--text-secondary);
+  border-bottom: 2px solid var(--text-secondary);
+  transform: rotate(-45deg);
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.service-group[open] > .service-group-head::before {
+  transform: rotate(45deg);
+}
+
+.service-group-title {
+  font-weight: 600;
+}
+
+.service-group-count {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-card);
+}
+
+.service-group-count.has-on {
+  color: #c4b5fd;
+  border-color: var(--accent-primary);
+}
+
+.service-group-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.service-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.recommended-addons {
+  margin-bottom: 16px;
+}
+
+.recommended-note {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 6px 4px;
+}
+
+.recommended-addons .service-row {
+  gap: 12px;
+}
+
+.recommended-addons a.btn {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .service-group-hint {
+    margin-left: 0;
+    width: 100%;
+  }
+}

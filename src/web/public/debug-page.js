@@ -76,6 +76,31 @@ function startDebugPage() {
       const open = item.classList.toggle('open');
       if (open) debugState.open.add(key); else debugState.open.delete(key);
     });
+    document.getElementById('dbg-log-copy')?.addEventListener('click', async () => {
+      const box = document.getElementById('dbg-log');
+      const label = document.getElementById('dbg-copy-label');
+      if (!box || !label) return;
+      const text = [...box.children].map(l => l.textContent).join('\n');
+      let ok = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      } catch (err) {
+        // older browsers / no permission: copy through a hidden text box
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        area.remove();
+      }
+      label.textContent = ok ? `Copied ${box.childElementCount} lines` : 'Copy failed';
+      clearTimeout(debugState.copyTimer);
+      debugState.copyTimer = setTimeout(() => { label.textContent = 'Copy logs'; }, 2000);
+    });
     document.getElementById('dbg-log-clear')?.addEventListener('click', () => {
       const box = document.getElementById('dbg-log');
       if (box) box.textContent = '';
@@ -119,7 +144,9 @@ function buildLogLine(raw) {
 
   const m = rest.match(/^\[(\d{4}-\d\d-\d\dT[\d:.]+Z)\] \[(INFO|WARN|ERROR)\] ?/);
   if (m) {
-    add(m[1].slice(11, 19) + ' ', 'log-time');
+    // the server writes UTC; shown in the viewer's own time zone, 24-hour
+    const at = new Date(m[1]);
+    add((isNaN(at) ? m[1].slice(11, 19) : at.toLocaleTimeString('en-GB', { hour12: false })) + ' ', 'log-time');
     add(m[2].padEnd(5) + ' ', 'log-level log-' + m[2].toLowerCase());
     line.classList.add('lvl-' + m[2].toLowerCase());
     rest = rest.slice(m[0].length);
@@ -283,6 +310,14 @@ function renderProviders(data) {
   const body = document.getElementById('dbg-prov-body');
   const summary = document.getElementById('dbg-prov-summary');
   if (!body || !summary) return;
+  // the id of a service shows on hover (title) or, on a phone, with a tap on its name
+  if (!body.dataset.idToggle) {
+    body.dataset.idToggle = '1';
+    body.addEventListener('click', ev => {
+      const label = ev.target.closest && ev.target.closest('.dbg-prov-label');
+      if (label) label.closest('.dbg-prov-name').classList.toggle('show-id');
+    });
+  }
 
   summary.textContent = data.requests
     ? `Based on the latest ${data.requests} request${data.requests === 1 ? '' : 's'} with stored details.`
@@ -304,7 +339,7 @@ function renderProviders(data) {
     const wins = ranked ? `${p.wins} <span class="dbg-muted">(${pct(p.wins / ranked)})</span>` : '-';
     const inTop = ranked ? `${p.inTop} <span class="dbg-muted">(${pct(p.inTop / ranked)})</span>` : '-';
     return `<tr>`
-      + `<td class="dbg-prov-name"><div class="dbg-name-row">${kindIcon(p.kind)}<span>${escapeHtmlDebug(p.name)}</span></div><div class="dbg-muted dbg-name-id">${escapeHtmlDebug(p.id)}</div></td>`
+      + `<td class="dbg-prov-name"><div class="dbg-name-row">${kindIcon(p.kind)}<span class="dbg-prov-label" title="${escapeHtmlDebug(p.id)}">${escapeHtmlDebug(p.name)}</span></div><div class="dbg-muted dbg-name-id">${escapeHtmlDebug(p.id)}</div></td>`
       + `<td>${status}</td>`
       + `<td class="${rateClass}">${p.searches ? pct(p.successRate) : '-'}<div class="dbg-muted">${p.searches ? `${p.searches - p.failures}/${p.searches}` : ''}</div></td>`
       + `<td>${p.searches ? ms(p.avgMs) : '-'}<div class="dbg-muted">${p.searches ? `max ${ms(p.maxMs)}` : ''}</div></td>`

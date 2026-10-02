@@ -938,6 +938,12 @@ function setupServicesActions() {
     searchInput.addEventListener('input', () => {
       const q = searchInput.value.toLowerCase().trim();
       let matchIdx = 0;
+      // a search opens the groups that have a match and hides the others; an empty search shows every group again
+      document.querySelectorAll('#services-list-container .service-group').forEach(group => {
+        const any = [...group.querySelectorAll('.service-row')].some(row => row.textContent.toLowerCase().includes(q));
+        group.style.display = !q || any ? '' : 'none';
+        if (q && any) group.open = true;
+      });
       document.querySelectorAll('#services-list-container .service-row').forEach(row => {
         const text = row.textContent.toLowerCase();
         const matches = text.includes(q);
@@ -1097,6 +1103,16 @@ function setupAddonsActions() {
   const btnImport = document.getElementById('btn-import-manifest');
   const inputUrl = document.getElementById('input-manifest-url');
   const feedbackMsg = document.getElementById('import-validation-msg');
+
+  // a recommended addon that needs no configuration is imported with one click
+  document.querySelectorAll('[data-recommended-manifest]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!btnImport || !inputUrl) return;
+      inputUrl.value = btn.dataset.recommendedManifest;
+      btnImport.click();
+      inputUrl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
 
   if (btnImport && inputUrl) {
     btnImport.addEventListener('click', async () => {
@@ -2939,7 +2955,21 @@ async function openNuvioModal() {
   openModal('modal-nuvio');
 }
 
+/** "2 of 4 on" next to each group of services (No API key / Optional / Requires) */
+function updateServiceGroupCounts() {
+  document.querySelectorAll('#services-list-container .service-group').forEach(group => {
+    const ids = [...group.querySelectorAll('.service-row')].map(r => r.dataset.serviceId);
+    const on = ids.filter(id => state.config.providers[id]?.enabled === true).length;
+    const label = group.querySelector('.service-group-count');
+    if (label) {
+      label.textContent = `${on} of ${ids.length} on`;
+      label.classList.toggle('has-on', on > 0);
+    }
+  });
+}
+
 function updateStats() {
+  updateServiceGroupCounts();
   const activeSvcCount = Object.keys(state.config.providers).filter(
     k => state.config.providers[k]?.enabled === true
   ).length;

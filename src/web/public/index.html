@@ -291,95 +291,111 @@
           <!-- Compact Services Table/List -->
           <div class="services-table-container">
             <div class="services-table" id="services-list-container">
-
-              <!-- Row 1: OpenSubtitles (Starts OFF) -->
-              <div class="service-row" data-service-id="opensubtitles">
+              <details class="service-group" data-group="nokey">
+                <summary class="service-group-head"><span class="service-group-title">No API key</span><span class="service-group-count" data-count-for="nokey"></span><span class="service-group-hint">work right away</span></summary>
+                <div class="service-group-body">
+              <!-- Row 5: Titrari.ro (Starts OFF) -->
+              <div class="service-row" data-service-id="titrari">
                 <div class="service-left">
-                  <div class="service-logo" title="OpenSubtitles">
-                    <img src="/assets/opensubtitlepro_logo_wordmark.png" alt="OpenSubtitles" width="36" height="36"
-                      style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;">
+                  <div class="service-logo" title="Titrari.ro">
+                    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="border-radius: 8px;">
+                      <rect width="36" height="36" rx="8" fill="#1f7a4d"/>
+                      <text x="18" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">TR</text>
+                    </svg>
                   </div>
                   <div class="service-info">
                     <div class="service-name-row">
-                      <span class="service-name">OpenSubtitles</span>
-                      <span class="service-badge">Requires API Key</span>
+                      <span class="service-name">Titrari.ro</span>
+                      <span class="service-badge service-badge-optional">No API Key</span>
                     </div>
-                    <div class="service-desc">Official API with native language search support and detailed metadata</div>
+                    <div class="service-desc">Large Romanian subtitles site. Works without a key.</div>
                   </div>
                 </div>
                 <div class="service-right">
-                  <label class="compact-switch" title="Enable or disable OpenSubtitles">
-                    <input type="checkbox" id="svc-toggle-opensubtitles">
+                  <label class="compact-switch" title="Enable or disable Titrari.ro">
+                    <input type="checkbox" id="svc-toggle-titrari">
                     <span class="compact-slider"></span>
                   </label>
-                  <button class="btn-config-gear" id="btn-config-opensubtitles" title="Configure OpenSubtitles">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path
-                        d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
-                    </svg>
-                  </button>
                 </div>
               </div>
-
-              <!-- Row 2: SubDL (Starts OFF) -->
-              <div class="service-row" data-service-id="subdl">
+              <!-- Row 6: Subtitrari-noi.ro (Starts OFF) -->
+              <div class="service-row" data-service-id="subtitrarinoi">
                 <div class="service-left">
-                  <div class="service-logo" title="SubDL">
-                    <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/subdl.webp" alt="SubDL"
-                      width="36" height="36"
-                      style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;">
+                  <div class="service-logo" title="Subtitrari-noi.ro">
+                    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="border-radius: 8px;">
+                      <rect width="36" height="36" rx="8" fill="#7a3f9e"/>
+                      <text x="18" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">SN</text>
+                    </svg>
                   </div>
                   <div class="service-info">
                     <div class="service-name-row">
-                      <span class="service-name">SubDL</span>
-                      <span class="service-badge">Requires API Key</span>
+                      <span class="service-name">Subtitrari-noi.ro</span>
+                      <span class="service-badge service-badge-optional">No API Key</span>
                     </div>
-                    <div class="service-desc">Massive subtitles database with multiple languages and releases</div>
+                    <div class="service-desc">Romanian subtitles site. Works without a key.</div>
                   </div>
                 </div>
                 <div class="service-right">
-                  <label class="compact-switch" title="Enable or disable SubDL">
-                    <input type="checkbox" id="svc-toggle-subdl">
+                  <label class="compact-switch" title="Enable or disable Subtitrari-noi.ro">
+                    <input type="checkbox" id="svc-toggle-subtitrarinoi">
                     <span class="compact-slider"></span>
                   </label>
-                  <button class="btn-config-gear" id="btn-config-subdl" title="Configure SubDL">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path
-                        d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
-                    </svg>
-                  </button>
                 </div>
               </div>
-
-              <!-- Row 3: Subsource (Starts OFF) -->
-              <div class="service-row" data-service-id="subsource">
+              <!-- Row 7: YIFY (Starts OFF) -->
+              <div class="service-row" data-service-id="yify">
                 <div class="service-left">
-                  <div class="service-logo" title="Subsource">
-                    <img src="/assets/subSource_logo_wordmark.png" alt="Subsource" width="36" height="36"
-                      style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;">
+                  <div class="service-logo" title="YIFY">
+                    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="border-radius: 8px;">
+                      <rect width="36" height="36" rx="8" fill="#2b6cb0"/>
+                      <text x="18" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">YI</text>
+                    </svg>
                   </div>
                   <div class="service-info">
                     <div class="service-name-row">
-                      <span class="service-name">Subsource</span>
-                      <span class="service-badge">Requires API Key</span>
+                      <span class="service-name">YIFY</span>
+                      <span class="service-badge service-badge-optional">No API Key</span>
                     </div>
-                    <div class="service-desc">Collaborative community with verified subtitles for movies and series</div>
+                    <div class="service-desc">Film subtitles in many languages (yts-subs.com). Works without a key.</div>
                   </div>
                 </div>
                 <div class="service-right">
-                  <label class="compact-switch" title="Enable or disable Subsource">
-                    <input type="checkbox" id="svc-toggle-subsource">
+                  <label class="compact-switch" title="Enable or disable YIFY">
+                    <input type="checkbox" id="svc-toggle-yify">
                     <span class="compact-slider"></span>
                   </label>
-                  <button class="btn-config-gear" id="btn-config-subsource" title="Configure Subsource">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path
-                        d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
-                    </svg>
-                  </button>
                 </div>
               </div>
+              <!-- Row 8: Addic7ed (Starts OFF) -->
+              <div class="service-row" data-service-id="addic7ed">
+                <div class="service-left">
+                  <div class="service-logo" title="Addic7ed">
+                    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="border-radius: 8px;">
+                      <rect width="36" height="36" rx="8" fill="#b7791f"/>
+                      <text x="18" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">A7</text>
+                    </svg>
+                  </div>
+                  <div class="service-info">
+                    <div class="service-name-row">
+                      <span class="service-name">Addic7ed</span>
+                      <span class="service-badge service-badge-optional">No API Key</span>
+                    </div>
+                    <div class="service-desc">TV series subtitles made for exact releases. Works without a key.</div>
+                  </div>
+                </div>
+                <div class="service-right">
+                  <label class="compact-switch" title="Enable or disable Addic7ed">
+                    <input type="checkbox" id="svc-toggle-addic7ed">
+                    <span class="compact-slider"></span>
+                  </label>
+                </div>
+              </div>
+                </div>
+              </details>
 
+              <details class="service-group" data-group="optional">
+                <summary class="service-group-head"><span class="service-group-title">Optional API key</span><span class="service-group-count" data-count-for="optional"></span><span class="service-group-hint">work without a key, a key adds more</span></summary>
+                <div class="service-group-body">
               <!-- Row 4: RegieLive (Starts OFF, key optional) -->
               <div class="service-row" data-service-id="regielive">
                 <div class="service-left">
@@ -410,108 +426,97 @@
                   </button>
                 </div>
               </div>
+                </div>
+              </details>
 
-
-              <!-- Row 5: Titrari.ro (Starts OFF) -->
-              <div class="service-row" data-service-id="titrari">
+              <details class="service-group" data-group="required">
+                <summary class="service-group-head"><span class="service-group-title">Requires API key</span><span class="service-group-count" data-count-for="required"></span><span class="service-group-hint">need your own key</span></summary>
+                <div class="service-group-body">
+              <!-- Row 1: OpenSubtitles (Starts OFF) -->
+              <div class="service-row" data-service-id="opensubtitles">
                 <div class="service-left">
-                  <div class="service-logo" title="Titrari.ro">
-                    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="border-radius: 8px;">
-                      <rect width="36" height="36" rx="8" fill="#1f7a4d"/>
-                      <text x="18" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">TR</text>
-                    </svg>
+                  <div class="service-logo" title="OpenSubtitles">
+                    <img src="/assets/opensubtitlepro_logo_wordmark.png" alt="OpenSubtitles" width="36" height="36"
+                      style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;">
                   </div>
                   <div class="service-info">
                     <div class="service-name-row">
-                      <span class="service-name">Titrari.ro</span>
-                      <span class="service-badge service-badge-optional">No API Key</span>
+                      <span class="service-name">OpenSubtitles</span>
+                      <span class="service-badge">Requires API Key</span>
                     </div>
-                    <div class="service-desc">Large Romanian subtitles site. Works without a key.</div>
+                    <div class="service-desc">Official API with native language search support and detailed metadata</div>
                   </div>
                 </div>
                 <div class="service-right">
-                  <label class="compact-switch" title="Enable or disable Titrari.ro">
-                    <input type="checkbox" id="svc-toggle-titrari">
+                  <label class="compact-switch" title="Enable or disable OpenSubtitles">
+                    <input type="checkbox" id="svc-toggle-opensubtitles">
                     <span class="compact-slider"></span>
                   </label>
+                  <button class="btn-config-gear" id="btn-config-opensubtitles" title="Configure OpenSubtitles">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path
+                        d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
+                    </svg>
+                  </button>
                 </div>
               </div>
-
-              <!-- Row 6: Subtitrari-noi.ro (Starts OFF) -->
-              <div class="service-row" data-service-id="subtitrarinoi">
+              <!-- Row 2: SubDL (Starts OFF) -->
+              <div class="service-row" data-service-id="subdl">
                 <div class="service-left">
-                  <div class="service-logo" title="Subtitrari-noi.ro">
-                    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="border-radius: 8px;">
-                      <rect width="36" height="36" rx="8" fill="#7a3f9e"/>
-                      <text x="18" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">SN</text>
-                    </svg>
+                  <div class="service-logo" title="SubDL">
+                    <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/subdl.webp" alt="SubDL"
+                      width="36" height="36"
+                      style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;">
                   </div>
                   <div class="service-info">
                     <div class="service-name-row">
-                      <span class="service-name">Subtitrari-noi.ro</span>
-                      <span class="service-badge service-badge-optional">No API Key</span>
+                      <span class="service-name">SubDL</span>
+                      <span class="service-badge">Requires API Key</span>
                     </div>
-                    <div class="service-desc">Romanian subtitles site. Works without a key.</div>
+                    <div class="service-desc">Massive subtitles database with multiple languages and releases</div>
                   </div>
                 </div>
                 <div class="service-right">
-                  <label class="compact-switch" title="Enable or disable Subtitrari-noi.ro">
-                    <input type="checkbox" id="svc-toggle-subtitrarinoi">
+                  <label class="compact-switch" title="Enable or disable SubDL">
+                    <input type="checkbox" id="svc-toggle-subdl">
                     <span class="compact-slider"></span>
                   </label>
+                  <button class="btn-config-gear" id="btn-config-subdl" title="Configure SubDL">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path
+                        d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
+                    </svg>
+                  </button>
                 </div>
               </div>
-
-              <!-- Row 7: YIFY (Starts OFF) -->
-              <div class="service-row" data-service-id="yify">
+              <!-- Row 3: Subsource (Starts OFF) -->
+              <div class="service-row" data-service-id="subsource">
                 <div class="service-left">
-                  <div class="service-logo" title="YIFY">
-                    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="border-radius: 8px;">
-                      <rect width="36" height="36" rx="8" fill="#2b6cb0"/>
-                      <text x="18" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">YI</text>
-                    </svg>
+                  <div class="service-logo" title="Subsource">
+                    <img src="/assets/subSource_logo_wordmark.png" alt="Subsource" width="36" height="36"
+                      style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;">
                   </div>
                   <div class="service-info">
                     <div class="service-name-row">
-                      <span class="service-name">YIFY</span>
-                      <span class="service-badge service-badge-optional">No API Key</span>
+                      <span class="service-name">Subsource</span>
+                      <span class="service-badge">Requires API Key</span>
                     </div>
-                    <div class="service-desc">Film subtitles in many languages (yts-subs.com). Works without a key.</div>
+                    <div class="service-desc">Collaborative community with verified subtitles for movies and series</div>
                   </div>
                 </div>
                 <div class="service-right">
-                  <label class="compact-switch" title="Enable or disable YIFY">
-                    <input type="checkbox" id="svc-toggle-yify">
+                  <label class="compact-switch" title="Enable or disable Subsource">
+                    <input type="checkbox" id="svc-toggle-subsource">
                     <span class="compact-slider"></span>
                   </label>
-                </div>
-              </div>
-
-              <!-- Row 8: Addic7ed (Starts OFF) -->
-              <div class="service-row" data-service-id="addic7ed">
-                <div class="service-left">
-                  <div class="service-logo" title="Addic7ed">
-                    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="border-radius: 8px;">
-                      <rect width="36" height="36" rx="8" fill="#b7791f"/>
-                      <text x="18" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">A7</text>
+                  <button class="btn-config-gear" id="btn-config-subsource" title="Configure Subsource">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path
+                        d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
                     </svg>
-                  </div>
-                  <div class="service-info">
-                    <div class="service-name-row">
-                      <span class="service-name">Addic7ed</span>
-                      <span class="service-badge service-badge-optional">No API Key</span>
-                    </div>
-                    <div class="service-desc">TV series subtitles made for exact releases. Works without a key.</div>
-                  </div>
-                </div>
-                <div class="service-right">
-                  <label class="compact-switch" title="Enable or disable Addic7ed">
-                    <input type="checkbox" id="svc-toggle-addic7ed">
-                    <span class="compact-slider"></span>
-                  </label>
+                  </button>
                 </div>
               </div>
-
               <!-- Row 9: Wyzie (Starts OFF) -->
               <div class="service-row" data-service-id="wyzie">
                 <div class="service-left">
@@ -542,6 +547,9 @@
                   </button>
                 </div>
               </div>
+                </div>
+              </details>
+
             </div>
           </div>
         </section>
@@ -581,6 +589,41 @@
             </div>
             <div id="import-validation-msg" class="validation-feedback"></div>
           </div>
+
+          <!-- Recommended addons (collapsible) -->
+          <details class="service-group recommended-addons">
+            <summary class="service-group-head"><span class="service-group-title">Recommended addons by the developer</span><span class="service-group-hint">3 addons</span></summary>
+            <div class="service-group-body">
+              <p class="recommended-note">Configure the addon on its page, copy the manifest link it gives you, then paste it in "Add addon by Manifest URL" above.</p>
+              <div class="service-row">
+                <div class="service-info">
+                  <div class="service-name-row"><span class="service-name">Subs.ro</span><span class="service-badge service-badge-optional">Needs configuration</span></div>
+                  <div class="service-desc">Romanian subtitles from Subs.ro.</div>
+                </div>
+                <div class="service-right">
+                  <a class="btn btn-outline btn-sm" href="https://cdcd7719a6b3-stremio-subs-ro.baby-beamup.club/" target="_blank" rel="noopener noreferrer">Configure</a>
+                </div>
+              </div>
+              <div class="service-row">
+                <div class="service-info">
+                  <div class="service-name-row"><span class="service-name">OpenSubtitles PRO</span><span class="service-badge service-badge-optional">Needs configuration</span></div>
+                  <div class="service-desc">OpenSubtitles through the community addon (downloads through its own servers).</div>
+                </div>
+                <div class="service-right">
+                  <a class="btn btn-outline btn-sm" href="https://opensubtitlesv3-pro.dexter21767.com/configure/" target="_blank" rel="noopener noreferrer">Configure</a>
+                </div>
+              </div>
+              <div class="service-row">
+                <div class="service-info">
+                  <div class="service-name-row"><span class="service-name">OpenSubtitles v3</span><span class="service-badge service-badge-optional">No configuration</span></div>
+                  <div class="service-desc">The official OpenSubtitles addon of Stremio.</div>
+                </div>
+                <div class="service-right">
+                  <button class="btn btn-primary btn-sm" type="button" data-recommended-manifest="https://opensubtitles-v3.strem.io/manifest.json">Add</button>
+                </div>
+              </div>
+            </div>
+          </details>
 
           <!-- Addons Search & Filter Bar -->
           <div class="addons-filter-bar">
@@ -1372,6 +1415,10 @@
                 <button class="dbg-btn" id="dbg-log-pause" type="button">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" id="dbg-pause-icon"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
                   <span id="dbg-pause-label">Pause</span>
+                </button>
+                <button class="dbg-btn" id="dbg-log-copy" type="button" title="Copy every line shown to the clipboard">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"/></svg>
+                  <span id="dbg-copy-label">Copy logs</span>
                 </button>
                 <button class="dbg-btn" id="dbg-log-clear" type="button">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
