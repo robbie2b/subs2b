@@ -60,6 +60,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   (cu toate liniile și fără liniile singure la capete: max 3 linii la peste 2 min de rest, `withoutLoneEdges`); ambele
   ghicitori doar ADAUGĂ rapoarte de încercat. Toate liniile se aliniază și se mută în continuare. O decizie apare o
   singură dată în Debug. Caz: Gone Baby Gone (detalii mai jos).
+  Test live 08:37: TiMELORDS „shifted −3.4 s ×0.999”, 0.98 (înainte −7.9 s ×1, 0.82), 3.1 s. Confirmat de utilizator: sincronizat.
 - **v1.5.0 (deploy 2026-10-02):** (a doua cifră schimbată la cererea utilizatorului)
   - Clasament: o subtitrare cu numele exact al release-ului fișierului (același grup, sursă, serviciu, ediție, episod;
     orice rezoluție la WEB/TV, aceeași clasă UHD/HD la disc) intră în nivelul hash match-ului; între ele decide
