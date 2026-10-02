@@ -223,11 +223,22 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   sunt doar „served again from memory”).
 
 ## De făcut (în ordinea discutată)
-- **Pe ramură (nedeployat, pentru 1.5.2):** SRT trimis ca `application/x-subrip` (nu `text/plain`), pentru eticheta „PGS”
-  de la prima subtitrare (de verificat pe telefon după deploy, ex. Peacemaker).
-- **Următorul (discutat, aprobat ca idee):** listele goale / incomplete (o sursă cu eroare sau peste timp; „n-am nimic”
-  nu contează) ținute 2 min și pe server, și în Stremio (`Cache-Control`); listele bune 30 min; eroare = `no-store`.
-  Ajută și la Addic7ed (căutarea lentă din fundal apare la a doua deschidere).
+- **Pe ramură (nedeployat, pentru 1.5.2):**
+  - SRT trimis ca `application/x-subrip` (nu `text/plain`), pentru eticheta „PGS” de la prima subtitrare (de verificat
+    pe telefon după deploy, ex. Peacemaker).
+  - Liste ținute 2 min (`SHORT_CACHE_MINUTES`) și pe server, și în Stremio (`cacheMaxAge` + `Cache-Control`) când o sursă
+    a dat eroare / a depășit timpul sau nu e nicio subtitrare în limbile alese; altfel `cacheTtlMinutes` (30); eroare =
+    `no-store`. Log `[CACHE] kept 2 min only: …`.
+  - Titlu lipit de rezoluție („amb-friends720p”, „1080pBluRay”) despărțit la parsare; „friends720p” nu mai e grup.
+  - Debug: toate subtitrările respinse (max 60, pliate), nu doar primele 12.
+  - Debug: jurnal de descărcări eșuate (`utils/downloadJournal.ts`, tabela `download_failures`, 30 zile, citit în fundal
+    la pornire; `/debug/downloads.json`): eșecuri de la `/sub/proxy`, OpenSubtitles, RegieLive, convert (orice 5xx) și
+    din linkurile cu rezerve („recovered” când o copie a mers). Verificat local pe Postgres 16 (rămâne după repornire, RLS pornit).
+  - Debug: „SCORING RULES” → Measure (`/debug/rules.json`, `utils/ruleImpact.ts`): fiecare regulă opțională e inversată
+    pe clasamentele salvate (ultimele 1000 cereri cu nume de fișier) și se numără de câte ori s-ar schimba prima
+    subtitrare. `exactTier` e acum regulă (pornită). Pe datele live (75 cereri, 2026-10-02): fuzzyGroup 0, sourceTiers 0,
+    multiVariant 0, exactTier 6 (Homecoming: Subs.ro NTb 1080p în loc de hash-ul OpenSubtitles 720p / XviD-AFG).
+    Limită: se re-clasează doar ce e salvat (primele 12 + respinsele).
 - **Pentru mai târziu (cererea utilizatorului, 2026-10-02): „slot” ca la Stremio Community Subtitles.** Primul loc din listă
   = link fix către server (`no-store`); serverul trimite ce e ales acum. Pagină „Now playing” în interfață: alegi altă
   subtitrare dintre cele găsite și/sau muți manual (+/− s), fără să cauți în Stremio; alegerea ținută minte pe fișier și
@@ -238,7 +249,6 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 - Subsync pe REMUX: încredere doar în referințe REMUX (sau ale grupului fișierului); altfel subtitrarea neschimbată.
 - Limită de timp pentru calculul suplimentar (verificarea pe bucăți + alternative) când prima verificare a durat mult.
 - Semn vizibil în Stremio când serverul trimite altă subtitrare decât cea aleasă („replaced by”), legat de mesajul custom.
-- Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
 - „PGS” la prima subtitrare (fix pe ramură, vezi mai sus). Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.
   Direcție: linkuri care se termină în `.srt`, cu `application/x-subrip`.
   Nou (2026-10-01, 1.4.8, telefon): Peacemaker S01E01 2160p HMAX WEB-DL CRU → prima subtitrare a addonului apare „PGS”,
@@ -246,9 +256,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   Prima a fost pregătită din timp (servită în 0 ms, −5 s, 2 referințe). Răspunsul are `Content-Type: text/plain`.
   De verificat ce face Stremio diferit cu prima (auto-selectată) și dacă `application/x-subrip` schimbă eticheta.
 - Mesaj custom la începutul filmului (oprit / tehnic / text propriu; `{\an8}` doar dacă nu există gol; de testat pe dispozitive).
-- Cache scurt (1–2 min) pentru răspunsuri goale sau incomplete, normal (30 min) pentru liste bune.
 - Feedback la alegerea manuală a altei subtitrări (pentru clasament).
-- Măsurarea impactului regulilor de scor pe datele Debug adunate.
 
 ## Limitări în cloud
 - Nu există Docker și nici corpusul local de benchmark.
