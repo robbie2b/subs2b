@@ -223,11 +223,23 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   sunt doar „served again from memory”).
 
 ## De făcut (în ordinea discutată)
+- **Pe ramură (nedeployat, pentru 1.5.2):** SRT trimis ca `application/x-subrip` (nu `text/plain`), pentru eticheta „PGS”
+  de la prima subtitrare (de verificat pe telefon după deploy, ex. Peacemaker).
+- **Următorul (discutat, aprobat ca idee):** listele goale / incomplete (o sursă cu eroare sau peste timp; „n-am nimic”
+  nu contează) ținute 2 min și pe server, și în Stremio (`Cache-Control`); listele bune 30 min; eroare = `no-store`.
+  Ajută și la Addic7ed (căutarea lentă din fundal apare la a doua deschidere).
+- **Pentru mai târziu (cererea utilizatorului, 2026-10-02): „slot” ca la Stremio Community Subtitles.** Primul loc din listă
+  = link fix către server (`no-store`); serverul trimite ce e ales acum. Pagină „Now playing” în interfață: alegi altă
+  subtitrare dintre cele găsite și/sau muți manual (+/− s), fără să cauți în Stremio; alegerea ținută minte pe fișier și
+  folosită la clasament (vezi „Feedback la alegerea manuală”). Restul listei rămâne la fel. **Întâi o probă:** un slot
+  care își schimbă singur decalajul, ca să vedem dacă/când Stremio reîncarcă subtitrarea (telefon și TV); din loguri,
+  playerul o cere uneori de mai multe ori (The Chaser 13× în 2 min, Gone Baby Gone 3×). Dacă nu reîncarcă singur,
+  schimbarea se vede după oprit/pornit subtitrarea sau derulare.
 - Subsync pe REMUX: încredere doar în referințe REMUX (sau ale grupului fișierului); altfel subtitrarea neschimbată.
 - Limită de timp pentru calculul suplimentar (verificarea pe bucăți + alternative) când prima verificare a durat mult.
 - Semn vizibil în Stremio când serverul trimite altă subtitrare decât cea aleasă („replaced by”), legat de mesajul custom.
 - Arhive non-zip: RAR există doar la RegieLive; de adăugat în `/sub/proxy`, plus jurnal permanent al eșecurilor de descărcare în Debug.
-- „PGS” la prima subtitrare. Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.
+- „PGS” la prima subtitrare (fix pe ramură, vezi mai sus). Ipoteze: piste PGS din REMUX, sau linkuri fără `.srt` / MIME `text/plain`.
   Direcție: linkuri care se termină în `.srt`, cu `application/x-subrip`.
   Nou (2026-10-01, 1.4.8, telefon): Peacemaker S01E01 2160p HMAX WEB-DL CRU → prima subtitrare a addonului apare „PGS”,
   următoarele 4 „SRT”. Toate 5 sunt linkuri `/sub/aligned/<token>.srt` (deci nu pista video și nu lipsa `.srt`).
