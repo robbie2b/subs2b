@@ -66,8 +66,18 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   descarcă de pe Render o pagină de pe site-urile candidate (titrari.ro, subtitrari-noi.ro, yifysubtitles.*/yts-subs.com,
   addic7ed.com, wyzie.ru/wyzie.io) și arată status, antete, corp; redirecturile trebuie să rămână pe ele.
   Log nou: `[SOURCES] saved source blocks read in X ms` (pe 1.4.9 tot apărea „not read within 5 s” fără blocări în DB).
-  Următorul pas: 5 surse noi ca servicii (cerute de utilizator): Titrari.ro, Subtitrari-noi.ro, YIFY, Addic7ed, Wyzie
-  (`sub.wyzie.io`), scrise după paginile reale văzute cu probe.
+- Pe ramură (pentru 1.4.12): **5 servicii noi**, toate pornite oprite (Services):
+  - `titrari.ts`: căutare după IMDb (`cautamainaltaparte&z8=1|-1&z5=`), rezultate despărțite după celula de imagine,
+    limba din „[ Romana ]”, release din „Comentariu”; descărcare RAR/ZIP `get.php?id=` cu Referer.
+  - `subtitrariNoi.ts`: POST `paginare_filme.php` după titlu (Cinemeta), păstrate doar cele cu IMDb-ul cerut; ZIP.
+  - `yify.ts`: `yts-subs.com/movie-imdb/tt…`, doar filme, toate limbile; ZIP de pe `subtitles.yts-subs.com`.
+  - `addic7ed.ts`: doar seriale; `search.php` (lent, ~7 s; continuă după limita furnizorului, ținut minte 7 zile),
+    apoi pagina episodului; release `Show.S01E02.<versiune>`; descărcare cu Referer (pagina episodului, `ref=`).
+  - `wyzie.ts`: API JSON `sub.wyzie.io/search?source=all&format=srt,vtt&key=`; 400 „No subtitles found” = gol;
+    traducerile AI lăsate deoparte. Cheie gratuită: 1.000 cereri/zi (căutare + fiecare descărcare). Verificare cheie în server.
+  - `/sub/proxy`: gazdele noi permise, Referer pe site (`REFERER_REQUIRED`, `ref=` doar de pe același site), RAR și
+    cod 1250 pentru site-urile românești (ca la RegieLive), identitate de browser pentru site-urile citite ca pagini.
+  - Teste pe pagini reale salvate: `test/fixtures/sources/`, `test/newSources.test.ts`.
 - **v1.4.9 (deploy 2026-10-02):** tabele create fără să aștepte blocări (`dbTools.ensureTableSafely`), `query_timeout` 20 s,
   pagina Debug `db.json`, **RLS pornit pe toate tabelele** (Supabase Advisor: „RLS Disabled in Public”, CRITICAL; utilizatorul
   l-a pornit manual în SQL Editor pe 2026-10-02, codul îl pornește doar dacă e oprit, fără blocare). Serverul e proprietarul

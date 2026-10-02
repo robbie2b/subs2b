@@ -75,4 +75,20 @@ export abstract class BaseSubtitleProvider implements SubtitleProvider {
       }
     });
   }
+
+  protected async httpPost<T = unknown>(
+    url: string,
+    data: unknown,
+    options: AxiosRequestConfig = {},
+    signal?: AbortSignal
+  ): Promise<AxiosResponse<T>> {
+    return axios.post<T>(url, data, {
+      ...options,
+      signal,
+      headers: {
+        'User-Agent': `${USER_AGENT} (Stremio Addon)`,
+        ...(options.headers || {})
+      }
+    });
+  }
 }

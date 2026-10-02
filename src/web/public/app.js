@@ -47,14 +47,24 @@ const DEFAULT_CONFIG = {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
     'subsource': { enabled: false, apiKey: '' },
-    'regielive': { enabled: false, apiKey: '' }
+    'regielive': { enabled: false, apiKey: '' },
+    'titrari': { enabled: false, apiKey: '' },
+    'subtitrarinoi': { enabled: false, apiKey: '' },
+    'yify': { enabled: false, apiKey: '' },
+    'addic7ed': { enabled: false, apiKey: '' },
+    'wyzie': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
     'subdl',
     'subsource',
-    'regielive'
+    'regielive',
+    'titrari',
+    'subtitrarinoi',
+    'yify',
+    'addic7ed',
+    'wyzie'
   ],
   languages: ['pob', 'por', 'eng'],
   allowUnknownLanguages: false,
@@ -80,7 +90,7 @@ const DEFAULT_CONFIG = {
 };
 
 // Services that work without a personal key (the key is optional)
-const KEY_OPTIONAL_SERVICES = new Set(['regielive']);
+const KEY_OPTIONAL_SERVICES = new Set(['regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed']);
 
 const SERVICES_META = {
   opensubtitles: {
@@ -92,6 +102,15 @@ const SERVICES_META = {
     id: 'regielive',
     name: 'RegieLive',
     helpText: 'Works without a key (a shared one is used). To get your own request budget, ask RegieLive for a personal API key and paste it here; it is optional.'
+  },
+  titrari: { id: 'titrari', name: 'Titrari.ro', helpText: 'No key needed.' },
+  subtitrarinoi: { id: 'subtitrarinoi', name: 'Subtitrari-noi.ro', helpText: 'No key needed.' },
+  yify: { id: 'yify', name: 'YIFY', helpText: 'No key needed. Films only.' },
+  addic7ed: { id: 'addic7ed', name: 'Addic7ed', helpText: 'No key needed. TV series only.' },
+  wyzie: {
+    id: 'wyzie',
+    name: 'Wyzie',
+    helpText: 'Don\'t have a key? <a href="https://store.wyzie.io/redeem" target="_blank" rel="noopener noreferrer">Get a free Wyzie key</a> (1,000 requests a day).'
   },
   subdl: {
     id: 'subdl',
@@ -823,7 +842,7 @@ function renderHomeBranding() {
 }
 
 function setupServicesActions() {
-  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
 
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
@@ -1064,7 +1083,7 @@ function triggerAutoValidation(serviceId, apiKey) {
 }
 
 function renderServicesState() {
-  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
     if (toggle) {
@@ -2069,7 +2088,7 @@ function renderFiltersPriority() {
 
   const activeItemsMap = new Map();
 
-  const nativeKeys = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
+  const nativeKeys = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
   for (const id of nativeKeys) {
     const prov = state.config.providers[id];
     // ONLY show native services that are enabled AND have an API key
@@ -2340,7 +2359,7 @@ function setupInstallPageActions() {
 
     // Check credentials on active services
     const missingCreds = [];
-    const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
+    const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
     for (const id of nativeIds) {
       const prov = state.config.providers[id];
       if (prov && prov.enabled === true && !KEY_OPTIONAL_SERVICES.has(id) && (!prov.apiKey || prov.apiKey.trim() === '')) {
@@ -2485,7 +2504,7 @@ function setupInstallPageActions() {
 
 async function saveCurrentConfiguration(andShowInstall = false) {
   const missingCreds = [];
-  const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive'];
+  const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
   for (const id of nativeIds) {
     const prov = state.config.providers[id];
     if (prov && prov.enabled === true && !KEY_OPTIONAL_SERVICES.has(id)) {

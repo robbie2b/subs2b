@@ -13,6 +13,7 @@ import { configStorage } from '../storage/configStore';
 import { UserConfig } from '../types/config';
 import { USER_AGENT, APP_VERSION } from '../config/version';
 import { isBlocked, noteRefusal, recoveryFromMessage, statusOf } from '../utils/sourceHealth';
+import { BROWSER_UA } from '../utils/html';
 
 /** A subtitle is a small text file: anything bigger inside an archive is ignored (protects the server's memory) */
 const MAX_SUBTITLE_BYTES = 10 * 1024 * 1024;
@@ -20,7 +21,25 @@ const MAX_SUBTITLE_BYTES = 10 * 1024 * 1024;
 const BROWSER_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) subs2b/${APP_VERSION}`;
 
 /** Sites the generic proxy is allowed to download from (prevents it from being used as an open proxy) */
-const ALLOWED_DOWNLOAD_HOSTS = ['subdl.com', 'subsource.net', 'opensubtitles.org', 'opensubtitles.com', 'strem.io'];
+const ALLOWED_DOWNLOAD_HOSTS = [
+  'subdl.com', 'subsource.net', 'opensubtitles.org', 'opensubtitles.com', 'strem.io',
+  'titrari.ro', 'subtitrari-noi.ro', 'yts-subs.com', 'addic7ed.com', 'wyzie.io', 'wyzie.ru'
+];
+
+/** Sites that only serve a download asked "from their own pages" (a Referer of the same site) */
+const REFERER_REQUIRED: Record<string, string> = {
+  'titrari.ro': 'https://www.titrari.ro/',
+  'addic7ed.com': 'https://www.addic7ed.com/'
+};
+
+/** Sites without an API, read as web pages */
+const WEB_PAGE_SITES = ['titrari.ro', 'subtitrari-noi.ro', 'yts-subs.com', 'addic7ed.com'];
+
+/** Romanian sites: an old file without a byte order mark is in the Central European code page (ș, ț, ă) */
+const ROMANIAN_HOSTS = ['titrari.ro', 'subtitrari-noi.ro'];
+
+const siteOf = (host: string, list: string[]): string | undefined =>
+  list.find(h => host === h || host.endsWith('.' + h));
 
 function isAllowedHost(hostname: string, extraHosts: string[] = []): boolean {
   const host = hostname.toLowerCase();
@@ -349,13 +368,23 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
 
   try {
     const requestHeaders: Record<string, string> = {
-      'User-Agent': BROWSER_USER_AGENT,
+      // the sites read as web pages answer a common browser as they answer people (checked from Render)
+      'User-Agent': siteOf(new URL(targetUrl).hostname.toLowerCase(), WEB_PAGE_SITES) ? BROWSER_UA : BROWSER_USER_AGENT,
       'Accept': '*/*'
     };
     const apiKey = (req.query.apiKey as string) || (req.query.key as string);
     if (apiKey) {
       requestHeaders['X-API-Key'] = apiKey;
       requestHeaders['Api-Key'] = apiKey;
+    }
+    // a Referer: the page given with the link (same site only) or the site's home page, for the sites that need one
+    const targetHost = new URL(targetUrl).hostname.toLowerCase();
+    const refererSite = siteOf(targetHost, Object.keys(REFERER_REQUIRED));
+    if (refererSite) {
+      const given = typeof req.query.ref === 'string' ? req.query.ref : '';
+      let sameSite = false;
+      try { sameSite = Boolean(given) && siteOf(new URL(given).hostname.toLowerCase(), [refererSite]) === refererSite; } catch { sameSite = false; }
+      requestHeaders['Referer'] = sameSite ? given : REFERER_REQUIRED[refererSite];
     }
 
     const upstreamRes = await axios.get<ArrayBuffer>(targetUrl, {
@@ -374,8 +403,21 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
       episode: toNumber(req.query.episode),
       videoFilename: typeof req.query.vf === 'string' ? req.query.vf : null
     };
-    const { buffer: cleanBuffer, formatHint, filename: extractedFilename } = decompressBuffer(Buffer.from(upstreamRes.data), pick);
-    const validation = validateAndFormatSubtitle(toCleanUtf8(cleanBuffer), formatHint || preferredFormat);
+    const raw = Buffer.from(upstreamRes.data);
+    const romanian = Boolean(siteOf(targetHost, ROMANIAN_HOSTS));
+    const isRar = raw.length > 4 && raw[0] === 0x52 && raw[1] === 0x61 && raw[2] === 0x72 && raw[3] === 0x21;
+    let validation: ReturnType<typeof validateAndFormatSubtitle>;
+    let extractedFilename: string | undefined;
+    if (isRar || romanian) {
+      // RAR archives (Titrari.ro) and the Romanian sites' old files: the same handling as RegieLive's
+      const r = await subtitleFromRegieLiveArchive(raw, pick);
+      validation = { valid: r.valid, content: r.content, format: 'srt', reason: r.reason } as ReturnType<typeof validateAndFormatSubtitle>;
+      extractedFilename = r.filename;
+    } else {
+      const { buffer: cleanBuffer, formatHint, filename } = decompressBuffer(raw, pick);
+      validation = validateAndFormatSubtitle(toCleanUtf8(cleanBuffer), formatHint || preferredFormat);
+      extractedFilename = filename;
+    }
 
     if (!validation.valid) {
       Logger.warn(`Invalid subtitle delivered from ${new URL(targetUrl).hostname}: ${validation.reason}`);

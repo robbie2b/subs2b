@@ -90,6 +90,22 @@ const KEY_VALIDATORS: Record<string, (apiKey: string) => Promise<KeyValidation>>
     }
   },
 
+  async wyzie(apiKey) {
+    try {
+      const res = await axios.get('https://sub.wyzie.io/search', {
+        params: { id: 'tt0133093', language: 'en', key: apiKey },
+        timeout: 10000,
+        validateStatus: () => true
+      });
+      if (res.status === 200 && Array.isArray(res.data)) return { valid: true };
+      if (res.status === 400 && /no subtitles/i.test(String(res.data?.message || ''))) return { valid: true };
+      if (res.status === 429) return { valid: true };
+      return { valid: false, error: `Wyzie did not accept this key${res.data?.message ? `: ${res.data.message}` : ''}.` };
+    } catch (err: any) {
+      return { valid: false, error: `Could not reach Wyzie: ${err?.code || err?.message || 'error'}.` };
+    }
+  },
+
   async subsource(apiKey) {
     if (apiKey.length < 6) {
       return { valid: false, error: 'Invalid API key.' };

@@ -12,14 +12,24 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'opensubtitles': { enabled: false, apiKey: '' },
     'subdl': { enabled: false, apiKey: '' },
     'subsource': { enabled: false, apiKey: '' },
-    'regielive': { enabled: false, apiKey: '' }
+    'regielive': { enabled: false, apiKey: '' },
+    'titrari': { enabled: false, apiKey: '' },
+    'subtitrarinoi': { enabled: false, apiKey: '' },
+    'yify': { enabled: false, apiKey: '' },
+    'addic7ed': { enabled: false, apiKey: '' },
+    'wyzie': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
     'opensubtitles',
     'subdl',
     'subsource',
-    'regielive'
+    'regielive',
+    'titrari',
+    'subtitrarinoi',
+    'yify',
+    'addic7ed',
+    'wyzie'
   ],
   languages: ['pob', 'por', 'eng'],
   allowUnknownLanguages: false,
@@ -56,8 +66,8 @@ function upgradeLegacyName(name: string): string {
 }
 const LEGACY_LOGO = '/assets/AIOsubs_logo_wordmark.png';
 
-/** Providers that work without a personal API key (a shared one is used) */
-const KEY_OPTIONAL_PROVIDERS = ['regielive'];
+/** Providers that work without a personal API key (a shared one, or none at all) */
+const KEY_OPTIONAL_PROVIDERS = ['regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed'];
 
 /**
  * Decodes a configuration passed directly in the URL (base64 JSON). Kept for old install links;
@@ -181,7 +191,12 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
       'opensubtitles': { enabled: false, apiKey: '' },
       'subdl': { enabled: false, apiKey: '' },
       'subsource': { enabled: false, apiKey: '' },
-      'regielive': { enabled: false, apiKey: '' }
+      'regielive': { enabled: false, apiKey: '' },
+      'titrari': { enabled: false, apiKey: '' },
+      'subtitrarinoi': { enabled: false, apiKey: '' },
+      'yify': { enabled: false, apiKey: '' },
+      'addic7ed': { enabled: false, apiKey: '' },
+      'wyzie': { enabled: false, apiKey: '' }
     },
     customAddons,
     providerPriority,

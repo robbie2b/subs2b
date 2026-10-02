@@ -4,6 +4,11 @@ import { OpenSubtitlesProvider } from './openSubtitles';
 import { SubDLProvider } from './subdl';
 import { SubsourceProvider } from './subsource';
 import { RegieLiveProvider } from './regielive';
+import { TitrariProvider } from './titrari';
+import { SubtitrariNoiProvider } from './subtitrariNoi';
+import { YifyProvider } from './yify';
+import { Addic7edProvider } from './addic7ed';
+import { WyzieProvider } from './wyzie';
 import { GenericStremioAddonProvider } from './genericStremioAddon';
 import { Logger } from '../utils/logger';
 import { ENV } from '../config/env';
@@ -12,7 +17,12 @@ const BUILTIN_PROVIDERS: SubtitleProvider[] = [
   new OpenSubtitlesProvider(),
   new SubDLProvider(),
   new SubsourceProvider(),
-  new RegieLiveProvider()
+  new RegieLiveProvider(),
+  new TitrariProvider(),
+  new SubtitrariNoiProvider(),
+  new YifyProvider(),
+  new Addic7edProvider(),
+  new WyzieProvider()
 ];
 
 function isOpenSubtitlesAddon(id: string, name: string): boolean {
