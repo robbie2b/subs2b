@@ -62,6 +62,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Priority, apoi punctajul (`exactNameMatch` în scorer.ts, motiv „EXACT NAME MATCH”). Caz: Homecoming S01E01–E04
     (fișier 1080p AMZN WEB-DL NTb): Subs.ro „…1080p…NTb” pierdea în fața hash match-urilor OpenSubtitles „720p…NTb”,
     „XviD-AFG”, „iNSiDiOUS”. Subtitrările forced / traduse automat nu intră în nivel prin nume.
+    Test live 08:15 (Homecoming S01E05): #1 Subs.ro „…1080p…NTb” (126, EXACT NAME MATCH), #2 OpenSubtitles hash „720p…NTb” (307.5). Confirmat de utilizator.
   - Subsync: referința de la grupul fișierului decide prima (Gone Baby Gone, mai jos).
   - Addic7ed nu mai e scos din lista Priority salvată (regulă veche, de când fusese eliminat).
   - Interfață: Services grupate pliabil („No API key”, „Optional API key”, „Requires API key”, cu „x of y on”);
