@@ -56,6 +56,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.4.10 (deploy 2026-10-02):** unealta Debug `/<uuid>/debug/probe.json?url=…[&as=addon]` (`src/proxy/siteProbe.ts`):
+  descarcă de pe Render o pagină de pe site-urile candidate (titrari.ro, subtitrari-noi.ro, yifysubtitles.*/yts-subs.com,
+  addic7ed.com, wyzie.ru/wyzie.io) și arată status, antete, corp; redirecturile trebuie să rămână pe ele.
+  Log nou: `[SOURCES] saved source blocks read in X ms` (pe 1.4.9 tot apărea „not read within 5 s” fără blocări în DB).
+  Următorul pas: 5 surse noi ca servicii (cerute de utilizator): Titrari.ro, Subtitrari-noi.ro, YIFY, Addic7ed, Wyzie
+  (`sub.wyzie.io`), scrise după paginile reale văzute cu probe.
 - **v1.4.9 (deploy 2026-10-02):** tabele create fără să aștepte blocări (`dbTools.ensureTableSafely`), `query_timeout` 20 s,
   pagina Debug `db.json`, **RLS pornit pe toate tabelele** (Supabase Advisor: „RLS Disabled in Public”, CRITICAL; utilizatorul
   l-a pornit manual în SQL Editor pe 2026-10-02, codul îl pornește doar dacă e oprit, fără blocare). Serverul e proprietarul
@@ -89,7 +95,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.9 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.10 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.

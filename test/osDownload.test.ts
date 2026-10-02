@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { handleOpenSubtitlesRestDownload, serverCanDownload } from '../src/proxy/subtitleProxy';
 import { clearSourceHealth, isBlocked, recoveryFromMessage } from '../src/utils/sourceHealth';
+import { probeAllowed } from '../src/proxy/siteProbe';
 
 // OpenSubtitles download: the order of the sources and the reasons that reach the log
 
@@ -100,6 +101,12 @@ async function main(): Promise<void> {
 
   console.log = realLog;
   console.error = realError;
+
+  // the site probe (Debug) only fetches the candidate subtitle sites
+  check(probeAllowed('https://www.titrari.ro/index.php?page=cautare') && probeAllowed('https://sub.wyzie.ru/search?id=tt1') && probeAllowed('https://www.addic7ed.com/'),
+    'the probe accepts the candidate sites');
+  check(!probeAllowed('https://169.254.169.254/latest') && !probeAllowed('https://evil-titrari.ro/') && !probeAllowed('file:///etc/passwd') && !probeAllowed('https://titrari.ro.evil.com/'),
+    'the probe refuses any other address (not an open proxy)');
   if (failures) {
     console.error(`${failures} OpenSubtitles download check(s) failed`);
     process.exit(1);

@@ -35,6 +35,7 @@ async function ensureTable(): Promise<boolean> {
 
 /** Reads the refusals still running and keeps the next ones. Never throws; when the table is not ready, tries again later. */
 export async function startSourceBlockStore(): Promise<void> {
+  const started = Date.now();
   try {
     if (!(await ensureTable())) {
       setTimeout(() => { void startSourceBlockStore(); }, 10 * 60 * 1000).unref();
@@ -43,7 +44,7 @@ export async function startSourceBlockStore(): Promise<void> {
     const pool = await configStorage.getPool();
     const res = await pool!.query(`SELECT source, until, reason FROM source_blocks WHERE until > NOW()`);
     restoreRefusals(res.rows.map((r: any) => ({ source: r.source, until: new Date(r.until).getTime(), reason: r.reason })));
-    if (res.rows.length) Logger.info(`[SOURCES] ${res.rows.length} source(s) still refusing this server, remembered from before the restart`, { sources: res.rows.map((r: any) => r.source) });
+    Logger.info(`[SOURCES] saved source blocks read in ${Date.now() - started} ms: ${res.rows.length} still running`, { sources: res.rows.map((r: any) => r.source) });
     attachRefusalStore({
       save(source, until, reason) {
         void pool!.query(

@@ -1,6 +1,6 @@
 {
   "name": "subs2b",
-  "version": "1.4.9",
+  "version": "1.4.10",
   "description": "Stremio & Nuvio subtitle aggregator: searches several providers and puts the subtitle that best matches the playing file first.",
   "main": "dist/index.js",
   "scripts": {
