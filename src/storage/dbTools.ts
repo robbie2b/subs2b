@@ -11,18 +11,31 @@ import type { Pool } from 'pg';
 
 const LOCK_WAIT = '5s';
 
+/**
+ * SQL that switches Row Level Security on for a table, only when it is off (then nothing is locked). Supabase serves
+ * every table of the public schema through its web API; with RLS on and no policy, that API cannot read or change
+ * the table, while this server (the tables' owner) is not affected.
+ */
+export function enableRlsSql(table: string): string {
+  return `DO $rls$ BEGIN
+    IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.${table}'::regclass) THEN
+      ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;
+    END IF;
+  END $rls$`;
+}
+
 /** Does the table exist (committed)? */
 export async function tableExists(pool: Pool, table: string): Promise<boolean> {
   const res = await pool.query('SELECT to_regclass($1) IS NOT NULL AS ok', [`public.${table}`]);
   return res.rows[0]?.ok === true;
 }
 
-/** Creates a table (and its indexes) unless it exists; never waits more than 5 s for a lock */
+/** Creates a table (and its indexes, with RLS on) unless it exists; never waits more than 5 s for a lock */
 export async function ensureTableSafely(pool: Pool, table: string, ddl: string): Promise<void> {
   if (await tableExists(pool, table)) return;
   const client = await pool.connect();
   try {
-    await client.query(`BEGIN; SET LOCAL lock_timeout = '${LOCK_WAIT}'; ${ddl}; COMMIT;`);
+    await client.query(`BEGIN; SET LOCAL lock_timeout = '${LOCK_WAIT}'; ${ddl}; ${enableRlsSql(table)}; COMMIT;`);
     client.release();
   } catch (err) {
     // the connection is left inside the failed transaction (or still busy, after a query timeout): it is closed,

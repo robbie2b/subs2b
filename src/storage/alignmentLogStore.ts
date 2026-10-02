@@ -1,4 +1,5 @@
 import { configStorage } from './configStore';
+import { enableRlsSql } from './dbTools';
 import { ownerOf } from './usageStore';
 import { Logger } from '../utils/logger';
 
@@ -58,6 +59,7 @@ async function ensureTable(): Promise<boolean> {
           ALTER TABLE subsync_decisions ADD COLUMN IF NOT EXISTS segments INTEGER NOT NULL DEFAULT 0;
           ALTER TABLE subsync_decisions ADD COLUMN IF NOT EXISTS replaced_by TEXT;
           CREATE INDEX IF NOT EXISTS idx_subsync_decisions_owner_at ON subsync_decisions(owner, at DESC);
+          ${enableRlsSql('subsync_decisions')};
         `);
         return true;
       } catch (err) {

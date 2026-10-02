@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { enableRlsSql } from './dbTools';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { Pool } from 'pg';
@@ -107,6 +108,7 @@ class ConfigStorage {
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
               );
               CREATE INDEX IF NOT EXISTS idx_configurations_updated_at ON configurations(updated_at);
+              ${enableRlsSql('configurations')};
             `);
           } finally {
             client.release();

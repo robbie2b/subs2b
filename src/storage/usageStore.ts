@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { configStorage } from './configStore';
+import { enableRlsSql } from './dbTools';
 import { Logger } from '../utils/logger';
 import { providerKind, ProviderKind } from '../providers/kind';
 
@@ -73,6 +74,7 @@ async function ensureTable(): Promise<boolean> {
           );
           ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS details JSONB;
           CREATE INDEX IF NOT EXISTS idx_usage_events_owner_at ON usage_events(owner, at DESC);
+          ${enableRlsSql('usage_events')};
         `);
         return true;
       } catch (err) {
