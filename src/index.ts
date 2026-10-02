@@ -5,6 +5,7 @@ import { Logger } from './utils/logger';
 import { configStorage } from './storage/configStore';
 import { warmUpAlignWorker } from './core/alignPool';
 import { startSourceBlockStore } from './storage/sourceBlockStore';
+import { startDownloadFailureStore } from './storage/downloadFailureStore';
 
 async function bootstrap(): Promise<void> {
   try {
@@ -27,6 +28,8 @@ async function bootstrap(): Promise<void> {
     setTimeout(() => {
       if (!blocksRead) Logger.warn('[SOURCES] the saved source blocks were not read within 5 s, going on without them');
     }, 5000).unref();
+    // the journal of failed downloads (Debug), in the background too
+    void startDownloadFailureStore();
   });
 }
 

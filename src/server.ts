@@ -17,6 +17,7 @@ import {
   handleVttConvert
 } from './proxy/subtitleProxy';
 import { globalSubtitleCache } from './utils/cache';
+import { downloadFailures } from './utils/downloadJournal';
 import { Logger, getLogLines } from './utils/logger';
 import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
@@ -471,6 +472,14 @@ export function createServer(): express.Application {
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
     res.json(await getProviderStats(key));
+  });
+
+  // The downloads that failed lately (kept 30 days in the database), and how many per source over the last week
+  app.get('/:config/debug/downloads.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(downloadFailures());
   });
 
   // What the automatic re-timing decided lately

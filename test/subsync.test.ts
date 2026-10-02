@@ -27,6 +27,7 @@ import { SubsourceProvider } from '../src/providers/subsource';
 import { configStorage } from '../src/storage/configStore';
 import { mergeWithDefaults } from '../src/config/userConfig';
 import { globalSubtitleCache } from '../src/utils/cache';
+import { downloadFailures } from '../src/utils/downloadJournal';
 import { RawSubtitleItem, SubtitleQuery } from '../src/types/provider';
 
 let failed = 0;
@@ -545,6 +546,9 @@ async function main() {
     const f2 = respond();
     await fallback({ params: { config: uuid, data: Buffer.from(JSON.stringify({ u: baseUrl + '/rate-limited/3', b: [baseUrl + '/rate-limited/4'] })).toString('base64url') }, query: {} } as any, f2.res);
     check('fallback link: every source fails -> an error, not a broken file', f2.out.status === 502, f2.out.status);
+    const journal = downloadFailures();
+    check('the Debug journal has the failure and the recovery', journal.entries.some(f => !f.recovered && f.place === 'backups')
+      && journal.entries.some(f => f.recovered) && journal.lastWeek.length > 0, journal.entries.slice(0, 3));
     const f3 = respond();
     await fallback({ params: { config: uuid, data: Buffer.from(JSON.stringify({ u: 'https://169.254.169.254/x', b: [] })).toString('base64url') }, query: {} } as any, f3.res);
     check('fallback link: a main link to any other host is refused', f3.out.status === 400, f3.out.status);

@@ -51,7 +51,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
 
     if (config.subsync === false) {
       try {
-        sendSubtitleResponse(res, (await loadFirst(linksOf(token), hosts, baseUrl)).text, 'srt', 'subtitle.srt');
+        sendSubtitleResponse(res, (await loadFirst(linksOf(token), hosts, baseUrl, token.r)).text, 'srt', 'subtitle.srt');
       } catch (err: unknown) {
         originalFailed(err);
       }
@@ -153,7 +153,7 @@ export function createFallbackHandler(getBaseUrl: (req: Request) => string) {
       return;
     }
     try {
-      const { text } = await loadFirst(linksOf(token), hosts, baseUrl);
+      const { text } = await loadFirst(linksOf(token), hosts, baseUrl, token.r);
       sendSubtitleResponse(res, text, 'srt', 'subtitle.srt', 'public, max-age=3600');
     } catch {
       // every source failed here: the player may still reach the first one itself

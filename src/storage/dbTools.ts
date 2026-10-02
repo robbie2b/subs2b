@@ -59,7 +59,7 @@ export async function databaseActivity(pool: Pool): Promise<unknown> {
     LIMIT 50`);
   const tables = await pool.query(`
     SELECT t AS table, to_regclass('public.' || t) IS NOT NULL AS exists
-    FROM unnest(ARRAY['configurations', 'usage_events', 'subsync_decisions', 'subsync_references', 'source_blocks']) AS t`);
+    FROM unnest(ARRAY['configurations', 'usage_events', 'subsync_decisions', 'subsync_references', 'source_blocks', 'download_failures']) AS t`);
   return {
     pool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount },
     tables: tables.rows,

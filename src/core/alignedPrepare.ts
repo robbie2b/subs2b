@@ -5,6 +5,7 @@ import { SubtitleQuery } from '../types/provider';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
 import { isBlocked, noteRefusal, statusOf } from '../utils/sourceHealth';
+import { noteDownloadFailure } from '../utils/downloadJournal';
 import { AlignedToken, linksOf } from './alignedToken';
 import { getReferences, fitsReferences, AlignmentResult, Reference } from './alignment';
 import { alignInWorker, referencesAgreeInWorker } from './alignPool';
@@ -73,7 +74,7 @@ const describe = (err: unknown): string => {
  * Downloads the first of the links that works (the same subtitle from several providers, in priority order).
  * Only links of this server or of allowed hosts are tried. Every failure is logged, with the source that answered.
  */
-export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl: string): Promise<{ text: string; url: string }> {
+export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl: string, release?: string): Promise<{ text: string; url: string }> {
   const failures: string[] = [];
   for (const url of urls) {
     const own = url.startsWith(baseUrl + '/');
@@ -86,7 +87,10 @@ export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl:
     }
     try {
       const text = await loadOriginal(url, allowedHosts);
-      if (failures.length) Logger.info(`[DOWNLOAD] served from a backup source (${host}) after: ${failures.join('; ')}`);
+      if (failures.length) {
+        Logger.info(`[DOWNLOAD] served from a backup source (${host}) after: ${failures.join('; ')}`);
+        noteDownloadFailure({ host: failures[0].split(':')[0].split('/')[0], place: 'backups', reason: `${failures.join('; ')} -> served by ${host}`, recovered: true, release });
+      }
       return { text, url };
     } catch (err: unknown) {
       failures.push(`${label}: ${describe(err)}`);
@@ -94,6 +98,7 @@ export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl:
     }
   }
   Logger.warn(`[DOWNLOAD] no source of the subtitle could be downloaded: ${failures.join('; ') || 'no allowed link'}`);
+  noteDownloadFailure({ host: failures.length ? failures[0].split(':')[0].split('/')[0] : 'no allowed link', place: 'backups', reason: failures.join('; ') || 'no allowed link', recovered: false, release });
   throw new Error(failures.length ? `every source failed (${failures.join('; ')})` : 'no allowed link');
 }
 
@@ -117,7 +122,7 @@ async function alignOrReplace(
   for (const alt of alternatives) {
     if (!alt.u.startsWith(baseUrl + '/') && !isAllowedDownloadUrl(alt.u, hosts)) continue;
     try {
-      const altText = (await loadFirst(linksOf(alt), hosts, baseUrl)).text;
+      const altText = (await loadFirst(linksOf(alt), hosts, baseUrl, alt.r)).text;
       const altResult = await alignInWorker(altText, refs, alt.r, file);
       if (fitsReferences(altResult)) {
         return { result: altResult, text: altText, replacedBy: alt.r || alt.u };
@@ -142,7 +147,7 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
   const started = Date.now();
   const timing = { original: 0, references: 0, compute: 0 };
   // the subtitle and the references are fetched at the same time
-  const original = loadFirst(linksOf(token), hosts, baseUrl).then(r => { timing.original = Date.now() - started; return r.text; });
+  const original = loadFirst(linksOf(token), hosts, baseUrl, token.r).then(r => { timing.original = Date.now() - started; return r.text; });
   const references = getReferences({ query, config, baseUrl, filename: token.f })
     .then(refs => { timing.references = Date.now() - started; return refs; });
   const served = Promise.all([original, references]).then(async ([text, refs]) => {

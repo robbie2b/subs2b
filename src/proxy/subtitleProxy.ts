@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { noteDownloadFailure } from '../utils/downloadJournal';
 import axios from 'axios';
 import AdmZip from 'adm-zip';
 import iconv from 'iconv-lite';
@@ -70,6 +71,22 @@ export function addonHostsOf(config: UserConfig): string[] {
 }
 
 function sendError(res: Response, status: number, message: string): void {
+  // a subtitle that could not be fetched or read (not a bad link) goes into the Debug journal
+  if (status >= 500) {
+    const req = res.req;
+    const path = req?.path || '';
+    const target = typeof req?.query?.url === 'string' ? req.query.url : '';
+    let host = '';
+    try { host = target ? new URL(target).hostname : ''; } catch { /* not a URL */ }
+    const place = path.includes('/os-rest/') ? 'opensubtitles' : path.includes('/regielive/') ? 'regielive' : path.includes('/convert') ? 'convert' : 'proxy';
+    noteDownloadFailure({
+      host: host || (place === 'opensubtitles' ? 'opensubtitles' : place === 'regielive' ? 'regielive.ro' : 'unknown'),
+      place,
+      reason: message,
+      recovered: false,
+      release: typeof req?.query?.filename === 'string' ? req.query.filename : undefined
+    });
+  }
   res.status(status);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');

@@ -115,9 +115,10 @@ function startDebugPage() {
   refreshUsage();
   refreshProviders();
   refreshSubsync();
+  refreshDownloads();
   refreshLogs();
   debugState.logTimer = setInterval(refreshLogs, 2000);
-  debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); }, 30000);
+  debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); refreshDownloads(); }, 30000);
 }
 
 function stopDebugPage() {
@@ -396,6 +397,33 @@ function renderRequest(e, tz) {
     + `<div class="dbg-req-title"><div class="dbg-req-file">${title}</div><div class="dbg-req-sub">${escapeHtmlDebug(e.type)} ${escapeHtmlDebug(e.id)}</div></div>`
     + `<div class="dbg-req-side"><div>${escapeHtmlDebug(when)}</div><div class="dbg-muted">${summary}</div></div></div>`
     + `<div class="dbg-req-body">${body}</div></div>`;
+}
+
+async function refreshDownloads() {
+  const base = debugBase();
+  const box = document.getElementById('dbg-downloads');
+  const summary = document.getElementById('dbg-dl-summary');
+  if (!base || !box || !summary) return;
+  try {
+    const res = await fetch(`${base}/downloads.json`);
+    if (!res.ok) return;
+    const data = await res.json();
+    summary.textContent = data.lastWeek.length
+      ? 'Last 7 days: ' + data.lastWeek.map(h => `${h.host} ${h.failed} failed${h.recovered ? `, ${h.recovered} recovered` : ''}`).join(' · ')
+      : 'No failed download in the last 7 days.';
+    const shown = data.entries.slice(0, 50);
+    box.innerHTML = shown.length
+      ? shown.map(f => `<div class="dbg-req open"><div class="dbg-req-head" style="cursor:default">`
+        + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(f.release || f.host)}</div>`
+        + `<div class="dbg-req-sub">${escapeHtmlDebug(f.host)} · ${escapeHtmlDebug(f.place)} · ${escapeHtmlDebug(f.reason)}</div></div>`
+        + `<div class="dbg-req-side"><span class="dbg-tag ${f.recovered ? 'service' : 'addon'}">${f.recovered ? 'recovered' : 'failed'}</span>`
+        + `<div class="dbg-muted">${new Date(f.at).toLocaleString('en-GB', { hour12: false })}</div></div>`
+        + `</div></div>`).join('')
+        + (data.entries.length > shown.length ? `<div class="dbg-flow dbg-muted">The newest ${shown.length} of ${data.entries.length} are listed.</div>` : '')
+      : '<div class="dbg-empty">No failed download yet.</div>';
+  } catch (err) {
+    // ignore
+  }
 }
 
 async function refreshSubsync() {
