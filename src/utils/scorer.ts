@@ -58,6 +58,8 @@ export interface ScoringContext {
   episode?: number | null;
   /** Extra points per provider id (substring match), e.g. { subsro: 8 } */
   providerBonus?: Record<string, number>;
+  /** The user's provider order (Filters → Priority): decides between the subtitles of the top tier */
+  providerPriority?: string[];
   rules?: Partial<RuleFlags>;
 }
 
@@ -547,8 +549,42 @@ function scoreOne(
   };
 }
 
+const isDisc = (s: Source | null): boolean => s === 'remux' || s === 'bluray';
+
 /**
- * Scores and orders subtitles, best first. Clearly wrong subtitles (other title/year/episode) are dropped
+ * The name says the subtitle was made for exactly this file: same group, source, service, edition and episode.
+ * The resolution does not matter for WEB and TV releases (the same stream, scaled), but a disc must be of the same
+ * class (UHD and HD discs are different masters). `episodeFrom` gives the episode when a bracketed release has none.
+ */
+function exactFit(sub: ParsedRelease, video: ParsedRelease, ctx: ScoringContext, episodeFrom?: ParsedRelease): boolean {
+  if (!video.group || !video.source || sub.group !== video.group || sub.source !== video.source) return false;
+  if ((sub.service || null) !== (video.service || null)) return false;
+  if (sub.edition.slice().sort().join(',') !== video.edition.slice().sort().join(',')) return false;
+  if (isDisc(video.source) && (!sub.resolution || !video.resolution || (sub.resolution >= 2160) !== (video.resolution >= 2160))) return false;
+  if (ctx.season != null && ctx.episode != null) {
+    const ep = sub.episode !== null ? sub : episodeFrom;
+    if (!ep || ep.season !== ctx.season || ep.episode !== ctx.episode) return false;
+  }
+  return true;
+}
+
+/** Some release named by the subtitle (a ";"-separated part or a bracketed release) is exactly the playing file */
+export function exactNameMatch(release: string | undefined, filename: string | null | undefined, ctx: ScoringContext = {}): boolean {
+  if (!filename || !filename.trim()) return false;
+  const video = parseRelease(filename.trim());
+  if (!ruleOn(ctx, 'multiVariant')) return exactFit(parseRelease(release || ''), video, ctx);
+  for (const part of (release || '').split(';').map(v => v.trim()).filter(Boolean)) {
+    const whole = parseRelease(part);
+    if (exactFit(whole, video, ctx)) return true;
+    if (bracketedReleases(part).some(inner => exactFit(parseRelease(inner), video, ctx, whole))) return true;
+  }
+  return false;
+}
+
+/**
+ * Scores and orders subtitles, best first. The top tier holds the subtitles made for exactly this file: an exact
+ * hash match, or a name that is exactly the file's release (see exactFit). Between them the user's provider priority
+ * decides, then the score. Clearly wrong subtitles (other title/year/episode) are dropped
  * unless that would leave nothing; in that case the original list is returned untouched (safety fallback).
  */
 export function rankSubtitles(items: RawSubtitleItem[], ctx: ScoringContext): RankResult {
@@ -601,7 +637,21 @@ export function rankSubtitles(items: RawSubtitleItem[], ctx: ScoringContext): Ra
     return { items, details, usedFilename: Boolean(video), fallback: true };
   }
 
-  kept.sort((a, b) => details[b].score - details[a].score || a - b);
+  // (a forced or machine translated subtitle is never put there by its name)
+  const top = new Set(kept.filter(idx => items[idx].hashMatch === true || (video && exactNameMatch(items[idx].release, filename, ctx) &&
+    items[idx].forced !== true && !looksForced(items[idx].release || '') &&
+    items[idx].aiTranslated !== true && !looksMachineTranslated(items[idx].release || ''))));
+  for (const idx of top) {
+    if (items[idx].hashMatch !== true) details[idx] = { ...details[idx], reasons: [...details[idx].reasons, 'EXACT NAME MATCH (same release as the file)'] };
+  }
+  const priority = new Map((ctx.providerPriority || []).map((id, i) => [id.toLowerCase(), i] as [string, number]));
+  const rankOf = (idx: number): number => priority.get((items[idx].provider || '').toLowerCase()) ?? 999;
+  kept.sort((a, b) => {
+    const ta = top.has(a), tb = top.has(b);
+    if (ta !== tb) return ta ? -1 : 1;
+    if (ta && rankOf(a) !== rankOf(b)) return rankOf(a) - rankOf(b);
+    return details[b].score - details[a].score || a - b;
+  });
 
   return {
     items: kept.map(idx => items[idx]),

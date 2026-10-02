@@ -164,7 +164,8 @@ export async function getAggregatedSubtitles(
       filename: query.extra?.filename,
       season: query.season,
       episode: query.episode,
-      providerBonus: { subsro: 8 }
+      providerBonus: { subsro: 8 },
+      providerPriority: config.providerPriority
     });
     Logger.info(
       `Scoring: ${orderedItems.length} -> ${ranked.items.length} subtitles (filename: ${ranked.usedFilename ? 'yes' : 'no'}${ranked.fallback ? ', fallback' : ''})`

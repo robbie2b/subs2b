@@ -152,13 +152,13 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
     : [];
 
   // Migration of provider ids used by older versions: opensubtitles-rest / opensubtitles-v3 -> opensubtitles,
-  // and the removed addic7ed provider is dropped
+  // and removed providers are dropped
   const providerPriority: string[] = [];
   if (Array.isArray(partial.providerPriority)) {
     for (const item of partial.providerPriority) {
       const mapped = item === 'opensubtitles-rest' || item === 'opensubtitles-v3' ? 'opensubtitles' : item;
-      // addic7ed, the removed direct Subs.ro provider and Podnapisi (closed in 2026) are dropped from saved priority lists
-      if (mapped !== 'addic7ed' && mapped !== 'subsro' && mapped !== 'podnapisi' && !providerPriority.includes(mapped)) {
+      // the removed direct Subs.ro provider and Podnapisi (closed in 2026) are dropped from saved priority lists
+      if (mapped !== 'subsro' && mapped !== 'podnapisi' && !providerPriority.includes(mapped)) {
         providerPriority.push(mapped);
       }
     }

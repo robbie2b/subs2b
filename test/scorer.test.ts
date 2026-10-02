@@ -1,4 +1,4 @@
-import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated, setDefaultRules, titlesMatch } from '../src/utils/scorer';
+import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated, setDefaultRules, titlesMatch, exactNameMatch } from '../src/utils/scorer';
 import { RawSubtitleItem } from '../src/types/provider';
 
 // "scorer.test.ts all" (or SCORER_RULES=all) runs the whole suite with every optional rule switched on (regression check for those rules)
@@ -151,6 +151,51 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
   ];
   const r = rankSubtitles(items, { filename: 'Movie.2020.1080p.BluRay.x264-AAA.mkv' });
   check('hash match ranks first', r.items[0].provider === 'opensubtitles', r.items.map(i => i.provider));
+}
+
+// ---------- an exact name match is in the hash match's tier; the user's priority decides (Homecoming) ----------
+{
+  const priority = ['subsro', 'regielive', 'opensubtitles'];
+  const ctx = (ep: number, title: string) => ({
+    filename: `Homecoming.S01E0${ep}.${title}.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv`, season: 1, episode: ep, providerPriority: priority
+  });
+  // E01: OpenSubtitles hash match (720p NTb) and Subs.ro 1080p NTb -> Subs.ro first (priority)
+  let r = rankSubtitles([
+    item('Homecoming.S01E01.Mandatory.720p.AMZN.WEB-DL.DDP5.1.H.264-NTb', 'opensubtitles', { hashMatch: true }),
+    item('Homecoming.S01E01.Mandatory.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb', 'subsro'),
+    item('Homecoming.S01E01.1080p.WEB.H264-iNSiDiOUS', 'regielive')
+  ], ctx(1, 'Mandatory'));
+  check('Homecoming E01: Subs.ro exact name first', r.items[0].provider === 'subsro' && r.items[1].provider === 'opensubtitles', r.items.map(i => i.release));
+  check('exact name match noted', r.details[0].reasons.some(x => x.startsWith('EXACT NAME MATCH')), r.details[0]);
+  // E03: hash match named XviD-AFG, Subs.ro NTb -> Subs.ro first; the hash match still beats a non-exact name
+  r = rankSubtitles([
+    item('Homecoming.S01E03.1080p.WEB.H264-iNSiDiOUS', 'subsro'),
+    item('Homecoming.S01E03.XviD-AFG', 'opensubtitles', { hashMatch: true }),
+    item('Homecoming.S01E03.Redwood.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb', 'subsro')
+  ], ctx(3, 'Redwood'));
+  check('Homecoming E03: exact name, then hash match, then the rest',
+    r.items.map(i => i.release).join('|') === 'Homecoming.S01E03.Redwood.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb|Homecoming.S01E03.XviD-AFG|Homecoming.S01E03.1080p.WEB.H264-iNSiDiOUS',
+    r.items.map(i => i.release));
+  // the priority, not the provider order of the list, decides
+  r = rankSubtitles([
+    item('Homecoming.S01E04.Redwood.720p.AMZN.WEB-DL.DDP5.1.H.264-NTb', 'opensubtitles', { hashMatch: true }),
+    item('Homecoming.S01E04.Redwood.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb', 'regielive')
+  ], { ...ctx(4, 'Redwood'), providerPriority: ['regielive', 'opensubtitles'] });
+  check('priority decides inside the top tier', r.items[0].provider === 'regielive', r.items.map(i => i.provider));
+  // not exact: other service, other episode, other group, a disc of the other resolution class
+  const f = 'Homecoming.S01E01.Mandatory.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv';
+  const se = { season: 1, episode: 1 };
+  check('2160p WEB of the same release is exact', exactNameMatch('Homecoming.S01E01.2160p.AMZN.WEB-DL.DDP5.1.H.265-NTb', f, se));
+  check('other service is not exact', !exactNameMatch('Homecoming.S01E01.1080p.NF.WEB-DL.DDP5.1.H.264-NTb', f, se));
+  check('other episode is not exact', !exactNameMatch('Homecoming.S01E02.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb', f, se));
+  check('other group is not exact', !exactNameMatch('Homecoming.S01E01.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTG', f, se));
+  check('WEBRip is not WEB-DL', !exactNameMatch('Homecoming.S01E01.1080p.AMZN.WEBRip.DDP5.1.x264-NTb', f, se));
+  check('bracketed release with the episode outside counts',
+    exactNameMatch('Homecoming - S1E1.ro [Homecoming.S01.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb]', f, se));
+  const disc = 'Movie.2019.1080p.BluRay.x264-SPARKS.mkv';
+  check('720p BluRay of the same group is exact (same HD disc)', exactNameMatch('Movie.2019.720p.BluRay.x264-SPARKS', disc));
+  check('UHD BluRay is not the HD disc', !exactNameMatch('Movie.2019.2160p.BluRay.x265-SPARKS', disc));
+  check('other edition is not exact', !exactNameMatch('Movie.2019.Extended.1080p.BluRay.x264-SPARKS', disc));
 }
 
 // ---------- forced / machine translated (rule 2) ----------
