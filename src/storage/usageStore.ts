@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { computeRuleImpact, StoredRequest } from '../utils/ruleImpact';
 import { configStorage } from './configStore';
 import { enableRlsSql } from './dbTools';
 import { Logger } from '../utils/logger';
@@ -222,6 +223,26 @@ export interface ProviderStats {
 }
 
 const STATS_ROWS = 1000;
+
+/** The stored rankings of the latest requests (with file name), to measure the scoring rules on them */
+export async function getRuleImpact(configKey: string, priority: string[]): Promise<ReturnType<typeof computeRuleImpact>> {
+  const owner = ownerOf(configKey);
+  let events: StoredRequest[] = (memory.get(owner) || []).slice(0, STATS_ROWS)
+    .filter(e => e.details).map(e => ({ at: e.at, id: e.id, filename: e.filename, top: e.details!.top }));
+  if (await ensureTable()) {
+    try {
+      const pool = await configStorage.getPool();
+      const res = await pool!.query(
+        'SELECT at, content_id, filename, details FROM usage_events WHERE owner = $1 AND details IS NOT NULL ORDER BY at DESC LIMIT $2',
+        [owner, STATS_ROWS]
+      );
+      events = res.rows.map((r: any) => ({ at: new Date(r.at).toISOString(), id: r.content_id || '', filename: r.filename, top: r.details?.top || [] }));
+    } catch (err) {
+      Logger.error('Could not read the stored rankings', err);
+    }
+  }
+  return computeRuleImpact(events, priority);
+}
 
 /** Aggregates the stored request details of the latest requests into one line per provider */
 export async function getProviderStats(configKey: string): Promise<ProviderStats> {

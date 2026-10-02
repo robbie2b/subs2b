@@ -76,6 +76,7 @@ function startDebugPage() {
       const open = item.classList.toggle('open');
       if (open) debugState.open.add(key); else debugState.open.delete(key);
     });
+    document.getElementById('dbg-rules-run')?.addEventListener('click', () => { void measureRules(); });
     document.getElementById('dbg-log-copy')?.addEventListener('click', async () => {
       const box = document.getElementById('dbg-log');
       const label = document.getElementById('dbg-copy-label');
@@ -397,6 +398,35 @@ function renderRequest(e, tz) {
     + `<div class="dbg-req-title"><div class="dbg-req-file">${title}</div><div class="dbg-req-sub">${escapeHtmlDebug(e.type)} ${escapeHtmlDebug(e.id)}</div></div>`
     + `<div class="dbg-req-side"><div>${escapeHtmlDebug(when)}</div><div class="dbg-muted">${summary}</div></div></div>`
     + `<div class="dbg-req-body">${body}</div></div>`;
+}
+
+async function measureRules() {
+  const base = debugBase();
+  const box = document.getElementById('dbg-rules');
+  if (!base || !box) return;
+  box.innerHTML = '<div class="dbg-empty">Measuring…</div>';
+  try {
+    const res = await fetch(`${base}/rules.json`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data.requests) {
+      box.innerHTML = '<div class="dbg-empty">No stored request with a file name yet.</div>';
+      return;
+    }
+    box.innerHTML = `<div class="dbg-flow dbg-muted">${data.requests} request(s) with a file name measured.</div>`
+      + data.rules.map(r => {
+        const share = r.evaluated ? Math.round((r.changed / r.evaluated) * 100) : 0;
+        const examples = r.examples.map(x => `<div class="dbg-req-sub">${escapeHtmlDebug(x.file)}<br>now: <b>${escapeHtmlDebug(x.now)}</b><br>${r.on ? 'without' : 'with'} the rule: <b>${escapeHtmlDebug(x.flipped)}</b></div>`).join('');
+        return `<div class="dbg-req open"><div class="dbg-req-head" style="cursor:default">`
+          + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(r.rule)} <span class="dbg-tag ${r.on ? 'service' : 'addon'}">${r.on ? 'on' : 'off'}</span></div>`
+          + `<div class="dbg-req-sub">${escapeHtmlDebug(r.description)}</div>`
+          + (examples ? `<details class="dbg-rejected"><summary>Examples (${r.examples.length})</summary>${examples}</details>` : '')
+          + `</div><div class="dbg-req-side"><div>${r.changed} of ${r.evaluated}</div><div class="dbg-muted">first pick changes (${share}%)</div></div>`
+          + `</div></div>`;
+      }).join('');
+  } catch (err) {
+    box.innerHTML = `<div class="dbg-empty">Could not measure: ${escapeHtmlDebug(err.message || String(err))}</div>`;
+  }
 }
 
 async function refreshDownloads() {

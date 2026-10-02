@@ -1404,6 +1404,19 @@
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
+                <div class="section-badge-header">SCORING RULES</div>
+                <p class="section-desc-subtle">Each optional rule is flipped on the requests already made (their stored ranking and file name): how often the subtitle the player picks first would change.</p>
+              </div>
+              <div class="dbg-actions">
+                <button class="dbg-btn" id="dbg-rules-run" type="button">Measure</button>
+              </div>
+            </div>
+            <div id="dbg-rules" class="dbg-list"><div class="dbg-empty">Press Measure.</div></div>
+          </div>
+
+          <div class="dbg-card">
+            <div class="dbg-head">
+              <div>
                 <div class="section-badge-header">DOWNLOAD FAILURES</div>
                 <p class="section-desc-subtle">Subtitles this server could not download (kept 30 days, also after a restart), newest first. "Recovered" means a copy from another source was served instead.</p>
               </div>

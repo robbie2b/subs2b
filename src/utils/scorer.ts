@@ -35,11 +35,13 @@ export interface RuleFlags {
   sourceTiers: boolean;
   /** names listing several releases ("a;b;c") are scored per variant, the best one counts */
   multiVariant: boolean;
+  /** a name that is exactly the file's release joins the hash matches on top, the provider priority deciding */
+  exactTier: boolean;
 }
 
 // fuzzyGroup and multiVariant are safe (see the hazard cases in test/scorerRules.test.ts) and on by default.
 // sourceTiers only reorders neighbouring sources and nothing shows it helps synchronisation, so it stays off.
-export const DEFAULT_RULES: RuleFlags = { fuzzyGroup: true, sourceTiers: false, multiVariant: true };
+export const DEFAULT_RULES: RuleFlags = { fuzzyGroup: true, sourceTiers: false, multiVariant: true, exactTier: true };
 
 /** Changes the defaults (used by the tests to run the whole suite with every optional rule switched on) */
 export function setDefaultRules(rules: Partial<RuleFlags>): void {
@@ -641,7 +643,7 @@ export function rankSubtitles(items: RawSubtitleItem[], ctx: ScoringContext): Ra
   }
 
   // (a forced or machine translated subtitle is never put there by its name)
-  const top = new Set(kept.filter(idx => items[idx].hashMatch === true || (video && exactNameMatch(items[idx].release, filename, ctx) &&
+  const top = new Set(kept.filter(idx => items[idx].hashMatch === true || (video && ruleOn(ctx, 'exactTier') && exactNameMatch(items[idx].release, filename, ctx) &&
     items[idx].forced !== true && !looksForced(items[idx].release || '') &&
     items[idx].aiTranslated !== true && !looksMachineTranslated(items[idx].release || ''))));
   for (const idx of top) {

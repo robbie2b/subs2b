@@ -1,9 +1,10 @@
 import { parseRelease, rankSubtitles, looksForced, looksMachineTranslated, setDefaultRules, titlesMatch, exactNameMatch } from '../src/utils/scorer';
+import { computeRuleImpact } from '../src/utils/ruleImpact';
 import { RawSubtitleItem } from '../src/types/provider';
 
 // "scorer.test.ts all" (or SCORER_RULES=all) runs the whole suite with every optional rule switched on (regression check for those rules)
 if (process.env.SCORER_RULES === 'all' || process.argv[2] === 'all') {
-  setDefaultRules({ fuzzyGroup: true, sourceTiers: true, multiVariant: true });
+  setDefaultRules({ fuzzyGroup: true, sourceTiers: true, multiVariant: true, exactTier: true });
   console.log('(all optional scoring rules ON)');
 }
 
@@ -207,6 +208,21 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
     { filename: 'Friends.S03E08.1080p.BluRay.x264-PSYCHD.mkv', season: 3, episode: 8 });
   check('"amb-friends720p" is kept for Friends (not "another title")', r.items.some(i => i.release === 'amb-friends720p'), r.details);
   check('words with digits are not split ("Se7en", "x264")', parseRelease('Se7en.1995.1080p.BluRay.x264-AMIABLE').titleTokens.join(' ') === 'se7en');
+}
+
+// ---------- measuring the rules on stored requests ----------
+{
+  const stored = [{
+    at: '2026-10-02T08:00:00Z', id: 'tt7008682:1:1', filename: 'Homecoming.S01E01.Mandatory.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv',
+    top: [
+      { provider: 'opensubtitles', release: 'Homecoming.S01E01.Mandatory.720p.AMZN.WEB-DL.DDP5.1.H.264-NTb', reasons: ['HASH MATCH (exact file)'], rejected: false },
+      { provider: 'subsro', release: 'Homecoming.S01E01.Mandatory.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb', reasons: [], rejected: false }
+    ]
+  }, { at: '2026-10-02T08:00:00Z', id: 'tt1', filename: null, top: [] }];
+  const impact = computeRuleImpact(stored, ['subsro', 'opensubtitles']);
+  const exact = impact.rules.find(r => r.rule === 'exactTier')!;
+  check('rule impact: only requests with a file name are measured', impact.requests === 1, impact);
+  check('rule impact: the exact-name tier changes the first pick of Homecoming', exact.changed === 1 && /subsro/.test(exact.examples[0].now) && /opensubtitles/.test(exact.examples[0].flipped), exact);
 }
 
 // ---------- forced / machine translated (rule 2) ----------

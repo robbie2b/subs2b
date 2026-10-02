@@ -23,7 +23,7 @@ import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { getDebug } from './utils/debugLog';
-import { getUsage, getProviderStats } from './storage/usageStore';
+import { getUsage, getProviderStats, getRuleImpact } from './storage/usageStore';
 import { createAlignedHandler, createFallbackHandler } from './proxy/alignedProxy';
 import { databaseActivity } from './storage/dbTools';
 import { probeSite, probeAllowed, PROBE_HOSTS } from './proxy/siteProbe';
@@ -472,6 +472,15 @@ export function createServer(): express.Application {
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
     res.json(await getProviderStats(key));
+  });
+
+  // What each optional scoring rule changes on the requests really made (the player's first pick, rule on vs off)
+  app.get('/:config/debug/rules.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    const config = await configStorage.getConfigByUuidAsync(key);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await getRuleImpact(key, config?.providerPriority || []));
   });
 
   // The downloads that failed lately (kept 30 days in the database), and how many per source over the last week
