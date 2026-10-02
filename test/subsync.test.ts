@@ -260,6 +260,27 @@ async function main() {
     check('only references of its own release: "no independent reference", nothing changed', !none.decision.apply && none.decision.reason === 'no independent reference', none.decision);
   }
 
+  console.log('The file\'s own release decides (Gone Baby Gone)');
+  {
+    const FILE = 'Gone.Baby.Gone.2007.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-EPSiLON [REMUX-CLUB].mkv';
+    const ref = (cues: Array<{ start: number; end: number }>, label: string) => ({ label, lang: 'x', provider: 'x', cues: cues.map(c => ({ ...c, speech: true })) });
+    const shift = (d: number) => BASE.map(c => ({ start: c.start + d, end: c.end + d }));
+    // the file's timeline is BASE; the TiMELORDS subtitle is 7.9 s late on it; a FraMeSToR release is 5.6 s late
+    const candidate = toSrt(shift(7.9), 0, 'romana');
+    const refs = [
+      ref(BASE.filter((_, i) => i % 5 !== 1), '[zh-CN] Gone.Baby.Gone.2007.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-EPSiLON'),
+      ref(shift(5.6).filter((_, i) => i % 7 !== 3), '[pt-PT] Gone.Baby.Gone.2007.BluRay.1080p.DTS-HD.MA.5.1.AVC.HYBRID.REMUX-FraMeSToR')
+    ];
+    const before = alignAgainst(candidate, refs, 'Gone.Baby.Gone.2006.1080p.BluRay.x264-TiMELORDS');
+    check('BEFORE: two releases that disagree -> nothing done', !before.decision.apply && /disagree/.test(before.decision.reason), before.decision);
+    const after = alignAgainst(candidate, refs, 'Gone.Baby.Gone.2006.1080p.BluRay.x264-TiMELORDS', FILE);
+    check('AFTER: the reference made for the file\'s own release (EPSiLON) moves it -7.9 s', after.decision.apply && Math.abs(after.decision.offset + 7.9) < 0.15 && /file's own release \(epsilon/.test(after.note || ''), { d: after.decision, note: after.note });
+    const unrelated = alignAgainst(candidate, [refs[1]], 'Gone.Baby.Gone.2006.1080p.BluRay.x264-TiMELORDS', FILE);
+    check('without a reference of the file\'s release, the usual rules apply', !/file's own release/.test(unrelated.note || ''), unrelated);
+    const ownSub = alignAgainst(toSrt(BASE, 0, 'x'), refs, 'Gone.Baby.Gone.2007.1080p.BluRay.REMUX-EPSiLON', FILE);
+    check('a subtitle of the file\'s own group is never "confirmed" by its own release', /left out/.test(ownSub.note || '') && !/file's own release \(epsilon/.test(ownSub.note || ''), ownSub);
+  }
+
   console.log('References agree');
   {
     const ref = (cues: Array<{ start: number; end: number }>, label: string) => ({ label, lang: 'eng', provider: 'x', cues: cues.map(c => ({ ...c, speech: true })) });

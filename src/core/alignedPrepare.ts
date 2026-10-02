@@ -102,12 +102,13 @@ export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl:
 async function alignOrReplace(
   text: string,
   release: string | undefined,
+  file: string,
   refs: Reference[],
   alternatives: Array<{ u: string; r?: string; b?: string[] }>,
   hosts: string[],
   baseUrl: string
 ): Promise<Served> {
-  const result = await alignInWorker(text, refs, release);
+  const result = await alignInWorker(text, refs, release, file);
   if (fitsReferences(result) || result.references.length === 0 || alternatives.length === 0 || !(await referencesAgreeInWorker(refs))) {
     return { result };
   }
@@ -115,7 +116,7 @@ async function alignOrReplace(
     if (!alt.u.startsWith(baseUrl + '/') && !isAllowedDownloadUrl(alt.u, hosts)) continue;
     try {
       const altText = (await loadFirst(linksOf(alt), hosts, baseUrl)).text;
-      const altResult = await alignInWorker(altText, refs, alt.r);
+      const altResult = await alignInWorker(altText, refs, alt.r, file);
       if (fitsReferences(altResult)) {
         return { result: altResult, text: altText, replacedBy: alt.r || alt.u };
       }
@@ -144,7 +145,7 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
     .then(refs => { timing.references = Date.now() - started; return refs; });
   const served = Promise.all([original, references]).then(async ([text, refs]) => {
     const computeStart = Date.now();
-    const s = await alignOrReplace(text, token.r, refs, token.a || [], hosts, baseUrl);
+    const s = await alignOrReplace(text, token.r, token.f, refs, token.a || [], hosts, baseUrl);
     timing.compute = Date.now() - computeStart;
     return { ...s, timing };
   });

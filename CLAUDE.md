@@ -189,6 +189,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   citit la pornire), `copiesOf` dă rezerve și hash match-urilor (copia care merge îi ia locul, rămâne hash match),
   o subtitrare cu link prin server la o sursă blocată, fără copie, coboară ultima mereu (și cu Subsync oprit).
 
+- **Gone Baby Gone (2026-10-02, 1.4.12):** fișier REMUX EPSiLON; subtitrarea TiMELORDS (Subs.ro) n-a fost mutată fiindcă
+  referința `[zh-CN] …REMUX…-EPSiLON` (exact release-ul fișierului) zicea −7.9 s, iar `[pt-PT] …REMUX-FraMeSToR` −2.3 s
+  („references disagree”). Primul răspuns a durat 12.7 s (calcul 10.3 s).
+  → Pe ramură (pentru 1.4.13): `alignAgainst(..., fileName)`: referințele de la grupul fișierului (nu și al subtitrării)
+  se încearcă primele, singure, cu prag 0.70 (`FILE_REFERENCE_MIN_OVERLAP`); dacă subtitrarea se potrivește cu ele,
+  decizia e luată (nota „followed the reference(s) made for the file's own release”), altfel regulile obișnuite.
+  Plus: avertismentul „not read within 5 s” nu mai apare când citirea a reușit.
+
 ## De făcut (în ordinea discutată)
 - Subsync pe REMUX: încredere doar în referințe REMUX (sau ale grupului fișierului); altfel subtitrarea neschimbată.
 - Limită de timp pentru calculul suplimentar (verificarea pe bucăți + alternative) când prima verificare a durat mult.

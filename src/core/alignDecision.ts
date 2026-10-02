@@ -63,10 +63,19 @@ const medianOf = (a: number[]): number => {
 };
 
 /**
+ * How well a reference made for the playing file's own release must fit to be followed alone. Lower than for any
+ * single reference (0.85): its timeline is the file's, what differs is only the translation (lines split or merged).
+ */
+const FILE_REFERENCE_MIN_OVERLAP = 0.7;
+
+/**
  * Aligns a subtitle against the references. First with one single shift per reference (fast); only when that is not
  * convincing, with shifts that may change along the subtitle (and the frame-rate ratio).
+ * A reference made for the playing file's own release (its group in `fileName`) has the last word: it is tried
+ * first, alone, and when the subtitle lines up with it the other references are not needed (Gone Baby Gone: an
+ * EPSiLON reference said -7.9 s for an EPSiLON file, another release said -2.3 s, and nothing was done).
  */
-export function alignAgainst(candidateText: string, allReferences: Reference[], candidateRelease?: string): AlignmentResult {
+export function alignAgainst(candidateText: string, allReferences: Reference[], candidateRelease?: string, fileName?: string): AlignmentResult {
   // A reference made for the subtitle's own release only repeats the subtitle's timing: it says nothing about the
   // playing file (Downton Abbey: a SHORTBREHD subtitle "confirmed" by SHORTBREHD references on a FraMeSToR REMUX)
   const own = groupsOf(candidateRelease);
@@ -91,36 +100,35 @@ export function alignAgainst(candidateText: string, allReferences: Reference[], 
 
   // the spectra and correlations are shared by both passes and all references (freed when this decision is done)
   const cache = new AlignCache();
+  type DecideOptions = Parameters<typeof decide>[2];
   // the references are taken one by one; once two of them agree (and fit well) the rest is not needed
-  const collect = (split: boolean, topRatios: number): { list: RefAlignment[]; decision: Decision } => {
+  const collect = (refs: Reference[], split: boolean, topRatios: number, opts?: DecideOptions): { list: RefAlignment[]; decision: Decision } => {
     const list: RefAlignment[] = [];
-    let d = decide(cues, list);
-    for (const r of references) {
+    let d = decide(cues, list, opts);
+    for (const r of refs) {
       const a = alignOne(cues, r, split, topRatios, cache);
       if (a) list.push(a);
-      d = decide(cues, list);
+      d = decide(cues, list, opts);
       // (two references of one release agreeing prove less: then the next one is looked at too)
       if (list.length >= 2 && d.agreeing >= 2 && d.confidence >= 0.9 && distinctReleases(list) >= 2) break;
     }
     return { list, decision: d };
   };
-
-  const first = collect(false, 1);
-  let used = first.list;
-  let decision = first.decision;
-
-  // (when one shift already worked, the ratio is known: the split search tries only that one, which is much cheaper)
-  if ((!decision.apply && decision.reason !== 'already aligned') || (decision.apply && decision.confidence < 0.95)) {
-    const second = collect(true, decision.apply ? 1 : 2);
-    if (second.decision.apply && (!decision.apply || second.decision.confidence >= decision.confidence)) {
-      decision = second.decision;
-      used = second.list;
+  const fits = (d: Decision) => d.apply || d.reason === 'already aligned';
+  /** single shift first; the split search only when that is not convincing */
+  const run = (refs: Reference[], opts?: DecideOptions): { list: RefAlignment[]; decision: Decision } => {
+    const first = collect(refs, false, 1, opts);
+    let best = first;
+    // (when one shift already worked, the ratio is known: the split search tries only that one, which is much cheaper)
+    if (!fits(first.decision) || (first.decision.apply && first.decision.confidence < 0.95)) {
+      const second = collect(refs, true, first.decision.apply ? 1 : 2, opts);
+      if (second.decision.apply && (!first.decision.apply || second.decision.confidence >= first.decision.confidence)) best = second;
     }
-  }
-
-  return {
+    return best;
+  };
+  const describe = (decision: Decision, used: RefAlignment[], extra?: string): AlignmentResult => ({
     decision,
-    ...(note ? { note } : {}),
+    ...(note || extra ? { note: [extra, note].filter(Boolean).join('; ') } : {}),
     references: used.map(a => ({
       label: a.label,
       offset: Math.round(medianOf(a.result.offsets) * 10) / 10,
@@ -128,7 +136,20 @@ export function alignAgainst(candidateText: string, allReferences: Reference[], 
       ratio: Math.round(a.result.ratio * 1000) / 1000,
       segments: a.result.segments.length
     }))
-  };
+  });
+
+  // the playing file's own release first: it has the last word when the subtitle lines up with it
+  const fileGroups = new Set([...groupsOf(fileName)].filter(g => !own.has(g)));
+  const fileRefs = fileGroups.size ? references.filter(r => shareGroup(groupsOf(r.label), fileGroups)) : [];
+  if (fileRefs.length) {
+    const byFile = run(fileRefs, { singleMinOverlap: FILE_REFERENCE_MIN_OVERLAP });
+    if (fits(byFile.decision)) {
+      return describe(byFile.decision, byFile.list, `followed the reference(s) made for the file's own release (${[...fileGroups].join(', ')})`);
+    }
+  }
+
+  const all = run(references);
+  return describe(all.decision, all.list);
 }
 
 /** The subtitle can be served: it lines up with the references (as it is, or once shifted) */

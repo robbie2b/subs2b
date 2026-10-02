@@ -78,8 +78,8 @@ function run<T>(job: Omit<AlignJob, 'id'>, inline: () => T): Promise<T> {
     .finally(() => { if (pending.size === 0) worker?.unref(); });
 }
 
-export function alignInWorker(text: string, references: Reference[], release?: string): Promise<AlignmentResult> {
-  return run({ op: 'align', text, references, release } as Omit<AlignJob, 'id'>, () => alignAgainst(text, references, release));
+export function alignInWorker(text: string, references: Reference[], release?: string, file?: string): Promise<AlignmentResult> {
+  return run({ op: 'align', text, references, release, file } as Omit<AlignJob, 'id'>, () => alignAgainst(text, references, release, file));
 }
 
 export function referencesAgreeInWorker(references: Reference[]): Promise<boolean> {

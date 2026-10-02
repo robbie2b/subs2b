@@ -7,12 +7,12 @@ import { alignAgainst, referencesAgree } from './alignDecision';
  */
 
 export type AlignJob =
-  | { id: number; op: 'align'; text: string; references: Parameters<typeof alignAgainst>[1]; release?: string }
+  | { id: number; op: 'align'; text: string; references: Parameters<typeof alignAgainst>[1]; release?: string; file?: string }
   | { id: number; op: 'agree'; references: Parameters<typeof referencesAgree>[0] };
 
 parentPort?.on('message', (job: AlignJob) => {
   try {
-    const value = job.op === 'align' ? alignAgainst(job.text, job.references, job.release) : referencesAgree(job.references);
+    const value = job.op === 'align' ? alignAgainst(job.text, job.references, job.release, job.file) : referencesAgree(job.references);
     parentPort!.postMessage({ id: job.id, ok: true, value });
   } catch (err: unknown) {
     parentPort!.postMessage({ id: job.id, ok: false, error: err instanceof Error ? err.message : String(err) });

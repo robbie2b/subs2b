@@ -22,10 +22,11 @@ async function bootstrap(): Promise<void> {
     warmUpAlignWorker();
     // the sources refusing this server are remembered across restarts; read in the background, so the database can
     // never keep the server from starting (Render only switches to a new version once it answers)
-    void Promise.race([
-      startSourceBlockStore(),
-      new Promise<void>(resolve => setTimeout(() => { Logger.warn('[SOURCES] the saved source blocks were not read within 5 s, going on without them'); resolve(); }, 5000).unref())
-    ]);
+    let blocksRead = false;
+    void startSourceBlockStore().finally(() => { blocksRead = true; });
+    setTimeout(() => {
+      if (!blocksRead) Logger.warn('[SOURCES] the saved source blocks were not read within 5 s, going on without them');
+    }, 5000).unref();
   });
 }
 
