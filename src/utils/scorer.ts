@@ -117,6 +117,9 @@ function normalize(raw: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    // a resolution glued to a word ("amb-friends720p", "1080pBluRay") is a word of its own
+    .replace(/([a-z])(\d{3,4}p)(?![a-z0-9])/g, '$1 $2')
+    .replace(/(?<![a-z0-9])(\d{3,4}p)([a-z])/g, '$1 $2')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -168,7 +171,7 @@ function detectGroup(raw: string): string | null {
   const m = s.match(/-\s*([A-Za-z0-9]{2,15})$/);
   if (!m) return null;
   const g = m[1].toLowerCase();
-  if (NOT_A_GROUP.has(g) || /^\d+$/.test(g) || /^\d{3,4}p$/.test(g)) return null;
+  if (NOT_A_GROUP.has(g) || /^\d+$/.test(g) || /\d{3,4}p$/.test(g)) return null;
   return g;
 }
 

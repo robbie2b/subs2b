@@ -198,6 +198,17 @@ check('season/episode', pep.season === 3 && pep.episode === 9, pep);
   check('other edition is not exact', !exactNameMatch('Movie.2019.Extended.1080p.BluRay.x264-SPARKS', disc));
 }
 
+// ---------- a resolution glued to the title ("amb-friends720p") ----------
+{
+  check('glued resolution is split off the title', parseRelease('amb-friends720p').titleTokens.join(' ') === 'amb friends' && parseRelease('amb-friends720p').resolution === 720, parseRelease('amb-friends720p'));
+  check('...and is not taken as the group', parseRelease('amb-friends720p').group === null);
+  check('glued after the resolution too', parseRelease('Friends.S03E08.1080pBluRay').resolution === 1080 && parseRelease('Friends.S03E08.1080pBluRay').source === 'bluray');
+  const r = rankSubtitles([item('amb-friends720p'), item('Other.Show.S03E08.720p.HDTV-XYZ')],
+    { filename: 'Friends.S03E08.1080p.BluRay.x264-PSYCHD.mkv', season: 3, episode: 8 });
+  check('"amb-friends720p" is kept for Friends (not "another title")', r.items.some(i => i.release === 'amb-friends720p'), r.details);
+  check('words with digits are not split ("Se7en", "x264")', parseRelease('Se7en.1995.1080p.BluRay.x264-AMIABLE').titleTokens.join(' ') === 'se7en');
+}
+
 // ---------- forced / machine translated (rule 2) ----------
 {
   const video = 'Movie.2021.1080p.BluRay.x264-GRP.mkv';
