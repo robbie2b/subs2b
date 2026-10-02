@@ -369,18 +369,26 @@ function renderRequest(e, tz) {
     const flow = `Found ${d.rawTotal} (${providers}) → language ${d.afterLanguage} → after duplicates ${d.afterDedup} → ranked ${d.afterScoring} → sent ${d.shown}`;
     const sync = d.subsync ? `Subsync: ${d.subsync.triggered ? 'a timing reference was needed' : 'not needed'} (${escapeHtmlDebug(d.subsync.reason)}).` : '';
     const mode = d.usedFilename ? 'Ranked against the file name sent by the player.' : 'The player sent no file name: general-quality ranking.';
-    const rows = d.top.map(t => {
+    const rowOf = t => {
       const sent = t.rank <= d.shown && !t.rejected;
       const reasons = t.reasons.map(r => `<span class="dbg-chip">${escapeHtmlDebug(r)}</span>`).join('');
       return `<div class="dbg-sub${t.rejected ? ' rejected' : ''}">`
-        + `<span class="dbg-rank">#${t.rank}</span>`
+        + `<span class="dbg-rank">${t.rejected ? '✕' : `#${t.rank}`}</span>`
         + `<div class="dbg-sub-main"><div class="dbg-sub-name">${escapeHtmlDebug(t.release) || '(no name)'}</div><div class="dbg-sub-meta">${kindIcon(debugState.kinds[t.provider])}<span class="dbg-prov">${escapeHtmlDebug(t.provider)}</span>${reasons}</div></div>`
         + `<span class="dbg-score">${t.score}</span>`
         + `<span class="dbg-sent${sent ? ' yes' : ''}">${t.rejected ? 'rejected' : sent ? 'sent' : 'not sent'}</span>`
         + `</div>`;
-    }).join('');
+    };
+    const kept = d.top.filter(t => !t.rejected);
+    const rejected = d.top.filter(t => t.rejected);
+    const rows = kept.map(rowOf).join('');
+    // every rejected subtitle, with the reason (folded: there can be many)
+    const rejectedBlock = rejected.length
+      ? `<details class="dbg-rejected"><summary>Rejected: ${rejected.length} (other title, year or episode)</summary><div class="dbg-subs">${rejected.map(rowOf).join('')}</div></details>`
+      : '';
     body = `<div class="dbg-flow">${flow}</div><div class="dbg-flow dbg-muted">${mode} ${sync}</div><div class="dbg-subs">${rows || '<div class="dbg-empty">Nothing to rank.</div>'}</div>`
-      + (d.top.length < d.afterScoring ? `<div class="dbg-flow dbg-muted">Only the top ${d.top.length} are listed.</div>` : '');
+      + (kept.length < d.afterScoring ? `<div class="dbg-flow dbg-muted">Only the top ${kept.length} of ${d.afterScoring} are listed.</div>` : '')
+      + rejectedBlock;
   }
 
   return `<div class="dbg-req${isOpen ? ' open' : ''}" data-key="${escapeHtmlDebug(key)}">`

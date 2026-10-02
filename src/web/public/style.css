@@ -3304,3 +3304,14 @@ button:active {
     width: 100%;
   }
 }
+
+.dbg-rejected {
+  margin-top: 10px;
+}
+
+.dbg-rejected > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 6px 0;
+}

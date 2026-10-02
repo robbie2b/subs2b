@@ -28,6 +28,9 @@ function preferDownloadable(item: RawSubtitleItem): RawSubtitleItem {
 /** How long an empty list, or one from a search where a provider failed, is kept (minutes; normal lists: cacheTtlMinutes) */
 export const SHORT_CACHE_MINUTES = 2;
 
+/** How many rejected subtitles a request keeps for Debug (besides the best 12) */
+const MAX_REJECTED_IN_DEBUG = 60;
+
 /** How many languages get their first subtitle aligned in advance */
 const MAX_PREPARED_LANGUAGES = 2;
 
@@ -187,7 +190,9 @@ export async function getAggregatedSubtitles(
     orderedItems = ranked.items;
     debugUsedFilename = ranked.usedFilename;
     debugFallback = ranked.fallback;
-    debugTop = ranked.details.slice(0, 12).map((d, i) => ({ rank: i + 1, ...d }));
+    // the best 12, and every rejected subtitle (with the reason), so Debug shows why something was left out
+    debugTop = ranked.details.map((d, i) => ({ rank: i + 1, ...d }))
+      .filter((d, i) => i < 12 || d.rejected).slice(0, 12 + MAX_REJECTED_IN_DEBUG);
   } catch (err) {
     Logger.error('Scoring failed, keeping provider order', err);
   }
