@@ -221,8 +221,10 @@ export function alignToReference(candidate: TimedCue[], reference: TimedCue[], o
   const inferred = span(rIv) / span(cIv);
 
   // Ratio 1, plus the usual frame-rate ratios that are close to what the two lengths suggest, plus that ratio itself
-  // (the lengths differ a little for other reasons too, hence the generous 0.05)
-  const ratios = [1, ...FRAMERATE_RATIOS.filter(r => !(inferred > 0.9 && inferred < 1.1) || Math.abs(r - inferred) <= 0.05)];
+  // (the lengths differ a little for other reasons too, hence the generous 0.05). The ratios next to 1 (24 / 23.976)
+  // are always tried: one line far from the dialogue (a translator's note after the end) is enough to mislead the
+  // lengths (Gone Baby Gone: a TiMELORDS subtitle needing x0.999 was shifted at ratio 1, 3 s off at both ends)
+  const ratios = [1, ...FRAMERATE_RATIOS.filter(r => !(inferred > 0.9 && inferred < 1.1) || Math.abs(r - inferred) <= 0.05 || Math.abs(r - 1) < 0.002)];
   if (inferred > 0.9 && inferred < 1.1 && !ratios.some(r => Math.abs(r - inferred) < 0.0005)) ratios.push(inferred);
 
   // ---- coarse search: one FFT cross-correlation per ratio ----

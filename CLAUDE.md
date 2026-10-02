@@ -208,6 +208,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   se încearcă primele, singure, cu prag 0.70 (`FILE_REFERENCE_MIN_OVERLAP`); dacă subtitrarea se potrivește cu ele,
   decizia e luată (nota „followed the reference(s) made for the file's own release”), altfel regulile obișnuite.
   Plus: avertismentul „not read within 5 s” nu mai apare când citirea a reușit.
+- **Gone Baby Gone pe 1.5.0:** referința EPSiLON a decis (−7.9 s), dar subtitrarea TiMELORDS tot nesincronizată.
+  Comparând subtitrările românești aliniate: Z0N3 și playHD (0.98 pe referința zh-CN) se potrivesc între ele, TiMELORDS
+  (0.82) diferă de ele cu o derivă liniară +4.5 s → −1.9 s pe film = raport 24/23.976 (×0.999), pe care motorul nu l-a încercat:
+  rapoartele se aleg după lungimea celor două subtitrări, iar o linie departe de dialog în referință (notă de traducător
+  după final) o strică. Reprodus local (−7.8 s, 0.83). → Pe ramură: rapoartele lângă 1 (24/23.976) se încearcă mereu
+  (`subsync.ts`); local dă ×0.999 −3.4 s, 1.00. Test în `subsyncEngine.test.ts`. Benchmark-ul (corpusul) nu e în cloud.
+  Plus: o decizie Subsync apare o singură dată în Debug (playerul cere aceeași subtitrare de mai multe ori; repetările
+  sunt doar „served again from memory”).
 
 ## De făcut (în ordinea discutată)
 - Subsync pe REMUX: încredere doar în referințe REMUX (sau ale grupului fișierului); altfel subtitrarea neschimbată.

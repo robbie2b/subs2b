@@ -57,6 +57,16 @@ check('speechFlags follows the same rule', JSON.stringify(speechFlags([{ start: 
   check('missing cues and jitter do not break it', Math.abs(mid - -5) < 0.15, mid);
 }
 
+// ---- 24 / 23.976 with a reference whose length misleads (Gone Baby Gone) ----
+{
+  // the subtitle runs 0.1 % slow and 4 s late; the reference ends with a translator's note 250 s after the film
+  const cand = moved(BASE, () => 4, 24 / 23.976);
+  const last = BASE[BASE.length - 1].end;
+  const ref = [...BASE, { start: last + 250, end: last + 253, text: 'Translated by someone' }];
+  const r = alignToReference(cand, ref, { split: false, topRatios: 1 })!;
+  check('the ratio next to 1 is tried even when the lengths suggest otherwise', Math.abs(r.ratio - 23.976 / 24) < 0.0001 && r.overlap > 0.95, { ratio: r.ratio, overlap: r.overlap });
+}
+
 // ---- frame rate: 25 fps against 23.976 fps ----
 {
   const cand = moved(BASE, () => 0, 23.976 / 25);          // the 25 fps version is shorter

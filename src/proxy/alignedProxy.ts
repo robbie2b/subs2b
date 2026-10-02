@@ -99,6 +99,15 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       }
       const served: Served = raced;
       const { result, replacedBy } = served;
+      // the player asks for the same subtitle again and again (seeking, switching tracks): the decision was made once
+      // and is logged once; the repeats are only a short line
+      if (prep.reported) {
+        Logger.info(`[SUBSYNC] served again from memory (decided earlier, nothing computed)`, { id: token.id, subtitle: replacedBy || token.r });
+        const again = served.text ?? text;
+        sendSubtitleResponse(res, result.decision.apply ? applyAlignment(again, result.decision.result!) : again, 'srt', 'subtitle.srt', 'public, max-age=3600');
+        return;
+      }
+      prep.reported = true;
       if (served.timing) {
         const t = served.timing;
         Logger.info(`[SUBSYNC] timing for ${token.id}: subtitle ${t.original} ms, references ${t.references} ms (both from the start, in parallel), computation ${t.compute} ms; the player waited ${Date.now() - started} ms`);

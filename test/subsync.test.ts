@@ -423,6 +423,7 @@ async function main() {
     const callsBefore = providerCalls;
     await handler({ params: { config: uuid, data: linkFor(baseUrl + '/ro-hd') }, query: {} } as any, again.res);
     check('the second request is served from the cache (no new search)', providerCalls === callsBefore && again.out.body === r.out.body);
+    check('the decision is logged once, not once per request', (await getAlignments(uuid)).length === 1, (await getAlignments(uuid)).length);
   }
 
   {
