@@ -56,6 +56,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.1 (deploy 2026-10-02):** Subsync: rapoartele lângă 1 (24/23.976) încercate mereu; lungimile ghicite de două ori
+  (cu toate liniile și fără liniile singure la capete: max 3 linii la peste 2 min de rest, `withoutLoneEdges`); ambele
+  ghicitori doar ADAUGĂ rapoarte de încercat. Toate liniile se aliniază și se mută în continuare. O decizie apare o
+  singură dată în Debug. Caz: Gone Baby Gone (detalii mai jos).
 - **v1.5.0 (deploy 2026-10-02):** (a doua cifră schimbată la cererea utilizatorului)
   - Clasament: o subtitrare cu numele exact al release-ului fișierului (același grup, sursă, serviciu, ediție, episod;
     orice rezoluție la WEB/TV, aceeași clasă UHD/HD la disc) intră în nivelul hash match-ului; între ele decide
@@ -124,7 +128,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12 și v1.5.0 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12, v1.5.0 și v1.5.1 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
@@ -212,7 +216,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   Comparând subtitrările românești aliniate: Z0N3 și playHD (0.98 pe referința zh-CN) se potrivesc între ele, TiMELORDS
   (0.82) diferă de ele cu o derivă liniară +4.5 s → −1.9 s pe film = raport 24/23.976 (×0.999), pe care motorul nu l-a încercat:
   rapoartele se aleg după lungimea celor două subtitrări, iar o linie departe de dialog în referință (notă de traducător
-  după final) o strică. Reprodus local (−7.8 s, 0.83). → Pe ramură: rapoartele lângă 1 (24/23.976) se încearcă mereu
+  după final) o strică. Reprodus local (−7.8 s, 0.83). → În 1.5.1: rapoartele lângă 1 (24/23.976) se încearcă mereu
   (`subsync.ts`); local dă ×0.999 −3.4 s, 1.00. Test în `subsyncEngine.test.ts`. Benchmark-ul (corpusul) nu e în cloud.
   Plus: o decizie Subsync apare o singură dată în Debug (playerul cere aceeași subtitrare de mai multe ori; repetările
   sunt doar „served again from memory”).

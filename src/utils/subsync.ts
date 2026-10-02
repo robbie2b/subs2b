@@ -89,12 +89,30 @@ const nextPow2 = (n: number): number => { let p = 1; while (p < n) p <<= 1; retu
 // ---------------------------------------------------------------------------
 // Speech signals
 // ---------------------------------------------------------------------------
-interface Interval { start: number; end: number }
+export interface Interval { start: number; end: number }
 
 function intervalsOf(cues: TimedCue[], flags: boolean[], ratio = 1): Interval[] {
   const out: Interval[] = [];
   cues.forEach((c, i) => { if (flags[i]) out.push({ start: c.start * ratio, end: c.end * ratio }); });
   return out;
+}
+
+/** How far a line must be from the rest to stand alone at an edge, and how many lines such a stray group may have */
+const LONE_GAP = 120;
+const LONE_MAX_LINES = 3;
+
+/** The intervals without the few lines standing alone at the start or the end (see LONE_GAP) */
+export function withoutLoneEdges(iv: Interval[]): Interval[] {
+  const s = iv.slice().sort((a, b) => a.start - b.start);
+  if (s.length <= 2 * LONE_MAX_LINES + 10) return s;
+  let from = 0, to = s.length;
+  for (let k = 1; k <= LONE_MAX_LINES; k++) {
+    if (s[k].start - s[k - 1].end > LONE_GAP) from = k;
+  }
+  for (let k = 1; k <= LONE_MAX_LINES; k++) {
+    if (s[s.length - k].start - s[s.length - k - 1].end > LONE_GAP) to = s.length - k;
+  }
+  return s.slice(from, to);
 }
 
 /** Share of every `dt`-second bin that is covered by speech (0..1) */
@@ -218,14 +236,20 @@ export function alignToReference(candidate: TimedCue[], reference: TimedCue[], o
   if (cIv.length < 10 || rIv.length < 10) return null;
 
   const span = (iv: Interval[]) => Math.max(...iv.map(i => i.end)) - Math.min(...iv.map(i => i.start));
-  const inferred = span(rIv) / span(cIv);
+  // The lengths are guessed twice: as they are, and without the lines standing alone at either end (up to 3 lines
+  // more than 2 minutes away from the rest: a translator's note, a credit, an advert, in any language). Both guesses
+  // add ratios to try; none is taken away (and every line is still aligned and moved).
+  const guesses = [span(rIv) / span(cIv), span(withoutLoneEdges(rIv)) / span(withoutLoneEdges(cIv))];
 
-  // Ratio 1, plus the usual frame-rate ratios that are close to what the two lengths suggest, plus that ratio itself
+  // Ratio 1, plus the usual frame-rate ratios that are close to what the lengths suggest, plus those ratios themselves
   // (the lengths differ a little for other reasons too, hence the generous 0.05). The ratios next to 1 (24 / 23.976)
-  // are always tried: one line far from the dialogue (a translator's note after the end) is enough to mislead the
-  // lengths (Gone Baby Gone: a TiMELORDS subtitle needing x0.999 was shifted at ratio 1, 3 s off at both ends)
-  const ratios = [1, ...FRAMERATE_RATIOS.filter(r => !(inferred > 0.9 && inferred < 1.1) || Math.abs(r - inferred) <= 0.05 || Math.abs(r - 1) < 0.002)];
-  if (inferred > 0.9 && inferred < 1.1 && !ratios.some(r => Math.abs(r - inferred) < 0.0005)) ratios.push(inferred);
+  // are always tried: one line far from the dialogue is enough to mislead the lengths (Gone Baby Gone: a TiMELORDS
+  // subtitle needing x0.999 was shifted at ratio 1, 3 s off at both ends)
+  const plausible = (g: number) => g > 0.9 && g < 1.1;
+  const anyGuess = guesses.some(plausible);
+  const ratios = [1, ...FRAMERATE_RATIOS.filter(r => !anyGuess || Math.abs(r - 1) < 0.002
+    || guesses.some(g => plausible(g) && Math.abs(r - g) <= 0.05))];
+  for (const g of guesses) if (plausible(g) && !ratios.some(r => Math.abs(r - g) < 0.0005)) ratios.push(g);
 
   // ---- coarse search: one FFT cross-correlation per ratio ----
   const refEnd = Math.max(...rIv.map(i => i.end));

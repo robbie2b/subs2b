@@ -1,4 +1,4 @@
-import { alignToReference, applyAlignment, decide, isNonDialogue, speechFlags, TimedCue, RefAlignment } from '../src/utils/subsync';
+import { alignToReference, applyAlignment, decide, isNonDialogue, speechFlags, TimedCue, RefAlignment, withoutLoneEdges } from '../src/utils/subsync';
 import { readCues, retimeSubtitle } from '../src/utils/subtitleCues';
 
 let failed = 0;
@@ -65,6 +65,28 @@ check('speechFlags follows the same rule', JSON.stringify(speechFlags([{ start: 
   const ref = [...BASE, { start: last + 250, end: last + 253, text: 'Translated by someone' }];
   const r = alignToReference(cand, ref, { split: false, topRatios: 1 })!;
   check('the ratio next to 1 is tried even when the lengths suggest otherwise', Math.abs(r.ratio - 23.976 / 24) < 0.0001 && r.overlap > 0.95, { ratio: r.ratio, overlap: r.overlap });
+}
+
+// ---- 25 fps subtitle with a credit line long after the end: the guess without lone lines still finds the ratio ----
+{
+  const cand = BASE.map(c => ({ ...c, start: c.start * 23.976 / 25 + 2, end: c.end * 23.976 / 25 + 2 }));
+  const last = cand[cand.length - 1].end;
+  cand.push({ start: last + 300, end: last + 303, text: 'Subtitrare: cineva' });
+  const r = alignToReference(cand, BASE, { split: false, topRatios: 1 })!;
+  check('a credit line after the end does not hide the 25 fps ratio', Math.abs(r.ratio - 25 / 23.976) < 0.0005 && r.overlap > 0.95, { ratio: r.ratio, overlap: r.overlap });
+  const stamp = (t: number) => new Date(Math.round(t * 1000)).toISOString().slice(11, 23).replace('.', ',');
+  const srt = cand.map((c, i) => `${i + 1}\n${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`).join('\n');
+  const out = readCues(applyAlignment(srt, r));
+  const note = out.find(c => c.text === 'Subtitrare: cineva');
+  check('...and the credit line is still in the subtitle, moved like the rest', out.length === cand.length && !!note
+    && Math.abs(note.start - ((last + 300) * r.ratio + r.offsets[r.offsets.length - 1])) < 0.01, note);
+}
+{
+  const iv = [{ start: 0, end: 2 }, ...Array.from({ length: 50 }, (_, i) => ({ start: 300 + i * 5, end: 302 + i * 5 })), { start: 900, end: 903 }];
+  const kept = withoutLoneEdges(iv);
+  check('lone lines at both ends are left out of the length guess only', kept.length === 50 && kept[0].start === 300 && iv.length === 52, kept.length);
+  const dense = Array.from({ length: 60 }, (_, i) => ({ start: i * 5, end: i * 5 + 2 }));
+  check('a normal subtitle keeps every line', withoutLoneEdges(dense).length === 60);
 }
 
 // ---- frame rate: 25 fps against 23.976 fps ----
