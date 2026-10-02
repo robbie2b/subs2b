@@ -369,6 +369,20 @@ async function main() {
     const noName = await getAggregatedSubtitles(parseSubtitleQuery('series', 'tt13146488:1:1', {}), stored, baseUrl, uuid);
     check('no file name from the player: links are left alone', noName.subtitles.every(s => !s.url.includes('/sub/aligned/')));
 
+    // how long the list may be kept: normal 30 min; a provider failing or nothing found -> 2 min only
+    check('a complete list is kept 30 min', noName.cacheMaxAge === 1800, noName.cacheMaxAge);
+    globalSubtitleCache.clear?.();
+    const working = (OpenSubtitlesProvider.prototype as any).executeSearch;
+    (OpenSubtitlesProvider.prototype as any).executeSearch = async () => { throw new Error('simulated outage'); };
+    const partial = await getAggregatedSubtitles(parseSubtitleQuery('series', 'tt13146488:1:1', {}), stored, baseUrl, uuid);
+    (OpenSubtitlesProvider.prototype as any).executeSearch = working;
+    check('a provider failing: the list is kept 2 min only', partial.cacheMaxAge === 120, partial.cacheMaxAge);
+    const again = await getAggregatedSubtitles(parseSubtitleQuery('series', 'tt13146488:1:1', {}), stored, baseUrl, uuid);
+    check('...and on the server too: still within those 2 min, the answer stays short-lived', again.cacheMaxAge === 120, again.cacheMaxAge);
+    globalSubtitleCache.clear?.();
+    const nothing = await getAggregatedSubtitles(parseSubtitleQuery('series', 'tt0000001:1:1', {}), mergeWithDefaults({ ...stored, languages: ['kor'] }), baseUrl, uuid);
+    check('nothing in the chosen languages: kept 2 min only', nothing.subtitles.length === 0 && nothing.cacheMaxAge === 120, nothing.cacheMaxAge);
+
     // several Romanian subtitles: each link carries the ones after it (same language) as alternatives
     globalSubtitleCache.clear?.();
     providerItems.push(

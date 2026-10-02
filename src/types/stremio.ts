@@ -33,4 +33,6 @@ export interface StremioSubtitle {
 
 export interface StremioSubtitlesResponse {
   subtitles: StremioSubtitle[];
+  /** how long the player may keep this list, in seconds (Stremio protocol field; also sent as Cache-Control) */
+  cacheMaxAge?: number;
 }

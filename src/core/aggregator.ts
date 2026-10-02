@@ -25,6 +25,9 @@ function preferDownloadable(item: RawSubtitleItem): RawSubtitleItem {
   return { ...backups[k], ...(item.hashMatch ? { hashMatch: true } : {}), backups: [main, ...rest] };
 }
 
+/** How long an empty list, or one from a search where a provider failed, is kept (minutes; normal lists: cacheTtlMinutes) */
+export const SHORT_CACHE_MINUTES = 2;
+
 /** How many languages get their first subtitle aligned in advance */
 const MAX_PREPARED_LANGUAGES = 2;
 
@@ -83,10 +86,18 @@ export async function getAggregatedSubtitles(
   let rawSubtitles = globalSubtitleCache.get(cacheKey);
   const providerReport: ProviderReport[] = [];
   const fromCache = !!rawSubtitles;
+  let incomplete = fromCache && globalSubtitleCache.isIncomplete(cacheKey);
 
   if (!rawSubtitles) {
     rawSubtitles = await executeParallelSearch(query, config, providerReport);
-    globalSubtitleCache.set(cacheKey, rawSubtitles, config.cacheTtlMinutes);
+    // a search where a provider failed or timed out is kept only briefly: asked again soon, that provider may answer
+    // (an empty answer is not a failure)
+    const failedProviders = providerReport.filter(r => !r.ok);
+    incomplete = failedProviders.length > 0;
+    globalSubtitleCache.set(cacheKey, rawSubtitles, incomplete ? SHORT_CACHE_MINUTES : config.cacheTtlMinutes, incomplete);
+    if (incomplete) {
+      Logger.info(`[CACHE] kept ${SHORT_CACHE_MINUTES} min only: ${failedProviders.map(r => r.name).join(', ')} failed or timed out`);
+    }
   } else {
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);
   }
@@ -341,5 +352,8 @@ export async function getAggregatedSubtitles(
     });
   }
 
-  return { subtitles };
+  // the player keeps the list as long as this server does; an empty or incomplete list only briefly
+  const short = incomplete || subtitles.length === 0;
+  if (short && !incomplete) Logger.info(`[CACHE] kept ${SHORT_CACHE_MINUTES} min only: no subtitle in your languages`);
+  return { subtitles, cacheMaxAge: short ? SHORT_CACHE_MINUTES * 60 : Math.round(config.cacheTtlMinutes * 60) };
 }

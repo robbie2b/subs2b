@@ -426,11 +426,13 @@ export function createServer(): express.Application {
       const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
       const response = await getAggregatedSubtitles(query, userConfig, getBaseUrl(req), debugKey);
 
-      res.setHeader('Cache-Control', 'max-age=1800, public');
+      res.setHeader('Cache-Control', `max-age=${response.cacheMaxAge ?? 1800}, public`);
       res.json(response);
     } catch (err: unknown) {
       Logger.error('Failed to handle subtitles request', err);
-      res.json({ subtitles: [] });
+      // an error is never kept: the next request tries again
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ subtitles: [], cacheMaxAge: 0 });
     }
   };
 
