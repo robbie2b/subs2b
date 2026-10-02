@@ -56,6 +56,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.4.11 (deploy 2026-10-02):** probe cu `referer=`, `warm=` (cookie de sesiune), `form=` (POST), `ajax=1`.
+  Constatări probe (de pe Render): Titrari.ro OK (căutare `index.php?page=cautamainaltaparte&z8=1&z5=<imdb fără tt>`,
+  release în „Comentariu”, `get.php?id=` fără Referer întoarce la pagină); Subtitrari-noi.ro: rezultate prin POST
+  `paginare_filme.php` (search_q, query_q, cautare, tip, an, gen); YIFY: `yts-subs.com/movie-imdb/tt…` OK, zip la
+  `https://subtitles.yts-subs.com/subtitles/<slug>.zip`, `yifysubtitles.ch` blocat Cloudflare; Addic7ed OK (search.php →
+  `serie/<Show>/<s>/<e>/<titlu>`, versiuni pe release, linkuri `/original/<id>/<n>`); Wyzie (`sub.wyzie.io`) cere cheie gratuită.
 - **v1.4.10 (deploy 2026-10-02):** unealta Debug `/<uuid>/debug/probe.json?url=…[&as=addon]` (`src/proxy/siteProbe.ts`):
   descarcă de pe Render o pagină de pe site-urile candidate (titrari.ro, subtitrari-noi.ro, yifysubtitles.*/yts-subs.com,
   addic7ed.com, wyzie.ru/wyzie.io) și arată status, antete, corp; redirecturile trebuie să rămână pe ele.
@@ -95,7 +101,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.10 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.11 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.

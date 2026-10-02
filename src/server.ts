@@ -490,7 +490,14 @@ export function createServer(): express.Application {
       res.status(400).json({ error: 'only these sites can be probed', sites: PROBE_HOSTS });
       return;
     }
-    res.json(await probeSite(url, req.query.as === 'addon' ? 'addon' : 'browser'));
+    const q = (k: string) => (typeof req.query[k] === 'string' ? String(req.query[k]) : undefined);
+    res.json(await probeSite(url, {
+      as: q('as') === 'addon' ? 'addon' : 'browser',
+      referer: q('referer'),
+      warm: q('warm'),
+      form: q('form'),
+      ajax: q('ajax') === '1'
+    }));
   });
 
   // Live server log (poll with ?after=<last seq received>)

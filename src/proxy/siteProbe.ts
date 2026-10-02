@@ -43,12 +43,42 @@ export interface ProbeResult {
   error?: string;
 }
 
+export interface ProbeOptions {
+  as?: 'browser' | 'addon';
+  /** page sent as Referer (the sites that only serve downloads "from their own pages") */
+  referer?: string;
+  /** page opened first, whose cookies (a PHP session...) go with the request */
+  warm?: string;
+  /** url-encoded form: the request is a POST */
+  form?: string;
+  /** sent as an XMLHttpRequest (pages loaded by the site's own scripts) */
+  ajax?: boolean;
+}
+
+const cookiesOf = (setCookie: unknown): string =>
+  (Array.isArray(setCookie) ? setCookie : setCookie ? [String(setCookie)] : []).map(c => String(c).split(';')[0]).join('; ');
+
 /** Fetches one page as a browser (or as this addon, with as='addon') would, and returns what came back */
-export async function probeSite(url: string, as: 'browser' | 'addon' = 'browser'): Promise<ProbeResult> {
+export async function probeSite(url: string, opts: ProbeOptions = {}): Promise<ProbeResult> {
+  const as = opts.as || 'browser';
   const started = Date.now();
   let finalUrl = url;
   try {
-    const res = await axios.get<ArrayBuffer>(url, {
+    let cookie = '';
+    if (opts.warm && probeAllowed(opts.warm)) {
+      const warm = await axios.get(opts.warm, {
+        timeout: 15000, maxRedirects: 5, validateStatus: () => true, responseType: 'arraybuffer',
+        beforeRedirect: (options: { href?: string }) => {
+          if (!probeAllowed(options.href || '')) throw new Error(`redirect to a site that is not allowed: ${options.href}`);
+        },
+        headers: { 'User-Agent': as === 'addon' ? USER_AGENT : BROWSER }
+      });
+      cookie = cookiesOf(warm.headers['set-cookie']);
+    }
+    const res = await axios.request<ArrayBuffer>({
+      url,
+      method: opts.form !== undefined ? 'POST' : 'GET',
+      data: opts.form,
       responseType: 'arraybuffer',
       timeout: 15000,
       maxRedirects: 5,
@@ -61,7 +91,11 @@ export async function probeSite(url: string, as: 'browser' | 'addon' = 'browser'
       headers: {
         'User-Agent': as === 'addon' ? USER_AGENT : BROWSER,
         Accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'ro-RO,ro;q=0.9,en;q=0.8'
+        'Accept-Language': 'ro-RO,ro;q=0.9,en;q=0.8',
+        ...(opts.referer && probeAllowed(opts.referer) ? { Referer: opts.referer } : {}),
+        ...(cookie ? { Cookie: cookie } : {}),
+        ...(opts.form !== undefined ? { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' } : {}),
+        ...(opts.ajax ? { 'X-Requested-With': 'XMLHttpRequest' } : {})
       }
     });
     const buffer = Buffer.from(res.data);
