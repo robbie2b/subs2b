@@ -87,6 +87,8 @@ class ConfigStorage {
             max: 10,
             idleTimeoutMillis: 30000,
             connectionTimeoutMillis: 10000,
+            // no query may hang for ever (a lock nobody releases): it fails after 20 s, with the reason in the log
+            query_timeout: 20000,
           });
 
           pool.on('error', (err) => {

@@ -1,5 +1,6 @@
 import zlib from 'zlib';
 import { configStorage } from './configStore';
+import { ensureTableSafely } from './dbTools';
 import { Logger } from '../utils/logger';
 import type { Reference } from '../core/alignDecision';
 
@@ -19,17 +20,18 @@ async function ensureTable(): Promise<boolean> {
       const pool = await configStorage.getPool();
       if (!pool) return false;
       try {
-        await pool.query(`
+        await ensureTableSafely(pool, 'subsync_references', `
           CREATE TABLE IF NOT EXISTS subsync_references (
             ref_key TEXT PRIMARY KEY,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             data BYTEA NOT NULL
           );
-          CREATE INDEX IF NOT EXISTS idx_subsync_references_created ON subsync_references(created_at);
-        `);
+          CREATE INDEX IF NOT EXISTS idx_subsync_references_created ON subsync_references(created_at)`);
         return true;
       } catch (err) {
-        Logger.error('Could not prepare the Subsync references table', err);
+        Logger.error('Could not prepare the Subsync references table (tried again in 10 min)', err);
+        // not remembered for ever: a later use tries again
+        setTimeout(() => { tableReady = null; }, 10 * 60 * 1000).unref();
         return false;
       }
     })();

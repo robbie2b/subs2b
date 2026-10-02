@@ -60,8 +60,13 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   `source_blocks` din Postgres înainte de `listen`. Acum serverul pornește întâi, citirea se face în fundal (max 5 s).
   Regulă: nimic din baza de date nu se așteaptă înainte de `app.listen`.
   Live 09:21: pornit în 0.5 s, dar `CREATE TABLE IF NOT EXISTS source_blocks` atârnă (fără eroare, >1 min) → memoria
-  surselor blocate e doar în RAM. **De investigat:** `statement_timeout`/`lock_timeout` pe pool (eroare clară în loc
-  de atârnare), pagină Debug cu `pg_stat_activity` (interogări care așteaptă), posibil lock rămas de la 1.4.7 anulat.
+  surselor blocate e doar în RAM.
+- Pe ramură (2026-10-02, pentru 1.4.9): `src/storage/dbTools.ts`. `ensureTableSafely`: întâi `to_regclass` (nu poate fi
+  blocat), apoi `CREATE` cu `SET LOCAL lock_timeout = '5s'`; la eroare conexiunea se închide (nu se întoarce în pool).
+  Folosit la `source_blocks` și `subsync_references` (reîncercare la 10 min). Pool cu `query_timeout: 20000`.
+  Pagina Debug nouă `/<uuid>/debug/db.json`: sesiunile care nu sunt idle, cine pe cine blochează (`pg_blocking_pids`),
+  ce tabele există, starea pool-ului. Reprodus local (Postgres 16): o sesiune „idle in transaction” care a început
+  `CREATE TABLE source_blocks` blochează orice alt CREATE la nesfârșit; varianta nouă renunță în 5 s cu „lock timeout”.
 - **v1.4.7 (deploy 2026-10-01):** sursele blocate ținute minte în Postgres peste reporniri; rezerve și pentru hash match;
   o subtitrare pe care n-o poate descărca nimeni coboară ultima (eroarea de la Downton Abbey S03E03).
 - **v1.4.6 (deploy 2026-10-01):** referințe independente (fără cele de la release-ul subtitrării verificate), release-uri

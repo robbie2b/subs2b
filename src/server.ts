@@ -24,6 +24,7 @@ import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { getDebug } from './utils/debugLog';
 import { getUsage, getProviderStats } from './storage/usageStore';
 import { createAlignedHandler, createFallbackHandler } from './proxy/alignedProxy';
+import { databaseActivity } from './storage/dbTools';
 import { getAlignments } from './core/alignment';
 import { REGIELIVE_SEARCH_URL, regieLiveHeaders } from './providers/regielive';
 
@@ -459,6 +460,23 @@ export function createServer(): express.Application {
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
     res.json({ entries: await getAlignments(key) });
+  });
+
+  // What the database is doing: sessions running or waiting (and who blocks whom), which tables exist, the pool
+  app.get('/:config/debug/db.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const pool = await configStorage.getPool();
+    if (!pool) {
+      res.json({ database: false });
+      return;
+    }
+    try {
+      res.json({ database: true, ...(await databaseActivity(pool) as object) });
+    } catch (err: unknown) {
+      res.status(500).json({ database: true, error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   // Live server log (poll with ?after=<last seq received>)
