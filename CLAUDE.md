@@ -248,6 +248,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   (`src/proxy/formatTest.ts`, buton Debug „TV FORMAT TEST”, 2 h): prima subtitrare de încă 4 ori sus: 1 text/plain link
   lung, 2 text/plain scurt, 3 x-subrip scurt, 4 VTT scurt; log `[FORMAT TEST] variant N requested` (cu user-agent).
   După rezultat: toate linkurile pe varianta care merge (linkuri scurte = token ținut pe server/în DB), testul scos.
+  **Rezultat 2026-10-09:** pe TV toate 4 variantele merg (Loki), și Endgame (care nu mergea înainte) merge acum, după ce
+  utilizatorul a reinstalat addonul în Stremio. Deci nici tipul (`x-subrip`), nici lungimea linkului nu sunt cauza pe
+  TV-ul lui. Cauza rămâne neclară (probabil starea aplicației Stremio de pe TV, curățată de reinstalare). Testul rămâne
+  în Debug (oprit) pentru data viitoare: întâi testul, apoi reinstalarea, ca să se vadă dacă e serverul sau aplicația.
 - **Pentru mai târziu (cererea utilizatorului, 2026-10-02): „slot” ca la Stremio Community Subtitles.** Primul loc din listă
   = link fix către server (`no-store`); serverul trimite ce e ales acum. Pagină „Now playing” în interfață: alegi altă
   subtitrare dintre cele găsite și/sau muți manual (+/− s), fără să cauți în Stremio; alegerea ținută minte pe fișier și
