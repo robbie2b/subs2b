@@ -56,6 +56,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.3 (deploy 2026-10-09):** testul temporar „TV FORMAT TEST” din Debug (vezi „De făcut” → TV).
 - **v1.5.1 (deploy 2026-10-02):** Subsync: rapoartele lângă 1 (24/23.976) încercate mereu; lungimile ghicite de două ori
   (cu toate liniile și fără liniile singure la capete: max 3 linii la peste 2 min de rest, `withoutLoneEdges`); ambele
   ghicitori doar ADAUGĂ rapoarte de încercat. Toate liniile se aliniază și se mută în continuare. O decizie apare o
@@ -129,7 +130,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12, v1.5.0, v1.5.1 și v1.5.2 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.3 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
@@ -243,7 +244,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   primește cererile și răspunde (Loki 2026-10-08: toate 5 cerute în aceeași secundă, servite). Prima subtitrare pe
   telefon apare „PGS” și goală la Peacemaker CRU „PL” (probabil pista internă poloneză PGS încurcată de player).
   Utilizatorul nu mai folosește Stremio pe TV din cauza asta. Diferențe față de alte addonuri: `application/x-subrip`
-  din 1.5.2 (înainte `text/plain`) și linkuri lungi (2–4.5 KB, tokenul poartă alternativele). → Pe ramură: test temporar
+  din 1.5.2 (înainte `text/plain`) și linkuri lungi (2–4.5 KB, tokenul poartă alternativele). → În 1.5.3: test temporar
   (`src/proxy/formatTest.ts`, buton Debug „TV FORMAT TEST”, 2 h): prima subtitrare de încă 4 ori sus: 1 text/plain link
   lung, 2 text/plain scurt, 3 x-subrip scurt, 4 VTT scurt; log `[FORMAT TEST] variant N requested` (cu user-agent).
   După rezultat: toate linkurile pe varianta care merge (linkuri scurte = token ținut pe server/în DB), testul scos.
