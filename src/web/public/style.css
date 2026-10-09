@@ -3315,3 +3315,10 @@ button:active {
   font-size: 13px;
   padding: 6px 0;
 }
+
+/* Subsync references: long names shortened, the whole name with a tap */
+.dbg-ref { cursor: pointer; }
+.dbg-ref .dbg-ref-full { display: none; }
+.dbg-ref.full .dbg-ref-full { display: inline; }
+.dbg-ref.full .dbg-ref-short { display: none; }
+.dbg-ref i { font-style: normal; color: var(--text-muted); }

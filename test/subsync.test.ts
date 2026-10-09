@@ -458,6 +458,7 @@ async function main() {
     check('it was quick', Date.now() - t0 < 1500, Date.now() - t0);
     const log = (await getAlignments(uuid))[0];
     check('the decision is recorded for the Debug page', log?.outcome === 'shifted' && Math.abs(log.offset - -5) < 0.2 && log.references.length === 2, log);
+    check('each reference says where it comes from', log?.references.every(r => typeof r.provider === 'string' && r.provider.length > 0), log?.references);
     check('an all-language search was made once', providerCalls === 1, providerCalls);
 
     const again = respond();

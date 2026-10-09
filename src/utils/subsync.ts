@@ -425,6 +425,8 @@ export function applyAlignment(text: string, result: AlignResult): string {
 // ---------------------------------------------------------------------------
 export interface RefAlignment {
   label: string;
+  /** where the reference comes from (provider id), for Debug */
+  provider?: string;
   result: AlignResult;
 }
 

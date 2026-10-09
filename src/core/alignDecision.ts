@@ -23,7 +23,7 @@ export interface Reference {
 
 export interface AlignmentResult {
   decision: Decision;
-  references: Array<{ label: string; offset: number; score: number; ratio: number; segments: number }>;
+  references: Array<{ label: string; provider?: string; offset: number; score: number; ratio: number; segments: number }>;
   /** what else the Debug page should know (references left out...) */
   note?: string;
 }
@@ -54,7 +54,7 @@ function distinctReleases(list: RefAlignment[]): number {
 
 const alignOne = (cues: TimedCue[], r: Reference, split: boolean, topRatios: number, cache: AlignCache): RefAlignment | null => {
   const result = alignToReference(cues, r.cues, { split, splitPenalty: 7, topRatios, cache });
-  return result ? { label: r.label, result } : null;
+  return result ? { label: r.label, provider: r.provider, result } : null;
 };
 
 const medianOf = (a: number[]): number => {
@@ -131,6 +131,7 @@ export function alignAgainst(candidateText: string, allReferences: Reference[], 
     ...(note || extra ? { note: [extra, note].filter(Boolean).join('; ') } : {}),
     references: used.map(a => ({
       label: a.label,
+      ...(a.provider ? { provider: a.provider } : {}),
       offset: Math.round(medianOf(a.result.offsets) * 10) / 10,
       score: Math.round(a.result.overlap * 100) / 100,
       ratio: Math.round(a.result.ratio * 1000) / 1000,

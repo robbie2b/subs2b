@@ -20,7 +20,7 @@ export interface AlignmentLogEntry {
   segments?: number;
   confidence: number;
   reason: string;
-  references: Array<{ label: string; offset: number; score: number; ratio?: number; segments?: number }>;
+  references: Array<{ label: string; provider?: string; offset: number; score: number; ratio?: number; segments?: number }>;
   /** release name of the alternative served instead, when the subtitle did not fit the references */
   replacedBy?: string;
   ms: number;

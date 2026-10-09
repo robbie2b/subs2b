@@ -1,6 +1,6 @@
 // Debug page: live server log + when/what the addon was used for.
 // Loaded after app.js; app.js calls startDebugPage()/stopDebugPage() when the page is shown/left.
-const debugState = { logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5 };
+const debugState = { names: {}, logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5 };
 const PLAY_ICON = 'M8,5.14V19.14L19,12.14L8,5.14Z';
 const PAUSE_ICON = 'M14,19H18V5H14M6,19H10V5H6V19Z';
 
@@ -77,6 +77,11 @@ function startDebugPage() {
       if (open) debugState.open.add(key); else debugState.open.delete(key);
     });
     document.getElementById('dbg-rules-run')?.addEventListener('click', () => { void measureRules(); });
+    // a shortened reference name opens in full with a tap (phones have no hover)
+    document.getElementById('dbg-subsync')?.addEventListener('click', e => {
+      const chip = e.target.closest && e.target.closest('.dbg-ref');
+      if (chip) chip.classList.toggle('full');
+    });
     document.getElementById('dbg-ft-toggle')?.addEventListener('click', e => { void formatTest(e.currentTarget.dataset.on !== '1'); });
     document.getElementById('dbg-log-copy')?.addEventListener('click', async () => {
       const box = document.getElementById('dbg-log');
@@ -308,7 +313,7 @@ async function refreshProviders() {
 function renderProviders(data) {
   // the request list shows the same tags next to each provider
   debugState.kinds = {};
-  for (const p of data.providers || []) debugState.kinds[p.id] = p.kind;
+  for (const p of data.providers || []) { debugState.kinds[p.id] = p.kind; debugState.names[p.id] = p.name; }
   renderRecent();
 
   const body = document.getElementById('dbg-prov-body');
@@ -474,6 +479,22 @@ async function refreshDownloads() {
   }
 }
 
+/**
+ * A reference as "[lang · Source] first release + N more releases": some sites list every release a subtitle fits in
+ * its name (Subtitrari-noi.ro: dozens). The whole name shows on hover, or with a tap (dbg-ref toggles .full).
+ */
+function referenceLabel(r) {
+  const m = /^\[([^\]]*)\]\s*(.*)$/.exec(r.label || '');
+  const lang = m ? m[1] : '';
+  const name = m ? m[2] : (r.label || '');
+  const source = r.provider ? (debugState.names[r.provider] || r.provider) : '';
+  const parts = name.split(';').map(x => x.trim()).filter(Boolean);
+  const head = `[${escapeHtmlDebug([lang, source].filter(Boolean).join(' · '))}] `;
+  if (parts.length <= 1) return head + escapeHtmlDebug(name);
+  return head + `<span class="dbg-ref-short">${escapeHtmlDebug(parts[0])} <i>+ ${parts.length - 1} more release${parts.length > 2 ? 's' : ''}</i></span>`
+    + `<span class="dbg-ref-full">${escapeHtmlDebug(name)}</span>`;
+}
+
 async function refreshSubsync() {
   const base = debugBase();
   if (!base) return;
@@ -505,7 +526,7 @@ function renderSubsync() {
     box.innerHTML = slice.map(e => {
       const label = { shifted: `shifted ${e.offset > 0 ? '+' : ''}${e.offset} s${e.ratio && e.ratio !== 1 ? ` ×${e.ratio}` : ''}${e.segments > 1 ? ` · ${e.segments} parts` : ''}`, unchanged: 'unchanged', timeout: 'too slow: sent unchanged', error: 'error: sent unchanged' }[e.outcome] || e.outcome;
       const cls = e.outcome === 'shifted' ? 'service' : 'addon';
-      const refs = (e.references || []).map(r => `<span class="dbg-chip">${escapeHtmlDebug(r.label)}: ${r.offset > 0 ? '+' : ''}${r.offset} s${r.ratio && r.ratio !== 1 ? ` ×${r.ratio}` : ''}${r.segments > 1 ? ` · ${r.segments} parts` : ''} (${r.score})</span>`).join('');
+      const refs = (e.references || []).map(r => `<span class="dbg-chip dbg-ref" title="${escapeHtmlDebug(r.label)}">${referenceLabel(r)}: ${r.offset > 0 ? '+' : ''}${r.offset} s${r.ratio && r.ratio !== 1 ? ` ×${r.ratio}` : ''}${r.segments > 1 ? ` · ${r.segments} parts` : ''} (${r.score})</span>`).join('');
       return `<div class="dbg-req open"><div class="dbg-req-head" style="cursor:default">`
         + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(e.subtitle || '(subtitle)')}</div>`
         + `<div class="dbg-req-sub">for ${escapeHtmlDebug(e.filename)} · ${escapeHtmlDebug(e.reason)}</div>`

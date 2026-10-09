@@ -252,6 +252,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   utilizatorul a reinstalat addonul în Stremio. Deci nici tipul (`x-subrip`), nici lungimea linkului nu sunt cauza pe
   TV-ul lui. Cauza rămâne neclară (probabil starea aplicației Stremio de pe TV, curățată de reinstalare). Testul rămâne
   în Debug (oprit) pentru data viitoare: întâi testul, apoi reinstalarea, ca să se vadă dacă e serverul sau aplicația.
+- **Pe ramură (nedeployat, pentru următorul deploy):** Debug → SUBSYNC DECISIONS: fiecare referință arată și sursa
+  („[ron · Subtitrari-noi.ro] …”; câmpul `provider` în deciziile noi, cele vechi n-au), iar numele cu multe release-uri
+  (Subtitrari-noi.ro le listează pe toate, ex. Endgame ~70) apar scurtate: primul + „+ N more releases”, tot numele la
+  hover sau tap.
 - **Pentru mai târziu (cererea utilizatorului, 2026-10-02): „slot” ca la Stremio Community Subtitles.** Primul loc din listă
   = link fix către server (`no-store`); serverul trimite ce e ales acum. Pagină „Now playing” în interfață: alegi altă
   subtitrare dintre cele găsite și/sau muți manual (+/− s), fără să cauți în Stremio; alegerea ținută minte pe fișier și
