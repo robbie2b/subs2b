@@ -120,7 +120,11 @@
       <!-- Topbar (Clean navigation: [Previous] [Next]) -->
       <header class="topbar">
         <div class="topbar-left">
-          <!-- Clean left topbar -->
+          <!-- On a phone the sidebar footer is hidden: sign out from here -->
+          <button class="btn btn-pill-nav topbar-signout" id="btn-topbar-signout" type="button" title="Sign Out" aria-label="Sign Out">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16,17V14H9V10H16V7L21,12L16,17M14,2A2,2 0 0,1 16,4V6H14V4H5V20H14V18H16V20A2,2 0 0,1 14,22H5A2,2 0 0,1 3,20V4A2,2 0 0,1 5,2H14Z" /></svg>
+            <span>Sign out</span>
+          </button>
         </div>
 
         <div class="topbar-right">
@@ -464,7 +468,7 @@
               <div class="service-row" data-service-id="subdl">
                 <div class="service-left">
                   <div class="service-logo" title="SubDL">
-                    <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/subdl.webp" alt="SubDL"
+                    <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/subdl.webp" onerror="this.style.visibility='hidden'" alt="SubDL"
                       width="36" height="36"
                       style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;">
                   </div>
@@ -715,7 +719,7 @@
                   <div class="filter-section-header">
                     <h3>Allowed Languages</h3>
                     <div class="whitelist-quick-btns">
-                      <button class="btn btn-outline btn-sm" id="btn-quick-pt-en" type="button">Main (PT-BR, PT-PT, EN)</button>
+                      <button class="btn btn-outline btn-sm" id="btn-quick-pt-en" type="button">Romanian + English</button>
                       <button class="btn btn-outline btn-sm" id="btn-clear-langs" type="button">Clear Selection</button>
                     </div>
                   </div>
@@ -746,7 +750,7 @@
                       <path
                         d="M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z" />
                     </svg>
-                    <span><b>No language selected:</b> when the list is empty, all valid languages will be allowed (no whitelist filter applied).</span>
+                    <span id="whitelist-hint-text"><b>No language chosen:</b> until you pick at least one, the default languages (Romanian and English) are used.</span>
                   </div>
                 </div>
               </div>
@@ -834,7 +838,7 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" />
                         </svg>
-                        <span>+ Add Mapping Rule</span>
+                        <span>Add Mapping Rule</span>
                       </button>
                     </div>
                   </div>
@@ -905,7 +909,7 @@
                 <div class="panel-header-row">
                   <div>
                     <h2 class="panel-title">Priority</h2>
-                    <p class="panel-subtitle">Drag to set preference order. Only active native services with an API Key and enabled imported addons appear here.</p>
+                    <p class="panel-subtitle">Drag to set the order. It decides which copy of the same subtitle is kept, and the order between equally good matches (an exact hash or name match included). Only the services that are on and the enabled addons appear here.</p>
                   </div>
                 </div>
 
@@ -929,7 +933,7 @@
                   <div class="filter-section-header">
                     <div>
                       <h3>Align to a matching-release reference</h3>
-                      <p class="panel-subtitle">Different releases of the same episode can have slightly different timing (for example a 2160p file with a few extra seconds at the start). When none of the subtitles found comes from the same release group or the same resolution class as your file, subs2b looks for a subtitle of your file&#39;s release in <em>any</em> language, measures the difference in timing (only when the lines appear, never the text) and shifts the subtitle it serves accordingly. If no reliable reference is found, the subtitle is sent unchanged.</p>
+                      <p class="panel-subtitle">Different releases of the same film can have different timing (a few extra seconds at the start, or a slightly different speed). Every subtitle that was not made by your file&#39;s release group is checked before it reaches the player: subs2b finds subtitles of releases like yours in <em>any</em> language, compares when the lines appear (never the text) and shifts or stretches the subtitle when needed. If no reliable reference is found, the subtitle is sent unchanged.</p>
                     </div>
                     <div class="header-toggle">
                       <label class="compact-switch" title="Automatic subtitle re-timing">
@@ -1200,7 +1204,7 @@
                 <div class="install-client-col">
                   <div class="client-brand-row">
                     <div class="stremio-logo-badge" title="Stremio">
-                      <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/stremio.webp" alt="Stremio"
+                      <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/stremio.webp" onerror="this.style.visibility='hidden'" alt="Stremio"
                         width="36" height="36"
                         style="width: 36px; height: 36px; object-fit: contain; border-radius: 8px;">
                     </div>
@@ -1240,7 +1244,7 @@
                   <!-- Compatible client badges with REAL icons -->
                   <div class="compatible-clients-row">
                     <div class="client-pill" title="Stremio" id="pill-open-stremio">
-                      <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/stremio.webp" alt="Stremio"
+                      <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/stremio.webp" onerror="this.style.visibility='hidden'" alt="Stremio"
                         width="16" height="16" style="width: 16px; height: 16px; object-fit: contain;">
                       <span>Stremio</span>
                     </div>
@@ -1378,7 +1382,7 @@
             <div class="dbg-head">
               <div>
                 <div class="section-badge-header">SUBSYNC DECISIONS</div>
-                <p class="section-desc-subtle">What the automatic re-timing did lately (kept in memory, reset on restart), newest first. It only appears when no subtitle fits your file.</p>
+                <p class="section-desc-subtle">What the automatic re-timing decided lately (kept in the database), newest first. Every subtitle not made by your file's release group is checked; the ones made by it are served as they are.</p>
               </div>
               <div class="dbg-actions">
                 <label class="dbg-perpage">Per page

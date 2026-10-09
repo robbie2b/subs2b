@@ -66,7 +66,7 @@ const DEFAULT_CONFIG = {
     'addic7ed',
     'wyzie'
   ],
-  languages: ['pob', 'por', 'eng'],
+  languages: ['ron', 'eng'],
   allowUnknownLanguages: false,
   languageRemap: {
     'por': 'pob',
@@ -749,6 +749,7 @@ function setupHomeActions() {
   document.getElementById('btn-cancel-branding')?.addEventListener('click', closeBrandingModal);
   document.getElementById('btn-close-branding-modal')?.addEventListener('click', closeBrandingModal);
 
+    document.getElementById('btn-topbar-signout')?.addEventListener('click', () => document.getElementById('btn-home-signout')?.click());
     document.getElementById('btn-home-signout')?.addEventListener('click', () => {
     openModal('modal-signout-confirm');
   });
@@ -1116,6 +1117,10 @@ function setupAddonsActions() {
         showImportFeedback('Please enter the manifest.json URL of an addon.', false);
         return;
       }
+      if (!/^(https?|stremio):\/\//i.test(rawUrl)) {
+        showImportFeedback('That is not a link: paste the addon link, starting with https:// (or stremio://).', false);
+        return;
+      }
 
       btnImport.disabled = true;
       btnImport.textContent = 'Importing...';
@@ -1399,7 +1404,7 @@ function setupFiltersActions() {
   });
 
     document.getElementById('btn-quick-pt-en')?.addEventListener('click', () => {
-    state.config.languages = ['pob', 'por', 'eng'];
+    state.config.languages = ['ron', 'eng'];
     renderWhitelistTags();
     renderLanguageChips(document.getElementById('search-languages')?.value || '');
     updateStats();
@@ -1671,12 +1676,19 @@ function renderWhitelistTags() {
   if (!container) return;
 
   const currentLangs = state.config.languages || [];
+  // the note under the list follows the list (it used to say "no language selected" whatever was chosen)
+  const hint = document.getElementById('whitelist-hint-text');
+  if (hint) {
+    hint.innerHTML = currentLangs.length
+      ? `<b>${currentLangs.length} language${currentLangs.length === 1 ? '' : 's'} chosen:</b> only subtitles in ${currentLangs.length === 1 ? 'this language' : 'these languages'} are searched and shown.`
+      : '<b>No language chosen:</b> until you pick at least one, the default languages (Romanian and English) are used.';
+  }
 
   if (currentLangs.length === 0) {
     container.innerHTML = `
       <div class="whitelist-empty-notice">
-        <span class="empty-badge">All languages allowed</span>
-        <span class="empty-text">No whitelist filter active. All subtitles with valid languages will be displayed.</span>
+        <span class="empty-badge">Default languages</span>
+        <span class="empty-text">Romanian and English are used until you pick at least one language.</span>
       </div>
     `;
     return;
@@ -2144,7 +2156,7 @@ function renderFiltersPriority() {
     container.innerHTML = `
       <div class="empty-priority-box">
         No active providers or addons at the moment.<br>
-        <span style="font-size: 11.5px; color: #6b7280;">Enable services with a valid API Key in <b>Services</b> or import addons in <b>Addons</b>.</span>
+        <span style="font-size: 11.5px; color: #6b7280;">Turn on services in <b>Services</b> or import addons in <b>Addons</b>.</span>
       </div>
     `;
     return;
@@ -2629,7 +2641,7 @@ function renderInstallPageDetails(animateTransition = false) {
     if (cardSave) cardSave.style.display = 'none';
 
     const inputEl = document.getElementById('final-manifest-url');
-    if (inputEl) inputEl.value = 'Create your configuration above to generate installation links.';
+    if (inputEl) inputEl.value = 'Create your configuration first (above)';
 
     const linkStremio = document.getElementById('link-install-stremio');
     if (linkStremio) {
@@ -2900,12 +2912,20 @@ function setupModals() {
     closeModal('modal-nuvio');
   });
 
-    document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+  // a click outside the card, or Escape, closes the window the same way its × does (so its own clean-up runs too)
+  const dismiss = backdrop => {
+    const x = backdrop.querySelector('.modal-close');
+    if (x) x.click(); else closeModal(backdrop);
+  };
+  document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
     backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) {
-        closeModal(backdrop);
-      }
+      if (e.target === backdrop) dismiss(backdrop);
     });
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const open = [...document.querySelectorAll('.modal-backdrop.active:not(.closing)')];
+    if (open.length) dismiss(open[open.length - 1]);
   });
 }
 

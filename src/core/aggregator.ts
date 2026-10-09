@@ -1,6 +1,7 @@
 import { StremioSubtitle, StremioSubtitlesResponse } from '../types/stremio';
 import { SubtitleQuery, RawSubtitleItem, ProviderReport } from '../types/provider';
 import { UserConfig } from '../types/config';
+import { DEFAULT_USER_CONFIG } from '../config/userConfig';
 import { executeParallelSearch } from '../providers';
 import { validateAndNormalizeLanguage, isLanguageWhitelisted } from '../utils/normalizer';
 import { deduplicateSubtitles, prioritizeSubtitles, copiesOf } from '../utils/deduplicator';
@@ -134,7 +135,7 @@ export async function getAggregatedSubtitles(
 
   const effectiveWhitelist = (config.languages && config.languages.length > 0)
     ? config.languages
-    : ['pob', 'eng'];
+    : DEFAULT_USER_CONFIG.languages;
 
   const whitelistedItems = normalizedItems.filter(item =>
     isLanguageWhitelisted(item.lang, effectiveWhitelist)

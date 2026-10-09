@@ -115,8 +115,20 @@ function startDebugPage() {
   }
   stopDebugPage();
   if (!debugBase()) {
-    const summary = document.getElementById('dbg-usage-summary');
-    if (summary) summary.textContent = 'Save your configuration first: the debug data is tied to your addon.';
+    // nothing can be loaded yet: every section says why instead of "Loading..." forever
+    const why = 'Save your configuration first (Install page): the debug data is tied to your addon.';
+    for (const id of ['dbg-usage-summary', 'dbg-prov-summary', 'dbg-dl-summary']) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = why;
+    }
+    for (const id of ['dbg-recent', 'dbg-subsync', 'dbg-downloads', 'dbg-rules']) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<div class="dbg-empty">${why}</div>`;
+    }
+    const body = document.getElementById('dbg-prov-body');
+    if (body) body.innerHTML = `<tr><td colspan="10" class="dbg-empty">${why}</td></tr>`;
+    const ft = document.getElementById('dbg-ft-state');
+    if (ft) ft.textContent = '';
     return;
   }
   refreshUsage();
@@ -461,9 +473,10 @@ async function refreshDownloads() {
     const res = await fetch(`${base}/downloads.json`);
     if (!res.ok) return;
     const data = await res.json();
+    // (with nothing to show the list says so; the summary stays empty instead of repeating it)
     summary.textContent = data.lastWeek.length
       ? 'Last 7 days: ' + data.lastWeek.map(h => `${h.host} ${h.failed} failed${h.recovered ? `, ${h.recovered} recovered` : ''}`).join(' · ')
-      : 'No failed download in the last 7 days.';
+      : '';
     const shown = data.entries.slice(0, 50);
     box.innerHTML = shown.length
       ? shown.map(f => `<div class="dbg-req open"><div class="dbg-req-head" style="cursor:default">`
@@ -521,7 +534,7 @@ function renderSubsync() {
   const slice = entries.slice(from, from + debugState.subsyncPageSize);
 
   if (!slice.length) {
-    box.innerHTML = '<div class="dbg-empty">Nothing yet. It appears when no subtitle fits your file (for example a 2160p file with only 1080p subtitles).</div>';
+    box.innerHTML = '<div class="dbg-empty">Nothing yet. A decision appears when you play something whose subtitles were not made by your file\'s release group.</div>';
   } else {
     box.innerHTML = slice.map(e => {
       const label = { shifted: `shifted ${e.offset > 0 ? '+' : ''}${e.offset} s${e.ratio && e.ratio !== 1 ? ` ×${e.ratio}` : ''}${e.segments > 1 ? ` · ${e.segments} parts` : ''}`, unchanged: 'unchanged', timeout: 'too slow: sent unchanged', error: 'error: sent unchanged' }[e.outcome] || e.outcome;

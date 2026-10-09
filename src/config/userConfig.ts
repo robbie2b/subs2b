@@ -31,7 +31,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'addic7ed',
     'wyzie'
   ],
-  languages: ['pob', 'por', 'eng'],
+  languages: ['ron', 'eng'],
   allowUnknownLanguages: false,
   languageRemap: {
     'por': 'pob',

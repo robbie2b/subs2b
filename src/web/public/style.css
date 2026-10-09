@@ -671,7 +671,7 @@ body {
 
 .config-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -793,6 +793,9 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
+  /* the text wraps before the switch instead of running under it */
+  flex: 1;
+  min-width: 0;
 }
 
 .service-logo {
@@ -856,6 +859,8 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
+  margin-left: 12px;
 }
 
 .btn-config-gear {
@@ -2754,9 +2759,14 @@ body {
   .filters-sidebar {
     width: 100%;
     flex-direction: row;
-    overflow-x: auto;
+    flex-wrap: wrap;
     gap: 6px;
     padding: 6px;
+  }
+
+  /* the panel takes the screen's width (it used to size itself to its content and stick out on the right) */
+  .filters-content-area {
+    width: 100%;
   }
 
   .filters-sidebar-title {
@@ -2765,6 +2775,8 @@ body {
 
   .filters-nav-item {
     width: auto;
+    flex: 1 1 auto;
+    justify-content: center;
     white-space: nowrap;
     padding: 7px 10px;
     font-size: 12px;
@@ -3235,18 +3247,22 @@ button:active {
 }
 
 .service-group-head::before {
+  /* a drawn chevron (two borders) looked like a check mark on phones */
   content: '';
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--text-secondary);
-  border-bottom: 2px solid var(--text-secondary);
-  transform: rotate(-45deg);
+  width: 16px;
+  height: 16px;
+  background: no-repeat center / 16px 16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z'/%3E%3C/svg%3E");
   transition: transform var(--transition-fast);
   flex-shrink: 0;
 }
 
 .service-group[open] > .service-group-head::before {
-  transform: rotate(45deg);
+  transform: rotate(90deg);
+}
+
+/* inside a group the group's title already says whether a key is needed */
+.service-group:not(.recommended-addons) .service-badge {
+  display: none;
 }
 
 .service-group-title {
@@ -3322,3 +3338,28 @@ button:active {
 .dbg-ref.full .dbg-ref-full { display: inline; }
 .dbg-ref.full .dbg-ref-short { display: none; }
 .dbg-ref i { font-style: normal; color: var(--text-muted); }
+
+/* sign out on a phone (the sidebar footer with its button is hidden there) */
+.topbar-signout {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .topbar-signout {
+    display: inline-flex;
+  }
+}
+
+/* remapping rules on a phone: the two languages may wrap, the codes never break, the × keeps its room */
+.remap-rule-content { flex-wrap: wrap; min-width: 0; row-gap: 4px; }
+.remap-rule-code { white-space: nowrap; }
+.btn-remove-rule { flex-shrink: 0; margin-left: 8px; }
+
+/* live log: break long lines between words, not in the middle of one */
+.dbg-log { overflow-wrap: anywhere; word-break: normal; }
+
+/* "Allowed Languages" on a phone: the title on its own line, the two buttons under it */
+@media (max-width: 600px) {
+  .filter-section-header:has(> h3) { flex-wrap: wrap; gap: 8px; }
+  .filter-section-header > h3 { width: 100%; }
+}
