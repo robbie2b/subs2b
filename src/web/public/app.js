@@ -430,8 +430,6 @@ function applyConfigWithMigration(parsed) {
       let targetKey = key;
       if (key === 'opensubtitles-rest' || key === 'opensubtitles-v3') {
         targetKey = 'opensubtitles';
-      } else if (key === 'addic7ed') {
-        continue;
       }
       if (merged.providers[targetKey]) {
         const apiKey = typeof val.apiKey === 'string' ? val.apiKey.trim() : '';
@@ -468,9 +466,6 @@ function applyConfigWithMigration(parsed) {
       let mapped = item;
       if (item === 'opensubtitles-rest' || item === 'opensubtitles-v3') {
         mapped = 'opensubtitles';
-      }
-      if (mapped === 'addic7ed') {
-        continue;
       }
       if (!rawPriority.includes(mapped)) {
         rawPriority.push(mapped);

@@ -56,6 +56,9 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.5 (deploy 2026-10-09):** Addic7ed se debifa singur: pagina de configurare (`app.js`, `applyConfigWithMigration`)
+  încă avea regula veche care scotea Addic7ed din config și din Priority la încărcare; la orice salvare, serverul îl
+  primea oprit (live: căutările mergeau la 11 surse, fără Addic7ed). Scoasă (pe server fusese scoasă în 1.5.0).
 - **v1.5.3 (deploy 2026-10-09):** testul temporar „TV FORMAT TEST” din Debug (vezi „De făcut” → TV).
 - **v1.5.1 (deploy 2026-10-02):** Subsync: rapoartele lângă 1 (24/23.976) încercate mereu; lungimile ghicite de două ori
   (cu toate liniile și fără liniile singure la capete: max 3 linii la peste 2 min de rest, `withoutLoneEdges`); ambele
@@ -130,7 +133,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.4 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.5 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
