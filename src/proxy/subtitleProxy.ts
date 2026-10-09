@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { noteDownloadFailure } from '../utils/downloadJournal';
+import { createHash } from 'crypto';
 import axios from 'axios';
 import AdmZip from 'adm-zip';
 import iconv from 'iconv-lite';
@@ -453,11 +454,20 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
   }
 }
 
-/** The hosts an OpenSubtitles download can come from (API, then mirrors) */
-export const OPENSUBTITLES_SOURCES = ['api.opensubtitles.com', 'dl.opensubtitles.org', 'subs5.strem.io'];
+/** The mirrors an OpenSubtitles download can come from when the API cannot */
+export const OPENSUBTITLES_MIRRORS = ['dl.opensubtitles.org', 'subs5.strem.io'];
 
-/** Can this server download from OpenSubtitles right now (at least one way is not refusing it)? */
-export const openSubtitlesDownloadable = (): boolean => OPENSUBTITLES_SOURCES.some(s => !isBlocked(s));
+/**
+ * The OpenSubtitles API as a source refusing this server: one per API key, since the daily download quota belongs to
+ * the key (one person's quota reached must not stop another configuration's key). Only a short hash of the key is kept.
+ */
+export function openSubtitlesApiSource(apiKey: string | null | undefined): string {
+  return apiKey ? `api.opensubtitles.com#${createHash('sha256').update(apiKey).digest('hex').slice(0, 8)}` : 'api.opensubtitles.com';
+}
+
+/** Can this server download from OpenSubtitles right now with this key (at least one way is not refusing it)? */
+export const openSubtitlesDownloadable = (apiKey?: string | null): boolean =>
+  (Boolean(apiKey) && !isBlocked(openSubtitlesApiSource(apiKey))) || OPENSUBTITLES_MIRRORS.some(s => !isBlocked(s));
 
 /**
  * Can this server download the subtitle right now? (Subsync needs the file itself.) False only when every way to it
@@ -465,7 +475,9 @@ export const openSubtitlesDownloadable = (): boolean => OPENSUBTITLES_SOURCES.so
  */
 export function serverCanDownload(item: { url: string }): boolean {
   const url = item.url;
-  if (url.startsWith('/proxy/download/os-rest/')) return openSubtitlesDownloadable();
+  if (url.startsWith('/proxy/download/os-rest/')) {
+    return openSubtitlesDownloadable(new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('apiKey'));
+  }
   try {
     if (url.startsWith('/sub/proxy?')) {
       const inner = new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('url');
@@ -519,7 +531,7 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
   // 1. Official API: POST /api/v1/download returns a temporary link
   const fromApi = async (): Promise<Buffer | null> => {
     if (!apiKey) return null;
-    if (isBlocked('api.opensubtitles.com')) {
+    if (isBlocked(openSubtitlesApiSource(apiKey))) {
       failures.push('api: skipped (refusing this server for now)');
       return null;
     }
@@ -552,7 +564,7 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
       const reason = failureReason(err);
       failures.push(`api: ${reason}`);
       const body = (err as { response?: { data?: { message?: string; reset_time_utc?: string } } })?.response?.data;
-      noteRefusal('api.opensubtitles.com', statusOf(err), reason,
+      noteRefusal(openSubtitlesApiSource(apiKey), statusOf(err), reason,
         recoveryFromMessage(typeof body === 'object' ? body?.message : undefined, typeof body === 'object' ? body?.reset_time_utc : undefined));
     }
     return null;

@@ -28,6 +28,7 @@ import { configStorage } from '../src/storage/configStore';
 import { mergeWithDefaults } from '../src/config/userConfig';
 import { globalSubtitleCache } from '../src/utils/cache';
 import { downloadFailures } from '../src/utils/downloadJournal';
+import { openSubtitlesApiSource } from '../src/proxy/subtitleProxy';
 import { setFormatTest, createFormatTestHandler } from '../src/proxy/formatTest';
 import { RawSubtitleItem, SubtitleQuery } from '../src/types/provider';
 
@@ -193,7 +194,7 @@ async function main() {
 
   console.log('Sources refusing this server');
   {
-    noteRefusal('api.opensubtitles.com', 406, 'quota');
+    noteRefusal(openSubtitlesApiSource('k'), 406, 'quota');
     noteRefusal('dl.opensubtitles.org', 403, 'blocked');
     noteRefusal('subs5.strem.io', 469, 'too many');
     const picked = pickReferenceCandidates([
@@ -641,7 +642,7 @@ async function main() {
     check('a hash match carries its copies as backups (served through the fallback link)', Boolean(fb && fb.u === baseUrl + OS_URL && fb.b.includes(PRO_URL)), before.subtitles.map(x => x.url.slice(0, 80)));
 
     // quota known: the working copy takes the place of the hash match (still a hash match), the one with no copy goes last
-    noteRefusal('api.opensubtitles.com', 406, 'quota');
+    noteRefusal(openSubtitlesApiSource('k'), 406, 'quota');
     noteRefusal('dl.opensubtitles.org', 403, 'blocked');
     noteRefusal('subs5.strem.io', 469, 'too many');
     globalSubtitleCache.clear?.();

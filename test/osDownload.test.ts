@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { handleOpenSubtitlesRestDownload, serverCanDownload } from '../src/proxy/subtitleProxy';
+import { handleOpenSubtitlesRestDownload, serverCanDownload, openSubtitlesApiSource } from '../src/proxy/subtitleProxy';
 import { clearSourceHealth, isBlocked, recoveryFromMessage } from '../src/utils/sourceHealth';
 import { probeAllowed } from '../src/proxy/siteProbe';
 
@@ -72,8 +72,11 @@ async function main(): Promise<void> {
   check(back !== null && Math.abs(back - (Date.now() + (15 * 60 + 50) * 60000)) < 5000, 'the quota message tells when it comes back (15 h 49 min)', back && new Date(back).toISOString());
 
   // the refusals are remembered: the next download does not try them again, and fails at once
-  check(isBlocked('api.opensubtitles.com') && isBlocked('dl.opensubtitles.org') && isBlocked('subs5.strem.io'), 'the refusing sources are remembered');
+  check(isBlocked(openSubtitlesApiSource('k')) && isBlocked('dl.opensubtitles.org') && isBlocked('subs5.strem.io'), 'the refusing sources are remembered');
   check(!serverCanDownload({ url: '/proxy/download/os-rest/1?apiKey=k' }), 'an OpenSubtitles subtitle counts as not downloadable by this server for now');
+  // the quota belongs to the key: another configuration's key is not stopped by it
+  check(!isBlocked(openSubtitlesApiSource('other-key')) && serverCanDownload({ url: '/proxy/download/os-rest/1?apiKey=other-key' }), 'another API key is not blocked by this key\'s quota');
+  check(!openSubtitlesApiSource('k').includes('k#') && /^api\.opensubtitles\.com#[0-9a-f]{8}$/.test(openSubtitlesApiSource('k')), 'only a short hash of the key is kept', openSubtitlesApiSource('k'));
   calls.length = 0;
   const t0 = Date.now();
   r = respond();
