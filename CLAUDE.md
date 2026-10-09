@@ -130,7 +130,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.3 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.4 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
@@ -252,7 +252,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   utilizatorul a reinstalat addonul în Stremio. Deci nici tipul (`x-subrip`), nici lungimea linkului nu sunt cauza pe
   TV-ul lui. Cauza rămâne neclară (probabil starea aplicației Stremio de pe TV, curățată de reinstalare). Testul rămâne
   în Debug (oprit) pentru data viitoare: întâi testul, apoi reinstalarea, ca să se vadă dacă e serverul sau aplicația.
-- **Pe ramură (nedeployat, pentru următorul deploy):** Debug → SUBSYNC DECISIONS: fiecare referință arată și sursa
+- **v1.5.4 (deploy 2026-10-09):** Debug → SUBSYNC DECISIONS: fiecare referință arată și sursa
   („[ron · Subtitrari-noi.ro] …”; câmpul `provider` în deciziile noi, cele vechi n-au), iar numele cu multe release-uri
   (Subtitrari-noi.ro le listează pe toate, ex. Endgame ~70) apar scurtate: primul + „+ N more releases”, tot numele la
   hover sau tap.
