@@ -18,6 +18,7 @@ import {
 } from './proxy/subtitleProxy';
 import { globalSubtitleCache } from './utils/cache';
 import { downloadFailures } from './utils/downloadJournal';
+import { createFormatTestHandler, setFormatTest, formatTestUntil } from './proxy/formatTest';
 import { Logger, getLogLines } from './utils/logger';
 import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
@@ -483,6 +484,16 @@ export function createServer(): express.Application {
     res.json(await getRuleImpact(key, config?.providerPriority || []));
   });
 
+  // Switches the format test on (2 hours) or off: ?on=1 / ?on=0; without it, only says whether it runs
+  app.get('/:config/debug/format-test.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    if (req.query.on === '1' || req.query.on === '0') setFormatTest(key, req.query.on === '1');
+    const until = formatTestUntil(key);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ on: until !== null, until: until ? new Date(until).toISOString() : null });
+  });
+
   // The downloads that failed lately (kept 30 days in the database), and how many per source over the last week
   app.get('/:config/debug/downloads.json', async (req: Request, res: Response): Promise<void> => {
     const key = await requireStoredConfig(req, res);
@@ -620,6 +631,8 @@ export function createServer(): express.Application {
   app.get('/:config/sub/aligned/:data.srt', subtitlesLimiter, createAlignedHandler(getBaseUrl));
   // a subtitle offered by several providers: the sources are tried in order
   app.get('/:config/sub/fallback/:data.srt', subtitlesLimiter, createFallbackHandler(getBaseUrl));
+  // the temporary format test for players that show nothing (see proxy/formatTest.ts)
+  app.get('/:config/sub/test/:id/:variant/:file', subtitlesLimiter, createFormatTestHandler(getBaseUrl));
 
   app.use((req: Request, res: Response) => {
     res.status(404).json({ error: 'Endpoint not found', path: req.path });

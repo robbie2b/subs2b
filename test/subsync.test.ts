@@ -28,6 +28,7 @@ import { configStorage } from '../src/storage/configStore';
 import { mergeWithDefaults } from '../src/config/userConfig';
 import { globalSubtitleCache } from '../src/utils/cache';
 import { downloadFailures } from '../src/utils/downloadJournal';
+import { setFormatTest, createFormatTestHandler } from '../src/proxy/formatTest';
 import { RawSubtitleItem, SubtitleQuery } from '../src/types/provider';
 
 let failed = 0;
@@ -411,6 +412,31 @@ async function main() {
     return { res, out };
   };
   const handler = createAlignedHandler(() => baseUrl);
+
+  // -- the TV format test: 4 more entries at the top, each served its own way --
+  {
+    globalSubtitleCache.clear?.();
+    setFormatTest(uuid, true);
+    const list = await getAggregatedSubtitles(parseSubtitleQuery('series', 'tt13146488:1:1', {}), stored, baseUrl, uuid);
+    setFormatTest(uuid, false);
+    const tests = list.subtitles.slice(0, 4);
+    check('format test: 4 entries at the top, the list after them, not kept by the player',
+      tests.every((t, i) => t.id === `subs2b-test-${i + 1}`) && list.subtitles.length >= 5 && list.cacheMaxAge === 0, list.subtitles.map(t => t.id));
+    check('format test: only the first link is long', tests[0].url.length > 3000 && tests.slice(1).every(t => t.url.length < 200), tests.map(t => t.url.length));
+    // the test links point to this server; their source here is the plain subtitle link of the list
+    const ftHandler = createFormatTestHandler(() => baseUrl);
+    const types: string[] = [];
+    let vttBody = '';
+    for (const t of tests) {
+      const m = /\/sub\/test\/([^/]+)\/([^/]+)\//.exec(t.url)!;
+      const r = respond();
+      await ftHandler({ params: { id: m[1], variant: m[2] }, get: () => '' } as any, r.res);
+      types.push(String(r.out.headers['Content-Type']));
+      if (m[2] === 'vtt') vttBody = r.out.body;
+    }
+    check('format test: text, text, x-subrip, vtt', /^text\/plain/.test(types[0]) && /^text\/plain/.test(types[1]) && /^application\/x-subrip/.test(types[2]) && /^text\/vtt/.test(types[3]), types);
+    check('format test: the VTT is valid WebVTT', vttBody.startsWith('WEBVTT\n\n') && /\d\d:\d\d:\d\d\.\d\d\d --> /.test(vttBody), vttBody.slice(0, 60));
+  }
   const linkFor = (u: string, name = 'Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL.DD5.1.H.264-FLUX') =>
     Buffer.from(JSON.stringify({ u, id: 'tt13146488:1:1', t: 'series', f: CRU, r: name })).toString('base64url');
 

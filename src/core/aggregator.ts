@@ -12,6 +12,7 @@ import { recordUsage } from '../storage/usageStore';
 import { needsReference, fromFileGroup, archivePickParams as buildArchivePickParams } from './alignment';
 import { encodeAlignedToken, encodeFallbackToken, AlignedToken, MAX_ALTERNATIVES, MAX_BACKUPS } from './alignedToken';
 import { prepareAligned } from './alignedPrepare';
+import { formatTestUntil, formatTestEntries } from '../proxy/formatTest';
 import { isAllowedDownloadUrl, addonHostsOf, serverCanDownload } from '../proxy/subtitleProxy';
 
 /** The copy kept for a subtitle: itself, or its first backup this server can download when it cannot */
@@ -357,7 +358,17 @@ export async function getAggregatedSubtitles(
     });
   }
 
-  // the player keeps the list as long as this server does; an empty or incomplete list only briefly
+  // the temporary format test (Debug page): the first subtitle 4 more times at the top, each served differently
+  const testing = Boolean(configId && formatTestUntil(configId) && subtitles.length);
+  if (testing) {
+    const first = subtitles[0];
+    subtitles.unshift(...formatTestEntries(baseUrl, configId!, first.url.startsWith(baseUrl + '/') ? first.url : `${baseUrl}/${configId}/sub/fallback/${encodeFallbackToken({ u: first.url, b: [], r: orderedItems[0].release })}.srt`, first.lang));
+    Logger.info('[FORMAT TEST] the first subtitle is offered 4 more times at the top of the list');
+  }
+
+  // the player keeps the list as long as this server does; an empty or incomplete list only briefly (and a test list
+  // not at all)
+  if (testing) return { subtitles, cacheMaxAge: 0 };
   const short = incomplete || subtitles.length === 0;
   if (short && !incomplete) Logger.info(`[CACHE] kept ${SHORT_CACHE_MINUTES} min only: no subtitle in your languages`);
   return { subtitles, cacheMaxAge: short ? SHORT_CACHE_MINUTES * 60 : Math.round(config.cacheTtlMinutes * 60) };

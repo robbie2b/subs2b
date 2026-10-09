@@ -77,6 +77,7 @@ function startDebugPage() {
       if (open) debugState.open.add(key); else debugState.open.delete(key);
     });
     document.getElementById('dbg-rules-run')?.addEventListener('click', () => { void measureRules(); });
+    document.getElementById('dbg-ft-toggle')?.addEventListener('click', e => { void formatTest(e.currentTarget.dataset.on !== '1'); });
     document.getElementById('dbg-log-copy')?.addEventListener('click', async () => {
       const box = document.getElementById('dbg-log');
       const label = document.getElementById('dbg-copy-label');
@@ -117,6 +118,7 @@ function startDebugPage() {
   refreshProviders();
   refreshSubsync();
   refreshDownloads();
+  formatTest();
   refreshLogs();
   debugState.logTimer = setInterval(refreshLogs, 2000);
   debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); refreshDownloads(); }, 30000);
@@ -398,6 +400,22 @@ function renderRequest(e, tz) {
     + `<div class="dbg-req-title"><div class="dbg-req-file">${title}</div><div class="dbg-req-sub">${escapeHtmlDebug(e.type)} ${escapeHtmlDebug(e.id)}</div></div>`
     + `<div class="dbg-req-side"><div>${escapeHtmlDebug(when)}</div><div class="dbg-muted">${summary}</div></div></div>`
     + `<div class="dbg-req-body">${body}</div></div>`;
+}
+
+async function formatTest(on) {
+  const base = debugBase();
+  const state = document.getElementById('dbg-ft-state');
+  const btn = document.getElementById('dbg-ft-toggle');
+  if (!base || !state || !btn) return;
+  try {
+    const res = await fetch(`${base}/format-test.json${on === undefined ? '' : `?on=${on ? 1 : 0}`}`);
+    const data = await res.json();
+    state.textContent = data.on ? `on until ${new Date(data.until).toLocaleTimeString('en-GB', { hour12: false })}` : 'off';
+    btn.textContent = data.on ? 'Stop test' : 'Start test';
+    btn.dataset.on = data.on ? '1' : '0';
+  } catch (err) {
+    state.textContent = 'could not reach the server';
+  }
 }
 
 async function measureRules() {
