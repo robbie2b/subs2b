@@ -5,6 +5,7 @@ import { SubtitleQuery } from '../types/provider';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
 import { isBlocked, noteRefusal, statusOf } from '../utils/sourceHealth';
+import { noteBrokenFile, isBrokenFileReason } from '../utils/brokenFiles';
 import { noteDownloadFailure } from '../utils/downloadJournal';
 import { AlignedToken, linksOf } from './alignedToken';
 import { getReferences, fitsReferences, AlignmentResult, Reference } from './alignment';
@@ -61,7 +62,11 @@ export async function loadOriginal(url: string, allowedHosts: string[]): Promise
   });
   const { buffer } = decompressBuffer(Buffer.from(upstream.data));
   const validation = validateAndFormatSubtitle(toCleanUtf8(buffer), 'srt');
-  if (!validation.valid) throw new Error(validation.reason || 'invalid subtitle');
+  if (!validation.valid) {
+    // (a link of this server's own proxy remembers it there, with the real address of the file)
+    if (isBrokenFileReason(validation.reason) && !url.startsWith(origin + '/sub/proxy')) noteBrokenFile(url, validation.reason || '');
+    throw new Error(validation.reason || 'invalid subtitle');
+  }
   return validation.content;
 }
 
@@ -100,6 +105,48 @@ export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl:
   Logger.warn(`[DOWNLOAD] no source of the subtitle could be downloaded: ${failures.join('; ') || 'no allowed link'}`);
   noteDownloadFailure({ host: failures.length ? failures[0].split(':')[0].split('/')[0] : 'no allowed link', place: 'backups', reason: failures.join('; ') || 'no allowed link', recovered: false, release });
   throw new Error(failures.length ? `every source failed (${failures.join('; ')})` : 'no allowed link');
+}
+
+/** A subtitle ready to be aligned: the one asked for, or the next of its language when that one could not be downloaded */
+export interface LoadedSubtitle {
+  text: string;
+  /** release name of the subtitle really loaded */
+  release?: string;
+  /** the subtitles after it, for the check against the references */
+  alternatives: Array<{ u: string; r?: string; b?: string[] }>;
+  /** set when the one asked for could not be downloaded and this one took its place */
+  replacedBy?: string;
+}
+
+/**
+ * Downloads the subtitle of a link. When no source of it can be downloaded (a file the site does not have any more,
+ * an archive with nothing readable), the next subtitle of the same language takes its place, instead of the player
+ * getting an error: a subtitle that works, one position lower, is better than none (Harry Potter: the first
+ * subtitle's file was gone from Subtitrari-noi.ro, the second, of the same release, was fine).
+ */
+export async function loadWithAlternatives(token: AlignedToken, hosts: string[], baseUrl: string): Promise<LoadedSubtitle> {
+  const alternatives = token.a || [];
+  try {
+    const first = await loadFirst(linksOf(token), hosts, baseUrl, token.r);
+    return { text: first.text, release: token.r, alternatives };
+  } catch (err: unknown) {
+    for (let i = 0; i < alternatives.length; i++) {
+      const alt = alternatives[i];
+      if (!alt.u.startsWith(baseUrl + '/') && !isAllowedDownloadUrl(alt.u, hosts)) continue;
+      try {
+        const loaded = await loadFirst(linksOf(alt), hosts, baseUrl, alt.r);
+        Logger.info(`[DOWNLOAD] the subtitle could not be downloaded, the next one of the same language is served instead: ${alt.r || alt.u}`);
+        noteDownloadFailure({
+          host: new URL(token.u).hostname, place: 'replaced', recovered: true, release: token.r,
+          reason: `could not be downloaded (${describe(err)}); replaced by ${alt.r || alt.u}`
+        });
+        return { text: loaded.text, release: alt.r, alternatives: alternatives.slice(i + 1), replacedBy: alt.r || alt.u };
+      } catch {
+        // this one cannot be downloaded either: the next
+      }
+    }
+    throw err;
+  }
 }
 
 /**
@@ -147,13 +194,18 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
   const started = Date.now();
   const timing = { original: 0, references: 0, compute: 0 };
   // the subtitle and the references are fetched at the same time
-  const original = loadFirst(linksOf(token), hosts, baseUrl, token.r).then(r => { timing.original = Date.now() - started; return r.text; });
+  const loading = loadWithAlternatives(token, hosts, baseUrl).then(l => { timing.original = Date.now() - started; return l; });
+  const original = loading.then(l => l.text);
   const references = getReferences({ query, config, baseUrl, filename: token.f })
     .then(refs => { timing.references = Date.now() - started; return refs; });
-  const served = Promise.all([original, references]).then(async ([text, refs]) => {
+  const served = Promise.all([loading, references]).then(async ([loaded, refs]) => {
     const computeStart = Date.now();
-    const s = await alignOrReplace(text, token.r, token.f, refs, token.a || [], hosts, baseUrl);
+    const s = await alignOrReplace(loaded.text, loaded.release, token.f, refs, loaded.alternatives, hosts, baseUrl);
     timing.compute = Date.now() - computeStart;
+    if (loaded.replacedBy && !s.replacedBy) {
+      s.replacedBy = loaded.replacedBy;
+      s.result.note = ['the subtitle could not be downloaded, the next one of the same language was used', s.result.note].filter(Boolean).join('; ');
+    }
     return { ...s, timing };
   });
   const entry: Prepared = { original, served, startedAt: Date.now() };

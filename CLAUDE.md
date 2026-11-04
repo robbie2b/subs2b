@@ -279,6 +279,17 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   folosește varianta cea mai apropiată de fișier. `title` rămâne numele release-ului. Testele vechi care căutau id-urile
   tehnice au fost adaptate (providerValidation, vttConvert). Nuvio are și el auto-sync, după pista embedded din fișier
   („Auto synced” / „autosync failed” în meniul lui; nu vine de la noi): se completează cu Subsync-ul nostru.
+- **Pe ramură (nedeployat): Harry Potter și piatra filozofală (2026-11-04).** Prima subtitrare (Subtitrari-noi
+  `subtitrarinoi-24773`, release TASTED) dădea în Nuvio „autosync failed”, a doua (Subs.ro, același release) mergea.
+  Cauza: nu format și nu antet. Site-ul răspunde 200 cu un text de 100 de octeți („Ne pare rău, subtitrarea nu este
+  disponibilă momentan. Vă rugăm să contactați administratorul.”) în loc de arhivă, chiar și cu Referer și sesiune
+  (probe.json); serverul dădea 502 și lista o ținea pe primul loc (jurnalul: 16 eșecuri la același fișier).
+  Reparat: (1) `loadWithAlternatives` (alignedPrepare.ts): dacă fișierul subtitrării alese nu se poate descărca,
+  se ia următoarea din aceeași limbă (alternativele din token), alinierea merge pe ea, Debug arată „replaced by” cu
+  motivul, jurnalul „replaced”; fără alternative rămâne 502; (2) `utils/brokenFiles.ts`: un fișier fără bloc de timp
+  sau gol e ținut minte 3 h (în memorie) și `serverCanDownload` îl dă drept nedescărcabil, deci coboară la sfârșitul
+  listei (un răspuns HTML/JSON nu, poate fi doar o blocare); (3) motivul invalid arată ce a spus site-ul când răspunsul
+  e scurt și text. Nu verificat live (e pe ramură).
 - **Pentru mai târziu (cererea utilizatorului, 2026-10-02): „slot” ca la Stremio Community Subtitles.** Primul loc din listă
   = link fix către server (`no-store`); serverul trimite ce e ales acum. Pagină „Now playing” în interfață: alegi altă
   subtitrare dintre cele găsite și/sau muți manual (+/− s), fără să cauți în Stremio; alegerea ținută minte pe fișier și

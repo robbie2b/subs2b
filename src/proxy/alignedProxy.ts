@@ -5,7 +5,7 @@ import { applyAlignment } from '../utils/subsync';
 import { parseSubtitleQuery } from '../core/aggregator';
 import { decodeAlignedToken, decodeFallbackToken, linksOf } from '../core/alignedToken';
 import { recordAlignment, AlignmentResult } from '../core/alignment';
-import { prepareAligned, loadFirst, clearPrepared, Served } from '../core/alignedPrepare';
+import { prepareAligned, loadFirst, loadWithAlternatives, clearPrepared, Served } from '../core/alignedPrepare';
 import { addonHostsOf, isAllowedDownloadUrl, sendSubtitleResponse } from './subtitleProxy';
 
 /**
@@ -51,7 +51,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
 
     if (config.subsync === false) {
       try {
-        sendSubtitleResponse(res, (await loadFirst(linksOf(token), hosts, baseUrl, token.r)).text, 'srt', 'subtitle.srt');
+        sendSubtitleResponse(res, (await loadWithAlternatives(token, hosts, baseUrl)).text, 'srt', 'subtitle.srt');
       } catch (err: unknown) {
         originalFailed(err);
       }
@@ -113,7 +113,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
         Logger.info(`[SUBSYNC] timing for ${token.id}: subtitle ${t.original} ms, references ${t.references} ms (both from the start, in parallel), computation ${t.compute} ms; the player waited ${Date.now() - started} ms`);
       }
       const body = served.text ?? text;
-      if (replacedBy) Logger.info(`[SUBSYNC] the subtitle does not fit the references, serving an alternative instead`, { id: token.id, subtitle: token.r, replacedBy });
+      if (replacedBy) Logger.info(`[SUBSYNC] the subtitle was replaced (it does not fit the references, or could not be downloaded), serving an alternative instead`, { id: token.id, subtitle: token.r, replacedBy });
       if (result.decision.apply) {
         const shifted = applyAlignment(body, result.decision.result!);
         Logger.info(`[SUBSYNC] shifted ${result.decision.offset} s${result.decision.ratio !== 1 ? ` x${result.decision.ratio}` : ''}${result.decision.segments > 1 ? ` in ${result.decision.segments} parts` : ''} (${result.decision.reason})`, { id: token.id, subtitle: replacedBy || token.r });

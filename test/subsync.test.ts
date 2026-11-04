@@ -15,6 +15,8 @@ import { needsReference, fromFileGroup, referenceKey, pickReferenceCandidates, c
 import { rankSubtitles } from '../src/utils/scorer';
 import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
 import { createAlignedHandler, createFallbackHandler, clearAlignmentDecisions } from '../src/proxy/alignedProxy';
+import { clearPrepared } from '../src/core/alignedPrepare';
+import { noteBrokenFile, clearBrokenFiles } from '../src/utils/brokenFiles';
 import { deduplicateSubtitles } from '../src/utils/deduplicator';
 import { packReferences, unpackReferences } from '../src/storage/referenceStore';
 import { noteRefusal, clearSourceHealth, isBlocked, restoreRefusals, attachRefusalStore } from '../src/utils/sourceHealth';
@@ -327,6 +329,8 @@ async function main() {
     if (url.includes('/ro-hd')) return body(RO_HD);
     if (url.includes('/ro-other')) return body(RO_OTHER);
     if (url.includes('/ro-empty')) return body('1\n00:00:01,000 --> 00:00:02,000\nshort\n');
+    // a site that answers 200 with an apology instead of the file (Subtitrari-noi.ro, Harry Potter)
+    if (url.includes('/ro-gone')) return body('Ne pare r\u0103u, subtitrarea nu este disponibil\u0103 momentan. V\u0103 rug\u0103m s\u0103 contacta\u021bi administratorul.');
     if (url.includes('/rate-limited')) throw Object.assign(new Error('Request failed with status code 469'), { response: { status: 469 } });
     throw new Error('unexpected fetch ' + url);
   };
@@ -412,6 +416,21 @@ async function main() {
     const dupIds = dup.subtitles.map(s => s.id);
     check('a repeated label gets a number', new Set(dupIds).size === dupIds.length && dupIds.some(i => / \(2\)$/.test(i)), dupIds);
     providerItems.splice(providerItems.findIndex(i => i.id === 'ro-dup'), 1);
+
+    // a subtitle whose file is known to be unusable goes to the end of the list (a first place that always fails)
+    const goneZip = 'https://www.subtitrari-noi.ro/gone.zip';
+    providerItems.push({ id: 'ro-broken', provider: 'subtitrarinoi', providerName: 'Subtitrari-noi.ro', url: `/sub/proxy?url=${encodeURIComponent(goneZip)}`, lang: 'ron', release: 'Peacemaker.2022.S01E01.2160p.HMAX.WEB-DL.HEVC-CRU' });
+    globalSubtitleCache.clear?.();
+    const healthy = await getAggregatedSubtitles(q, stored, baseUrl, uuid);
+    check('before: the subtitle of the file\'s own group is first', healthy.subtitles[0].url.includes('gone.zip'), healthy.subtitles.map(s => s.url.slice(0, 70)));
+    noteBrokenFile(goneZip, 'No valid timing block (-->) found in the subtitle text.');
+    globalSubtitleCache.clear?.();
+    const afterBroken = await getAggregatedSubtitles(q, stored, baseUrl, uuid);
+    check('a subtitle known to be unusable is last, the others keep their order',
+      afterBroken.subtitles.length === healthy.subtitles.length && afterBroken.subtitles[afterBroken.subtitles.length - 1].url.includes('gone.zip') && !afterBroken.subtitles[0].url.includes('gone.zip'),
+      afterBroken.subtitles.map(s => s.url.slice(0, 70)));
+    clearBrokenFiles();
+    providerItems.splice(providerItems.findIndex(i => i.id === 'ro-broken'), 1);
     providerItems.splice(providerItems.findIndex(i => i.id === 'ro-ntb'), 2);
   }
 
@@ -572,6 +591,31 @@ async function main() {
     await handler({ params: { config: uuid, data: wrapped.url.split('/sub/aligned/')[1].replace('.srt', '') }, query: {} } as any, r.res);
     check('prepared in advance: the player gets the aligned subtitle without waiting for a search', Date.now() - t0 < 500 && providerCalls === callsAfterList && Math.abs(parseCues(r.out.body)[10].start - (parseCues(RO_HD)[10].start - 5)) < 0.15, { ms: Date.now() - t0, calls: providerCalls - callsAfterList });
     searchDelayMs = 0;
+  }
+
+  {
+    // the subtitle asked for is gone from its site: the next one of the same language takes its place
+    clearAlignmentDecisions();
+    clearPrepared();
+    const gone = Buffer.from(JSON.stringify({
+      u: baseUrl + '/ro-gone', id: 'tt13146488:1:1', t: 'series', f: CRU, r: 'Peacemaker.2022.S01E01.GONE-FILE',
+      a: [{ u: baseUrl + '/ro-gone?2', r: 'Peacemaker.2022.S01E01.ALSO-GONE' }, { u: baseUrl + '/ro-hd?alt=1', r: 'Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL-FLUX' }]
+    })).toString('base64url');
+    const r = respond();
+    await handler({ params: { config: uuid, data: gone }, query: {} } as any, r.res);
+    check('a subtitle that cannot be downloaded is replaced by the next that can (and it is aligned)',
+      r.out.status === 200 && Math.abs(parseCues(r.out.body)[10].start - TRUTH[10].start) < 0.2, { status: r.out.status, body: r.out.body.slice(0, 60) });
+    const logged = (await getAlignments(uuid))[0];
+    check('Debug says which one took its place, and why', logged?.replacedBy === 'Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL-FLUX' && /could not be downloaded/.test(logged.reason), logged);
+    check('the journal notes the replacement', downloadFailures().entries.some(f => f.place === 'replaced' && f.recovered && /Peacemaker.2022.S01E01.1080p.HMAX.WEB-DL-FLUX/.test(f.reason)), downloadFailures().entries.slice(0, 2));
+
+    // with nothing to take its place the player gets an error (as before), not a broken file
+    clearAlignmentDecisions();
+    clearPrepared();
+    const lonely = Buffer.from(JSON.stringify({ u: baseUrl + '/ro-gone', id: 'tt13146488:1:1', t: 'series', f: CRU, r: 'Peacemaker.2022.S01E01.GONE-FILE' })).toString('base64url');
+    const r2 = respond();
+    await handler({ params: { config: uuid, data: lonely }, query: {} } as any, r2.res);
+    check('no alternative: an error, not a broken file', r2.out.status === 502, r2.out.status);
   }
 
   {

@@ -215,7 +215,7 @@ export async function getAggregatedSubtitles(
   const dead = orderedItems.filter(i => i.url.startsWith('/') && !serverCanDownload(i));
   if (dead.length) {
     orderedItems = [...orderedItems.filter(i => !dead.includes(i)), ...dead];
-    Logger.info(`[SOURCES] ${dead.length} subtitle(s) moved last: their source refuses this server for now and they have no working copy`);
+    Logger.info(`[SOURCES] ${dead.length} subtitle(s) moved last: their source refuses this server for now, or the file is known to be unusable, and they have no working copy`);
   }
 
   if (subsyncVerdict.needed) {

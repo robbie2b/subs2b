@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { handleOpenSubtitlesRestDownload, serverCanDownload, openSubtitlesApiSource } from '../src/proxy/subtitleProxy';
+import { handleOpenSubtitlesRestDownload, serverCanDownload, openSubtitlesApiSource, validateAndFormatSubtitle } from '../src/proxy/subtitleProxy';
+import { noteBrokenFile, isBrokenFile, isBrokenFileReason, clearBrokenFiles } from '../src/utils/brokenFiles';
 import { clearSourceHealth, isBlocked, recoveryFromMessage } from '../src/utils/sourceHealth';
 import { probeAllowed } from '../src/proxy/siteProbe';
 
@@ -104,6 +105,27 @@ async function main(): Promise<void> {
 
   console.log = realLog;
   console.error = realError;
+
+  // a file the site no longer has (it answers 200 with an apology): the reason shows what the site said, and the
+  // file is remembered as unusable, so its subtitle goes to the end of the lists
+  {
+    const apology = 'Ne pare r\u0103u, subtitrarea nu este disponibil\u0103 momentan. V\u0103 rug\u0103m s\u0103 contacta\u021bi administratorul.';
+    const v = validateAndFormatSubtitle(apology, 'srt');
+    check(!v.valid && /No valid timing block/.test(v.reason || '') && (v.reason || '').includes('The site answered: "Ne pare r\u0103u'), 'a short plain answer is quoted in the reason', v.reason);
+    const big = validateAndFormatSubtitle('x'.repeat(2000), 'srt');
+    check(!big.valid && !/The site answered/.test(big.reason || ''), 'a long text is not quoted', big.reason);
+    check(isBrokenFileReason(v.reason) && isBrokenFileReason('Empty subtitle file (0 bytes).'), 'no timing / empty: the file itself is unusable');
+    check(!isBrokenFileReason('HTML error page returned by the remote server.') && !isBrokenFileReason('JSON error response from the remote API.'), 'a block page is not the file\'s fault');
+
+    const zip = 'https://www.subtitrari-noi.ro/24773-subtitrari-noi.ro-Harry_Potter-939.zip';
+    const link = `/sub/proxy?url=${encodeURIComponent(zip)}&filename=x.srt`;
+    check(serverCanDownload({ url: link }), 'before: the subtitle counts as downloadable');
+    noteBrokenFile(zip, v.reason || '');
+    check(isBrokenFile(zip) && !serverCanDownload({ url: link }), 'once known as unusable it does not');
+    check(serverCanDownload({ url: `/sub/proxy?url=${encodeURIComponent('https://www.subtitrari-noi.ro/other.zip')}&filename=y.srt` }), 'another file of the same site is not affected');
+    clearBrokenFiles();
+    check(serverCanDownload({ url: link }), 'and it is forgotten again');
+  }
 
   // the site probe (Debug) only fetches the candidate subtitle sites
   check(probeAllowed('https://www.titrari.ro/index.php?page=cautare') && probeAllowed('https://sub.wyzie.ru/search?id=tt1') && probeAllowed('https://www.addic7ed.com/'),

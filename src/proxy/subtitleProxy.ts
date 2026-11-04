@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { noteDownloadFailure } from '../utils/downloadJournal';
+import { isBrokenFile, noteBrokenFile, isBrokenFileReason } from '../utils/brokenFiles';
 import { createHash } from 'crypto';
 import axios from 'axios';
 import AdmZip from 'adm-zip';
@@ -287,7 +288,9 @@ export function validateAndFormatSubtitle(
   const timingRegex = /((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,3})/;
   const match = timingRegex.exec(text);
   if (!match) {
-    return { content: text, format: preferredFormat, valid: false, reason: 'No valid timing block (-->) found in the subtitle text.' };
+    // a short plain answer is usually the site explaining itself ("the subtitle is not available"): it goes in the reason
+    const said = text.length <= 400 && !/[\u0000-\u0008\u000e-\u001f]/.test(text) ? ` The site answered: "${text.replace(/\s+/g, ' ').slice(0, 160)}"` : '';
+    return { content: text, format: preferredFormat, valid: false, reason: `No valid timing block (-->) found in the subtitle text.${said}` };
   }
 
   if (preferredFormat === 'vtt') {
@@ -441,6 +444,8 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
 
     if (!validation.valid) {
       Logger.warn(`Invalid subtitle delivered from ${new URL(targetUrl).hostname}: ${validation.reason}`);
+      // a file that is itself unusable (not a block of this server) goes to the end of the lists for a few hours
+      if (isBrokenFileReason(validation.reason)) noteBrokenFile(targetUrl, validation.reason || '');
       sendError(res, 502, `Failed to process the subtitle from the remote server: ${validation.reason}`);
       return;
     }
@@ -481,10 +486,10 @@ export function serverCanDownload(item: { url: string }): boolean {
   try {
     if (url.startsWith('/sub/proxy?')) {
       const inner = new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('url');
-      return !inner || !isBlocked(new URL(inner).hostname);
+      return !inner || (!isBlocked(new URL(inner).hostname) && !isBrokenFile(inner));
     }
     if (url.startsWith('/')) return true;
-    return !isBlocked(new URL(url).hostname);
+    return !isBlocked(new URL(url).hostname) && !isBrokenFile(url);
   } catch {
     return true;
   }
