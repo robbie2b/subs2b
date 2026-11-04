@@ -14,19 +14,6 @@ interface GenericStremioSubtitlesResponse {
 }
 
 /**
- * What the player tells an addon about the file, in the Stremio path form ("videoHash=..&videoSize=..&filename=.."):
- * addons use it to put the subtitles made for this exact file first (OpenSubtitles by the file's hash). Without it an
- * imported addon answers as for any copy of the film. Empty when the player sent none of it.
- */
-export function extraPathOf(query: SubtitleQuery): string {
-  const extra = query.extra || {};
-  return ['videoHash', 'videoSize', 'filename']
-    .filter(key => typeof extra[key] === 'string' && String(extra[key]).trim() !== '')
-    .map(key => `${key}=${encodeURIComponent(String(extra[key]))}`)
-    .join('&');
-}
-
-/**
  * Some addons (e.g. the community Subs.ro addon) put the real subtitle file name in the URL,
  * base64url-encoded (.../proxy/<id>/<encoded-name>/sub.vtt). Decode it to recover the release name.
  */
@@ -80,23 +67,14 @@ export class GenericStremioAddonProvider extends BaseSubtitleProvider {
     context: ProviderContext,
     signal: AbortSignal
   ): Promise<RawSubtitleItem[]> {
-    const path = `${this.baseUrl}/subtitles/${encodeURIComponent(query.type)}/${encodeURIComponent(query.id)}`;
+    const url = `${this.baseUrl}/subtitles/${encodeURIComponent(query.type)}/${encodeURIComponent(query.id)}.json`;
     const timeout = context.timeoutMs || 20000;
 
-    // with what the player knows of the file; an addon that does not take it (a 4xx) is asked the plain way
-    const extra = extraPathOf(query);
-    let response: Awaited<ReturnType<typeof this.httpGet<GenericStremioSubtitlesResponse>>> | null = null;
-    if (extra) {
-      try {
-        response = await this.httpGet<GenericStremioSubtitlesResponse>(`${path}/${extra}.json`, { timeout }, signal);
-      } catch (err: unknown) {
-        const status = (err as { response?: { status?: number } })?.response?.status;
-        if (!status || status >= 500 || status === 429) throw err;
-      }
-    }
-    if (!response) {
-      response = await this.httpGet<GenericStremioSubtitlesResponse>(`${path}.json`, { timeout }, signal);
-    }
+    const response = await this.httpGet<GenericStremioSubtitlesResponse>(
+      url,
+      { timeout },
+      signal
+    );
 
     if (!response.data || !Array.isArray(response.data.subtitles)) {
       return [];

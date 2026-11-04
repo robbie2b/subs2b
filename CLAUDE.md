@@ -298,6 +298,33 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   sau gol e ținut minte 3 h (în memorie) și `serverCanDownload` îl dă drept nedescărcabil, deci coboară la sfârșitul
   listei (un răspuns HTML/JSON nu, poate fi doar o blocare); (3) motivul invalid arată ce a spus site-ul când răspunsul
   e scurt și text. Verificat live pe 1.5.7 (2026-11-04 12:50): prima subtitrare (fișier lipsă) → HTTP 200, 1219 replici, înlocuită de a doua (Debug: „replaced by”, „already aligned (the subtitle could not be downloaded…)”); etichetele apar în listă.
+- **Extra-uri către addonurile importate: ÎNCERCAT în 1.5.8 și ANULAT (1.5.9, 2026-11-04).** Ideea: trimis `videoHash`,
+  `videoSize`, `filename` ca playerul. Măsurat live pe filme reale (A/B, aceleași filme cu și fără extra): numărul de
+  rezultate e IDENTIC (The Social Network: PRO 24, v3 85, Subs.ro 10; Fantastic Four: PRO 7, v3 99, Subs.ro 12), deci nu
+  aduce nimic; timpii nu s-au îmbunătățit (PRO a avut 11,9 s cu extra și 3,6 s fără; comparația e influențată de cache-ul
+  lor la a doua cerere). În plus: cu hash FĂRĂ videoSize, OpenSubtitles v3 întoarce 0 rezultate (Peacemaker 69 → 0), deci
+  riscul e de pierdere, nu câștig. Concluzie: copiile addonurilor din subs2b dau aceleași rezultate ca playerul, deci
+  Subs.ro și PRO pot fi scoase din Nuvio fără pierdere de conținut. Lecție: un test cu cereri făcute de mână trebuie să
+  ia TOATE valorile reale (hash + size + nume), nu doar o parte.
+- **v1.5.7: etichete citibile ca id de subtitrare** (2026-11-04). Nuvio afișează
+  `id`-ul sub limbă (niciun player nu arată `title`), deci `id` = `★ Subs.ro · 2160p BluRay · MainFrame`
+  (`src/utils/subtitleLabel.ts`): sursa, rezoluție + serviciu + sursă (REMUX/BluRay/BRRip/WEB-DL...), XviD când e cazul,
+  grupul; ★ doar la nivelul de sus (hash match sau nume exact); max 44 caractere; depinde doar de subtitrare și fișier,
+  nu de poziție sau scor (stabilă la fiecare deschidere); repetările primesc „ (2)”. La numele cu multe release-uri se
+  folosește varianta cea mai apropiată de fișier. `title` rămâne numele release-ului. Testele vechi care căutau id-urile
+  tehnice au fost adaptate (providerValidation, vttConvert). Nuvio are și el auto-sync, după pista embedded din fișier
+  („Auto synced” / „autosync failed” în meniul lui; nu vine de la noi): se completează cu Subsync-ul nostru.
+- **v1.5.7: Harry Potter și piatra filozofală (2026-11-04).** Prima subtitrare (Subtitrari-noi
+  `subtitrarinoi-24773`, release TASTED) dădea în Nuvio „autosync failed”, a doua (Subs.ro, același release) mergea.
+  Cauza: nu format și nu antet. Site-ul răspunde 200 cu un text de 100 de octeți („Ne pare rău, subtitrarea nu este
+  disponibilă momentan. Vă rugăm să contactați administratorul.”) în loc de arhivă, chiar și cu Referer și sesiune
+  (probe.json); serverul dădea 502 și lista o ținea pe primul loc (jurnalul: 16 eșecuri la același fișier).
+  Reparat: (1) `loadWithAlternatives` (alignedPrepare.ts): dacă fișierul subtitrării alese nu se poate descărca,
+  se ia următoarea din aceeași limbă (alternativele din token), alinierea merge pe ea, Debug arată „replaced by” cu
+  motivul, jurnalul „replaced”; fără alternative rămâne 502; (2) `utils/brokenFiles.ts`: un fișier fără bloc de timp
+  sau gol e ținut minte 3 h (în memorie) și `serverCanDownload` îl dă drept nedescărcabil, deci coboară la sfârșitul
+  listei (un răspuns HTML/JSON nu, poate fi doar o blocare); (3) motivul invalid arată ce a spus site-ul când răspunsul
+  e scurt și text. Verificat live pe 1.5.7 (2026-11-04 12:50): prima subtitrare (fișier lipsă) → HTTP 200, 1219 replici, înlocuită de a doua (Debug: „replaced by”, „already aligned (the subtitle could not be downloaded…)”); etichetele apar în listă.
 - **v1.5.8 (2026-11-04; cerut de utilizator):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate de
   noi doar cu `/subtitles/<type>/<id>.json`, FĂRĂ extra (`filename`, `videoHash`, `videoSize`) pe care le trimite playerul
   (`src/providers/genericStremioAddon.ts`): copiile din subs2b pot da rezultate mai slabe decât addonurile puse direct în
