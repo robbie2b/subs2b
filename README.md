@@ -1,3 +1,13 @@
+---
+title: subs2b
+emoji: 💬
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7000
+pinned: false
+---
+
 <div align="center">
 
 <img src="src/web/public/assets/subs2b_logo.png" width="160" height="160" alt="subs2b logo">
