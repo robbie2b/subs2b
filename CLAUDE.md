@@ -61,7 +61,8 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   Edit addon e ascuns; Debug scrie „timed out after Nms". Test: `test/connectorTimeout.test.ts`. (2) Extra-urile către
   addonurile importate (1.5.8) anulate: aceleași rezultate ca fără, v3 dă 0 cu hash fără size. Măsurat pe 136 căutări:
   la 6 s se pierd ~4% din răspunsuri și ~1% din subtitrări (PRO, Addic7ed); la 4 s ~2%. Idee cerută: setare „dynamic"
-  (oprire înainte de limită când există deja rezultate bune peste un punctaj).
+  (oprire înainte de limită când există deja rezultate bune peste un punctaj): NU se face (decizia utilizatorului, 2026-11-04):
+  bufferingul până la prima imagine e ~3 s, deci oricum lista nu mai contează după; posibil doar la seriale (replici de la secunda 0).
 - **v1.5.8 (deploy 2026-11-04):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate cu `videoHash`, `videoSize`,
   `filename` ca de player (vezi „De făcut”); cache-ul raw e pe fișier. De comparat după deploy: timpii per sursă din Debug.
   Gazdă: rămâne Render gratuit (cron-job 24/7); varianta recomandată dacă se vrea liniște: Render Starter (~7 $/lună,
