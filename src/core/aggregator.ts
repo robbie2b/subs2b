@@ -8,6 +8,7 @@ import { deduplicateSubtitles, prioritizeSubtitles, copiesOf } from '../utils/de
 import { globalSubtitleCache } from '../utils/cache';
 import { Logger } from '../utils/logger';
 import { rankSubtitles } from '../utils/scorer';
+import { subtitleLabel } from '../utils/subtitleLabel';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
 import { recordUsage } from '../storage/usageStore';
 import { needsReference, fromFileGroup, archivePickParams as buildArchivePickParams } from './alignment';
@@ -173,6 +174,8 @@ export async function getAggregatedSubtitles(
   let debugTop: DebugTopEntry[] = [];
   let debugUsedFilename = false;
   let debugFallback = false;
+  // the subtitles on the top level (an exact hash match, or a name exactly the file's release): they get a star
+  const topLevel = new Set<RawSubtitleItem>();
 
   // Bazarr-style scoring: best match for the playing file goes first (players auto-pick position 1)
   try {
@@ -188,6 +191,9 @@ export async function getAggregatedSubtitles(
     );
     ranked.details.slice(0, 5).forEach((d, i) => {
       Logger.info(`[SCORE] #${i + 1} ${d.score}${d.rejected ? ' REJECTED' : ''} [${d.provider}] ${d.release} | ${d.reasons.join(', ')}`);
+    });
+    ranked.items.forEach((it, i) => {
+      if ((ranked.details[i]?.reasons || []).some(r => /HASH MATCH|EXACT NAME MATCH/.test(r))) topLevel.add(it);
     });
     orderedItems = ranked.items;
     debugUsedFilename = ranked.usedFilename;
@@ -292,12 +298,14 @@ export async function getAggregatedSubtitles(
   /** Links this server may download itself (its own, a subtitle site or an addon of this configuration) */
   const fetchable = (u: string): boolean => u.startsWith(baseUrl + '/') || isAllowedDownloadUrl(u, addonHosts);
 
-  // Stremio treats the subtitle id as unique: never send the same id twice
+  // The subtitle id is what Nuvio shows under the language (no player shows the title), so it is the short readable
+  // label ("★ Subs.ro · 2160p BluRay · MainFrame"). It must be unique in the list: a repeat gets " (2)"...
   const usedIds = new Set<string>();
   const subtitles: StremioSubtitle[] = orderedItems.map(item => {
-    let uniqueId = item.id;
+    const label = subtitleLabel(item, { filename: query.extra?.filename, topLevel: topLevel.has(item) });
+    let uniqueId = label;
     for (let n = 2; usedIds.has(uniqueId); n++) {
-      uniqueId = `${item.id}-${n}`;
+      uniqueId = `${label} (${n})`;
     }
     usedIds.add(uniqueId);
 

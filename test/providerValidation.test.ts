@@ -116,7 +116,9 @@ async function main(): Promise<void> {
     check(response.subtitles.length === 1, 'one subtitle in the final response', response.subtitles.length);
     const sub = response.subtitles[0];
     check(sub?.lang === 'pob', 'language normalized to "pob"', sub?.lang);
-    check(sub?.id === 'sub-ext-101', 'original id preserved', sub?.id);
+    // the id is the readable label (Nuvio shows it); the release name stays in the title
+    check(sub?.id === 'External Subs Addon · 720p HDTV', 'the id is the readable label', sub?.id);
+    check(sub?.title === 'Breaking.Bad.S01E01.720p.HDTV.x264', 'the release name stays in the title', sub?.title);
     check(sub?.url === 'https://subs5.strem.io/en/download/file/1952160592.srt', 'original url preserved', sub?.url);
   }
 
@@ -212,7 +214,7 @@ async function main(): Promise<void> {
     check(response.subtitles.every(s => s.lang === 'pob'), 'every final subtitle has lang "pob"');
     check(response.subtitles.length === 3, 'the duplicate between OpenSubtitles and SubDL was merged', response.subtitles.length);
     const ids = response.subtitles.map(s => s.id);
-    check(ids.includes('os-sub-1') && !ids.includes('subdl-sub-2'), 'the higher priority provider kept the duplicated release', ids);
+    check(ids.includes('OpenSubtitles · 720p WEBRip') && !ids.includes('SubDL · 720p WEBRip'), 'the higher priority provider kept the duplicated release', ids);
   }
 
   // 8. Subtitle delivery: archives, charsets and format rules

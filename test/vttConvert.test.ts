@@ -160,7 +160,11 @@ async function integrationTests(): Promise<void> {
     globalSubtitleCache.set(globalSubtitleCache.generateKey(query.id, cfg.languages, enabled, null, null), items);
     return getAggregatedSubtitles(query, cfg, 'https://addon.example', configId);
   };
-  const byId = (r: { subtitles: Array<{ id: string; url: string }> }, id: string) => r.subtitles.find(s => s.id === id)?.url;
+  // (the list's ids are readable labels now: a subtitle is found by its release name, which stays in the title)
+  const byId = (r: { subtitles: Array<{ title: string; url: string }> }, id: string) => {
+    const release = items.find(i => i.id === id)?.release;
+    return r.subtitles.find(s => s.title === release)?.url;
+  };
 
   const on = await run({}, uuid);
   check(byId(on, 'vtt-addon') === `https://addon.example/${uuid}/sub/convert/${Buffer.from(`${upstreamBase}/abc/sub.vtt`).toString('base64url')}.srt`, 'a VTT link of an imported addon goes through the converter', byId(on, 'vtt-addon'));

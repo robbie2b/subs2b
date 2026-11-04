@@ -397,6 +397,21 @@ async function main() {
     const firstRo = tokens.find(t => t && t.u === baseUrl + '/ro-hd');
     check('the first Romanian link carries the next Romanian subtitle as an alternative (and not the English one)',
       firstRo?.a?.length === 1 && firstRo.a[0].u === baseUrl + '/ro-hd?ntb', tokens);
+    // the id is the readable label (Nuvio shows it under the language); unique, and the same at every opening
+    const ids = multi.subtitles.map(s => s.id);
+    check('list ids are readable labels, unique, short', ids.every(i => / · /.test(i) && i.length <= 50) && new Set(ids).size === ids.length, ids);
+    check('a label says source, resolution and source type, group', ids.some(i => /^SubDL · 2160p HMAX WEB-DL · FLUX$|^(★ )?SubDL · 1080p HMAX WEB-DL · FLUX$|SubDL · 720p HMAX WEB-DL · NTb/.test(i)), ids);
+    globalSubtitleCache.clear?.();
+    const reopened = await getAggregatedSubtitles(q, mergeWithDefaults({ ...stored, languages: ['ron', 'eng'] }), baseUrl, uuid);
+    check('the same labels at the next opening', JSON.stringify(reopened.subtitles.map(s => s.id)) === JSON.stringify(ids), reopened.subtitles.map(s => s.id));
+    // two subtitles with the same label are told apart
+    providerItems.push({ id: 'ro-dup', provider: 'subdl', providerName: 'SubDL', url: baseUrl + '/ro-hd?dup', lang: 'ron', release: 'Peacemaker.2022.S01E01.720p.HMAX.WEB-DL.DD5.1.H.264-NTb' });
+    globalSubtitleCache.clear?.();
+    // (deduplication would merge the two: it is switched off here to get two subtitles with one label)
+    const dup = await getAggregatedSubtitles(q, mergeWithDefaults({ ...stored, languages: ['ron', 'eng'], deduplication: false }), baseUrl, uuid);
+    const dupIds = dup.subtitles.map(s => s.id);
+    check('a repeated label gets a number', new Set(dupIds).size === dupIds.length && dupIds.some(i => / \(2\)$/.test(i)), dupIds);
+    providerItems.splice(providerItems.findIndex(i => i.id === 'ro-dup'), 1);
     providerItems.splice(providerItems.findIndex(i => i.id === 'ro-ntb'), 2);
   }
 

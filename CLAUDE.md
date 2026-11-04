@@ -271,6 +271,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   („[ron · Subtitrari-noi.ro] …”; câmpul `provider` în deciziile noi, cele vechi n-au), iar numele cu multe release-uri
   (Subtitrari-noi.ro le listează pe toate, ex. Endgame ~70) apar scurtate: primul + „+ N more releases”, tot numele la
   hover sau tap.
+- **Pe ramură (nedeployat, pentru următorul deploy): etichete citibile ca id de subtitrare** (2026-11-04). Nuvio afișează
+  `id`-ul sub limbă (niciun player nu arată `title`), deci `id` = `★ Subs.ro · 2160p BluRay · MainFrame`
+  (`src/utils/subtitleLabel.ts`): sursa, rezoluție + serviciu + sursă (REMUX/BluRay/BRRip/WEB-DL...), XviD când e cazul,
+  grupul; ★ doar la nivelul de sus (hash match sau nume exact); max 44 caractere; depinde doar de subtitrare și fișier,
+  nu de poziție sau scor (stabilă la fiecare deschidere); repetările primesc „ (2)”. La numele cu multe release-uri se
+  folosește varianta cea mai apropiată de fișier. `title` rămâne numele release-ului. Testele vechi care căutau id-urile
+  tehnice au fost adaptate (providerValidation, vttConvert). Nuvio are și el auto-sync, după pista embedded din fișier
+  („Auto synced” / „autosync failed” în meniul lui; nu vine de la noi): se completează cu Subsync-ul nostru.
 - **Pentru mai târziu (cererea utilizatorului, 2026-10-02): „slot” ca la Stremio Community Subtitles.** Primul loc din listă
   = link fix către server (`no-store`); serverul trimite ce e ales acum. Pagină „Now playing” în interfață: alegi altă
   subtitrare dintre cele găsite și/sau muți manual (+/− s), fără să cauți în Stremio; alegerea ținută minte pe fișier și
