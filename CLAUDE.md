@@ -298,6 +298,22 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   sau gol e ținut minte 3 h (în memorie) și `serverCanDownload` îl dă drept nedescărcabil, deci coboară la sfârșitul
   listei (un răspuns HTML/JSON nu, poate fi doar o blocare); (3) motivul invalid arată ce a spus site-ul când răspunsul
   e scurt și text. Verificat live pe 1.5.7 (2026-11-04 12:50): prima subtitrare (fișier lipsă) → HTTP 200, 1219 replici, înlocuită de a doua (Debug: „replaced by”, „already aligned (the subtitle could not be downloaded…)”); etichetele apar în listă.
+- **Nuvio TV, din codul sursă (github.com/NuvioMedia/nuviotv, citit 2026-11-04, versiunea „bump version” din 4 nov):**
+  - Cere subtitrările de la TOATE addonurile în paralel, cu **20 s per addon** (`PER_ADDON_TIMEOUT_MS = 20_000` în
+    `data/repository/SubtitleRepositoryImpl.kt`; peste, addonul e ignorat); clientul HTTP are connect 30 s / read 60 s
+    (`core/di/NetworkModule.kt`), deci limita efectivă e 20 s.
+  - Trimite el însuși `videoHash`, `videoSize`, `filename` în forma `/subtitles/<tip>/<id>/videoHash=..&videoSize=..&filename=...json`;
+    hash-ul îl calculează el (`OpenSubtitlesHasher`) înainte de cerere.
+  - Meniul de subtitrări (`SubtitleSelectionOverlay.kt`): titlul = limba, eticheta sursei = numele addonului, rândul de
+    jos = `subtitle.id` al nostru (de aici etichetele citibile, `meta`), sortat după ORDINEA addonurilor instalate (apoi
+    ordinea sosirii) — deci ipoteza „apar în ordinea sosirii” NU e adevărată pentru TV; subs2b, primul instalat, ar trebui
+    să fie primul. id-ul opțiunii = `addon:<nume>:<id>:<url>`.
+  - Auto-sync propriu (`ui/screens/player/autosync/AutomaticSubtitleSync.kt`): descarcă el subtitrarea aleasă, cu **timeout
+    15 s** (`SUBTITLE_DOWNLOAD_TIMEOUT_MS`); „autosync failed” apare și când linkul dă eroare (cazul Harry Potter, 502).
+  - Consecință pentru noi: o listă care ajunge la ~20 s (opensubtitles PRO are timeout 20 s la noi) e abandonată de Nuvio
+    ÎNTREAGĂ; 9 din 144 de căutări (6%) au avut sursa cea mai lentă la ≥19 s, toate PRO. Ținta: listă sub ~8–10 s și
+    subtitrare aliniată gata sub 15 s. Cererea Social Network (11,9 s) NU ar fi trebuit tăiată de Nuvio: neexplicată.
+  - Se verifică versiunea instalată de utilizator (poate diferi de repo); aplicația de telefon e alt cod.
 - **Extra-uri către addonurile importate: ÎNCERCAT în 1.5.8 și ANULAT (1.5.9, 2026-11-04).** Ideea: trimis `videoHash`,
   `videoSize`, `filename` ca playerul. Măsurat live pe filme reale (A/B, aceleași filme cu și fără extra): numărul de
   rezultate e IDENTIC (The Social Network: PRO 24, v3 85, Subs.ro 10; Fantastic Four: PRO 7, v3 99, Subs.ro 12), deci nu
