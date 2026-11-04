@@ -56,14 +56,18 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
-- **Pe ramură, nedeployat (eficiență, 2026-11-04):** analiză cap-coadă a căii unei căutări, cu benchmark local
+- **v1.5.10 (deploy 2026-11-04; eficiență):** analiză cap-coadă a căii unei căutări, cu benchmark local
   (`scratchpad/perf`, nu în repo). Cel mai scump: deduplicarea (tokeniza de două ori fiecare pereche, O(n²)): 300 de
   release-uri diferite = 119 ms → 13 ms; scoring (medoid pe perechi) 45 → 21 ms; `parseRelease` și `tokenize` ținute
   în memorie (rezultatele nu sunt modificate nicăieri). Rezultate identice cu codul vechi (300 runde aleatorii,
   0 diferențe). În plus: aceeași căutare cerută simultan se face o dată (`inflightSearches` în aggregator.ts);
   cheia cache-ului ține cont de addonurile importate (`searchCacheKey`; înainte două configurații cu aceleași servicii,
   dar alte addonuri, își împărțeau răspunsul); `usageStore` păstrează detaliile (≈20 KB/cerere) doar pentru ultimele
-  150 de cereri din memorie (înainte până la 5000, ~100 MB). Test nou: `test/searchShare.test.ts`.
+  150 de cereri din memorie (înainte până la 5000, ~100 MB). Test nou: `test/searchShare.test.ts`. Plus: dacă referințele se potrivesc între ele (`referencesAgreeCached`) se calculează o
+  dată pe lista de referințe, nu pentru fiecare subtitrare. Pe Render calculul Subsync durează secunde (log live: 4 calcule
+  la rând 2,7→11,8 s, CPU ~0,1): limita reală e procesorul. Variante cercetate: Render Starter (~7 $), Oracle Always Free,
+  Northflank Sandbox (0,5 vCPU/1 GB în 20 $ credit, fără card; atenție: incident de securitate anunțat de ei); Hugging Face
+  Docker e acum plătit. Instrucțiuni HF rămase în `deploy/huggingface/` (neutilizabile fără plan plătit).
 - **v1.5.9 (deploy 2026-11-04):** (1) „Connector timeout" e global: aceeași limită (implicit 6 s, 2–15 s) pentru servicii și
   pentru addonurile importate (înainte un addon importat avea propriul timeout de 20 s, memorat la import); câmpul din
   Edit addon e ascuns; Debug scrie „timed out after Nms". Test: `test/connectorTimeout.test.ts`. (2) Extra-urile către
@@ -168,7 +172,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.9 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.10 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
