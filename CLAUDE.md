@@ -5,7 +5,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 
 ## Proiectul
 - Addon Stremio de subtitrări cu clasament inteligent (TypeScript / Node / Express). Repo: `robbie2b/subs2b`.
-- Rulează pe Render (Docker, plan gratuit ~0.1 CPU) cu Postgres pe Supabase. Un cron-job.org îl ține treaz ziua (la 10 min).
+- Rulează pe Render (Docker, plan gratuit ~0.1 CPU) cu Postgres pe Supabase. Un cron-job.org îl ține treaz non-stop, 24/7 (la 10 min; confirmat de utilizator 2026-11-04, nu a fost limitat niciodată).
 - Proprietarul nu e programator: explică simplu, **în română**.
 
 ## Reguli
@@ -294,6 +294,16 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   sau gol e ținut minte 3 h (în memorie) și `serverCanDownload` îl dă drept nedescărcabil, deci coboară la sfârșitul
   listei (un răspuns HTML/JSON nu, poate fi doar o blocare); (3) motivul invalid arată ce a spus site-ul când răspunsul
   e scurt și text. Verificat live pe 1.5.7 (2026-11-04 12:50): prima subtitrare (fișier lipsă) → HTTP 200, 1219 replici, înlocuită de a doua (Debug: „replaced by”, „already aligned (the subtitle could not be downloaded…)”); etichetele apar în listă.
+- **De făcut (propus 2026-11-04, în așteptarea acordului):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate de
+  noi doar cu `/subtitles/<type>/<id>.json`, FĂRĂ extra (`filename`, `videoHash`, `videoSize`) pe care le trimite playerul
+  (`src/providers/genericStremioAddon.ts`): copiile din subs2b pot da rezultate mai slabe decât addonurile puse direct în
+  Nuvio/Stremio (PRO/v3 pun întâi hash match-ul). De trimis extra în forma Stremio `/subtitles/<type>/<id>/<extra>.json`
+  (cheia raw din cache conține deja videoHash). Abia apoi are sens ca utilizatorul să scoată din Nuvio Subs.ro și PRO
+  (duplicate ale surselor din subs2b); Community Subtitles rămâne separat. Context: în Nuvio rezultatele subs2b apar
+  ultimele (ipoteză: ordinea sosirii; noi răspundem în ~5 s pe un film nou, ~1 s repetat, iar opensubtitles PRO,
+  addon importat cu timeout 20 s, e cea mai lentă sursă în 88 din 146 de căutări; mediană 2 s, p90 13 s). Test propus:
+  a doua deschidere a aceluiași film + timeout PRO 3–4 s (Addons → Edit). Idei dacă se confirmă: răspuns după ~3 s cu
+  ce avem (restul în fundal), sau sloturi fixe (pierd etichetele citibile).
 - **Pentru mai târziu (cererea utilizatorului, 2026-10-02): „slot” ca la Stremio Community Subtitles.** Primul loc din listă
   = link fix către server (`no-store`); serverul trimite ce e ales acum. Pagină „Now playing” în interfață: alegi altă
   subtitrare dintre cele găsite și/sau muți manual (+/− s), fără să cauți în Stremio; alegerea ținută minte pe fișier și
