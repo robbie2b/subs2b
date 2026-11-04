@@ -294,12 +294,16 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   sau gol e ținut minte 3 h (în memorie) și `serverCanDownload` îl dă drept nedescărcabil, deci coboară la sfârșitul
   listei (un răspuns HTML/JSON nu, poate fi doar o blocare); (3) motivul invalid arată ce a spus site-ul când răspunsul
   e scurt și text. Verificat live pe 1.5.7 (2026-11-04 12:50): prima subtitrare (fișier lipsă) → HTTP 200, 1219 replici, înlocuită de a doua (Debug: „replaced by”, „already aligned (the subtitle could not be downloaded…)”); etichetele apar în listă.
-- **De făcut (propus 2026-11-04, în așteptarea acordului):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate de
+- **Pe ramură (nedeployat, 2026-11-04; cerut de utilizator):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate de
   noi doar cu `/subtitles/<type>/<id>.json`, FĂRĂ extra (`filename`, `videoHash`, `videoSize`) pe care le trimite playerul
   (`src/providers/genericStremioAddon.ts`): copiile din subs2b pot da rezultate mai slabe decât addonurile puse direct în
   Nuvio/Stremio (PRO/v3 pun întâi hash match-ul). De trimis extra în forma Stremio `/subtitles/<type>/<id>/<extra>.json`
   (cheia raw din cache conține deja videoHash). Abia apoi are sens ca utilizatorul să scoată din Nuvio Subs.ro și PRO
-  (duplicate ale surselor din subs2b); Community Subtitles rămâne separat. Context: în Nuvio rezultatele subs2b apar
+  (duplicate ale surselor din subs2b); Community Subtitles rămâne separat. FĂCUT pe ramură: `extraPathOf` trimite
+  `videoHash`, `videoSize`, `filename` în forma Stremio; un addon care răspunde 4xx la calea cu extra e întrebat din nou
+  simplu (eroare 5xx/429/rețea = eșec, fără a doua încercare); cheia cache-ului raw ține cont de fișier (hash, altfel nume).
+  Test: `test/genericAddon.test.ts` (server mock). După deploy: comparat timpii per sursă din Debug cu cei de dinainte
+  (mediană PRO 2,0 s, Subs.ro 1,1 s, v3 0,56 s) ca să se vadă dacă extra-urile încetinesc. Context: în Nuvio rezultatele subs2b apar
   ultimele (ipoteză: ordinea sosirii; noi răspundem în ~5 s pe un film nou, ~1 s repetat, iar opensubtitles PRO,
   addon importat cu timeout 20 s, e cea mai lentă sursă în 88 din 146 de căutări; mediană 2 s, p90 13 s). Test propus:
   a doua deschidere a aceluiași film + timeout PRO 3–4 s (Addons → Edit). Idei dacă se confirmă: răspuns după ~3 s cu

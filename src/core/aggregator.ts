@@ -80,9 +80,11 @@ export async function getAggregatedSubtitles(
     id => config.providers[id]?.enabled !== false
   );
 
-  // The file hash changes which OpenSubtitles results are flagged as exact matches, so it is part of the key
+  // The file hash changes which OpenSubtitles results are flagged as exact matches, and the hash, size and name are
+  // passed on to the imported addons (they answer for the exact file), so the file is part of the key
+  const fileKey = query.extra?.videoHash ? `|h${query.extra.videoHash}` : query.extra?.filename ? `|f${query.extra.filename}` : '';
   const cacheKey = globalSubtitleCache.generateKey(
-    query.extra?.videoHash ? `${query.id}|h${query.extra.videoHash}` : query.id,
+    `${query.id}${fileKey}`,
     config.languages,
     enabledProviderIds,
     query.season,
