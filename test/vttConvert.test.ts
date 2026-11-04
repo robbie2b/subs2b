@@ -15,7 +15,7 @@ import { createServer } from '../src/server';
 import { configStorage } from '../src/storage/configStore';
 import { DEFAULT_USER_CONFIG, mergeWithDefaults } from '../src/config/userConfig';
 import { globalSubtitleCache } from '../src/utils/cache';
-import { getAggregatedSubtitles } from '../src/core/aggregator';
+import { getAggregatedSubtitles, searchCacheKey } from '../src/core/aggregator';
 import { RawSubtitleItem, SubtitleQuery } from '../src/types/provider';
 
 let failures = 0;
@@ -156,8 +156,7 @@ async function integrationTests(): Promise<void> {
   ];
   const run = async (cfgPatch: Partial<typeof config>, configId: string | undefined) => {
     const cfg = { ...config, languages: ['ron'], deduplication: false, ...cfgPatch };
-    const enabled = Object.keys(cfg.providers).filter(id => cfg.providers[id]?.enabled !== false);
-    globalSubtitleCache.set(globalSubtitleCache.generateKey(query.id, cfg.languages, enabled, null, null), items);
+    globalSubtitleCache.set(searchCacheKey(query, cfg), items);
     return getAggregatedSubtitles(query, cfg, 'https://addon.example', configId);
   };
   // (the list's ids are readable labels now: a subtitle is found by its release name, which stays in the title)

@@ -211,7 +211,23 @@ export function variantsOf(release: string | undefined | null): string[] {
   return list.length ? list : [''];
 }
 
+/**
+ * The same release names are read again and again (ranking, labels, Subsync checks, every request of a film): the
+ * result is remembered. Callers never change a ParsedRelease.
+ */
+const PARSE_CACHE_MAX = 4000;
+const parseCache = new Map<string, ParsedRelease>();
 export function parseRelease(raw: string): ParsedRelease {
+  const key = raw || '';
+  const hit = parseCache.get(key);
+  if (hit) return hit;
+  const parsed = parseReleaseUncached(key);
+  if (parseCache.size >= PARSE_CACHE_MAX) parseCache.clear();
+  parseCache.set(key, parsed);
+  return parsed;
+}
+
+function parseReleaseUncached(raw: string): ParsedRelease {
   const norm = normalize(raw || '');
 
   const se = norm.match(/\bs(\d{1,2}) ?e(\d{1,3})\b/) || norm.match(/\b(\d{1,2}) ?x ?(\d{2,3})\b/);
@@ -318,17 +334,31 @@ export function titlesMatch(a: string[], b: string[]): boolean {
 function medoidTitle(parsed: ParsedRelease[]): string[] | null {
   const candidates = parsed.filter(p => p.informative && p.titleTokens.length > 0);
   if (candidates.length === 0) return null;
-  let best: ParsedRelease | null = null;
-  let bestScore = -1;
+  // Most titles are the same word list (one film): they are compared once, with how many times each occurs. The
+  // totals and the first-best tie-break are the same as comparing every pair.
+  const groups = new Map<string, { tokens: string[]; set: Set<string>; count: number }>();
   for (const c of candidates) {
+    const key = c.titleTokens.join(' ');
+    const g = groups.get(key);
+    if (g) g.count++;
+    else groups.set(key, { tokens: c.titleTokens, set: new Set(c.titleTokens), count: 1 });
+  }
+  const list = [...groups.values()];
+  let best: string[] | null = null;
+  let bestScore = -1;
+  for (const c of list) {
     let total = 0;
-    for (const o of candidates) total += jaccard(c.titleTokens, o.titleTokens);
+    for (const o of list) {
+      let inter = 0;
+      c.set.forEach(t => { if (o.set.has(t)) inter++; });
+      total += (inter / (c.set.size + o.set.size - inter)) * o.count;
+    }
     if (total > bestScore) {
       bestScore = total;
-      best = c;
+      best = c.tokens;
     }
   }
-  return best ? best.titleTokens : null;
+  return best;
 }
 
 function mostCommonYear(parsed: ParsedRelease[]): number | null {

@@ -131,6 +131,7 @@ export function createServer(): express.Application {
   // Render (and most hosts) sit behind a reverse proxy: needed for correct client IPs / rate limiting
   app.set('trust proxy', 1);
 
+  app.disable("x-powered-by");
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));

@@ -56,6 +56,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **Pe ramură, nedeployat (eficiență, 2026-11-04):** analiză cap-coadă a căii unei căutări, cu benchmark local
+  (`scratchpad/perf`, nu în repo). Cel mai scump: deduplicarea (tokeniza de două ori fiecare pereche, O(n²)): 300 de
+  release-uri diferite = 119 ms → 13 ms; scoring (medoid pe perechi) 45 → 21 ms; `parseRelease` și `tokenize` ținute
+  în memorie (rezultatele nu sunt modificate nicăieri). Rezultate identice cu codul vechi (300 runde aleatorii,
+  0 diferențe). În plus: aceeași căutare cerută simultan se face o dată (`inflightSearches` în aggregator.ts);
+  cheia cache-ului ține cont de addonurile importate (`searchCacheKey`; înainte două configurații cu aceleași servicii,
+  dar alte addonuri, își împărțeau răspunsul); `usageStore` păstrează detaliile (≈20 KB/cerere) doar pentru ultimele
+  150 de cereri din memorie (înainte până la 5000, ~100 MB). Test nou: `test/searchShare.test.ts`.
 - **v1.5.9 (deploy 2026-11-04):** (1) „Connector timeout" e global: aceeași limită (implicit 6 s, 2–15 s) pentru servicii și
   pentru addonurile importate (înainte un addon importat avea propriul timeout de 20 s, memorat la import); câmpul din
   Edit addon e ascuns; Debug scrie „timed out after Nms". Test: `test/connectorTimeout.test.ts`. (2) Extra-urile către

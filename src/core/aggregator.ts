@@ -28,6 +28,9 @@ function preferDownloadable(item: RawSubtitleItem): RawSubtitleItem {
   return { ...backups[k], ...(item.hashMatch ? { hashMatch: true } : {}), backups: [main, ...rest] };
 }
 
+/** Searches running now, by cache key (see getAggregatedSubtitles) */
+const inflightSearches = new Map<string, Promise<{ items: RawSubtitleItem[]; report: ProviderReport[]; incomplete: boolean }>>();
+
 /** How long an empty list, or one from a search where a provider failed, is kept (minutes; normal lists: cacheTtlMinutes) */
 export const SHORT_CACHE_MINUTES = 2;
 
@@ -70,24 +73,33 @@ export function parseSubtitleQuery(
   return { type, id, imdbId, season, episode, kitsuId, extra };
 }
 
+/**
+ * The key a search is kept under. The file hash changes which OpenSubtitles results are flagged as exact matches, so
+ * it is part of it; so are the imported addons (two configurations with the same services but other addons must not
+ * share an answer).
+ */
+export function searchCacheKey(query: SubtitleQuery, config: UserConfig): string {
+  const enabledProviderIds = Object.keys(config.providers).filter(id => config.providers[id]?.enabled !== false);
+  const addonKey = (config.customAddons || [])
+    .filter(a => a && a.enabled !== false && a.manifestUrl)
+    .map(a => `${a.id}@${a.manifestUrl}`).sort().join(',');
+  return globalSubtitleCache.generateKey(
+    query.extra?.videoHash ? `${query.id}|h${query.extra.videoHash}` : query.id,
+    config.languages,
+    [...enabledProviderIds, ...(addonKey ? [`addons:${addonKey}`] : [])],
+    query.season,
+    query.episode
+  );
+}
+
 export async function getAggregatedSubtitles(
   query: SubtitleQuery,
   config: UserConfig,
   baseUrl: string,
   configId?: string
 ): Promise<StremioSubtitlesResponse> {
-  const enabledProviderIds = Object.keys(config.providers).filter(
-    id => config.providers[id]?.enabled !== false
-  );
-
   // The file hash changes which OpenSubtitles results are flagged as exact matches, so it is part of the key
-  const cacheKey = globalSubtitleCache.generateKey(
-    query.extra?.videoHash ? `${query.id}|h${query.extra.videoHash}` : query.id,
-    config.languages,
-    enabledProviderIds,
-    query.season,
-    query.episode
-  );
+  const cacheKey = searchCacheKey(query, config);
 
   let rawSubtitles = globalSubtitleCache.get(cacheKey);
   const providerReport: ProviderReport[] = [];
@@ -95,14 +107,38 @@ export async function getAggregatedSubtitles(
   let incomplete = fromCache && globalSubtitleCache.isIncomplete(cacheKey);
 
   if (!rawSubtitles) {
-    rawSubtitles = await executeParallelSearch(query, config, providerReport);
-    // a search where a provider failed or timed out is kept only briefly: asked again soon, that provider may answer
-    // (an empty answer is not a failure)
-    const failedProviders = providerReport.filter(r => !r.ok);
-    incomplete = failedProviders.length > 0;
-    globalSubtitleCache.set(cacheKey, rawSubtitles, incomplete ? SHORT_CACHE_MINUTES : config.cacheTtlMinutes, incomplete);
-    if (incomplete) {
-      Logger.info(`[CACHE] kept ${SHORT_CACHE_MINUTES} min only: ${failedProviders.map(r => r.name).join(', ')} failed or timed out`);
+    // The same search asked twice at once (a player and its retry, two devices opening the film) is made once:
+    // the second request waits for the first one's answer instead of asking every source again
+    const running = inflightSearches.get(cacheKey);
+    if (running) {
+      Logger.info(`[CACHE] the same search is already running for ${query.id}: waiting for it`);
+      const shared = await running;
+      rawSubtitles = shared.items;
+      providerReport.push(...shared.report);
+      incomplete = shared.incomplete;
+    } else {
+      const search = (async () => {
+        const report: ProviderReport[] = [];
+        const items = await executeParallelSearch(query, config, report);
+        // a search where a provider failed or timed out is kept only briefly: asked again soon, that provider may
+        // answer (an empty answer is not a failure)
+        const failedProviders = report.filter(r => !r.ok);
+        const isIncomplete = failedProviders.length > 0;
+        globalSubtitleCache.set(cacheKey, items, isIncomplete ? SHORT_CACHE_MINUTES : config.cacheTtlMinutes, isIncomplete);
+        if (isIncomplete) {
+          Logger.info(`[CACHE] kept ${SHORT_CACHE_MINUTES} min only: ${failedProviders.map(r => r.name).join(', ')} failed or timed out`);
+        }
+        return { items, report, incomplete: isIncomplete };
+      })();
+      inflightSearches.set(cacheKey, search);
+      try {
+        const done = await search;
+        rawSubtitles = done.items;
+        providerReport.push(...done.report);
+        incomplete = done.incomplete;
+      } finally {
+        inflightSearches.delete(cacheKey);
+      }
     }
   } else {
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);

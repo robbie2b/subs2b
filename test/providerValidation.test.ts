@@ -13,7 +13,7 @@ import { getAllProviders } from '../src/providers';
 import { GenericStremioAddonProvider } from '../src/providers/genericStremioAddon';
 import { validateAndNormalizeLanguage } from '../src/utils/normalizer';
 import { RawSubtitleItem, SubtitleQuery } from '../src/types/provider';
-import { getAggregatedSubtitles } from '../src/core/aggregator';
+import { getAggregatedSubtitles, searchCacheKey } from '../src/core/aggregator';
 import { DEFAULT_USER_CONFIG, mergeWithDefaults, decodeUserConfigAsync } from '../src/config/userConfig';
 import { UserConfig } from '../src/types/config';
 import { globalSubtitleCache } from '../src/utils/cache';
@@ -42,11 +42,7 @@ function section(title: string): void {
 
 /** Seeds the search cache with raw provider results, as if the providers had just answered */
 function seedCache(query: SubtitleQuery, config: UserConfig, items: RawSubtitleItem[]): void {
-  const enabled = Object.keys(config.providers).filter(id => config.providers[id]?.enabled !== false);
-  globalSubtitleCache.set(
-    globalSubtitleCache.generateKey(query.id, config.languages, enabled, query.season, query.episode),
-    items
-  );
+  globalSubtitleCache.set(searchCacheKey(query, config), items);
 }
 
 function makeQuery(id: string, season: number, episode: number): SubtitleQuery {

@@ -1,15 +1,24 @@
 import { RawSubtitleItem } from '../types/provider';
 
 /**
- * Tokenizes release names to calculate fuzzy similarity
+ * Tokenizes release names to calculate fuzzy similarity. The same names come back on every request and in several
+ * passes (deduplication, backups), so the token sets are remembered (they are never changed by the callers).
  */
+const TOKEN_CACHE_MAX = 4000;
+const tokenCache = new Map<string, Set<string>>();
 function tokenize(str: string): Set<string> {
-  const tokens = str
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, ' ')
-    .split(/\s+/)
-    .filter(t => t.length > 1);
-  return new Set(tokens);
+  const hit = tokenCache.get(str);
+  if (hit) return hit;
+  const tokens = new Set(
+    str
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ' ')
+      .split(/\s+/)
+      .filter(t => t.length > 1)
+  );
+  if (tokenCache.size >= TOKEN_CACHE_MAX) tokenCache.clear();
+  tokenCache.set(str, tokens);
+  return tokens;
 }
 
 /**
@@ -26,6 +35,8 @@ function similarity(tokensA: Set<string>, tokensB: Set<string>): number {
   return (2 * intersection) / (tokensA.size + tokensB.size);
 }
 
+const bucketKey = (i: RawSubtitleItem): string => `${i.lang}|${i.hearingImpaired ? 1 : 0}`;
+
 /**
  * Deduplicates a list of subtitles based on:
  * 1. Identical download URL
@@ -41,6 +52,8 @@ export function deduplicateSubtitles(
 ): RawSubtitleItem[] {
   const result: RawSubtitleItem[] = [];
   const seenUrls = new Set<string>();
+  // the kept items by language and hearing-impaired status (a duplicate must have both equal), in order
+  const buckets = new Map<string, RawSubtitleItem[]>();
 
   const checkHash = strategy === 'both' || strategy === 'hash';
   const checkFuzzy = strategy === 'both' || strategy === 'fuzzy';
@@ -58,11 +71,7 @@ export function deduplicateSubtitles(
       const itemTokens = item.release ? tokenize(item.release) : new Set<string>();
 
       if (itemTokens.size > 0) {
-        for (const existing of result) {
-          // Must be same language and hearing-impaired status to be a duplicate
-          if (existing.lang !== item.lang) continue;
-          if (Boolean(existing.hearingImpaired) !== Boolean(item.hearingImpaired)) continue;
-
+        for (const existing of buckets.get(bucketKey(item)) || []) {
           if (existing.release) {
             const existingTokens = tokenize(existing.release);
             const score = similarity(itemTokens, existingTokens);
@@ -78,7 +87,11 @@ export function deduplicateSubtitles(
 
     if (!isDuplicate) {
       if (item.url) seenUrls.add(item.url);
-      result.push({ ...item, backups: [] });
+      const kept = { ...item, backups: [] as RawSubtitleItem[] };
+      result.push(kept);
+      const key = bucketKey(kept);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(kept); else buckets.set(key, [kept]);
     } else if (original && item.url && !seenUrls.has(item.url)) {
       seenUrls.add(item.url);
       original.backups!.push(item);

@@ -102,6 +102,9 @@ export async function recordUsage(configKey: string, event: { id: string; type: 
     const list = memory.get(owner) || [];
     list.unshift(entry);
     if (list.length > MAX_MEMORY_EVENTS) list.length = MAX_MEMORY_EVENTS;
+    // the ranked details (about 20 KB a request) are only shown for the latest requests: older ones keep just the
+    // time and the film, so 5000 events cost a few MB, not 100
+    if (list.length > RECENT_LIMIT) list[RECENT_LIMIT] = { ...list[RECENT_LIMIT], details: undefined };
     memory.set(owner, list);
 
     if (await ensureTable()) {
