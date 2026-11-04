@@ -46,7 +46,9 @@ export abstract class BaseSubtitleProvider implements SubtitleProvider {
     } catch (err: unknown) {
       clearTimeout(timeoutTimer);
       const durationMs = Date.now() - startTime;
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      // when the time limit cut the request, say so (axios only reports "canceled")
+      const reason = abortController.signal.aborted ? abortController.signal.reason : null;
+      const errorMessage = reason instanceof Error ? reason.message : (err instanceof Error ? err.message : String(err));
 
       const logEntry: ProviderLogEntry = {
         providerId: this.id,

@@ -56,6 +56,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.9 (deploy 2026-11-04):** (1) „Connector timeout" e global: aceeași limită (implicit 6 s, 2–15 s) pentru servicii și
+  pentru addonurile importate (înainte un addon importat avea propriul timeout de 20 s, memorat la import); câmpul din
+  Edit addon e ascuns; Debug scrie „timed out after Nms". Test: `test/connectorTimeout.test.ts`. (2) Extra-urile către
+  addonurile importate (1.5.8) anulate: aceleași rezultate ca fără, v3 dă 0 cu hash fără size. Măsurat pe 136 căutări:
+  la 6 s se pierd ~4% din răspunsuri și ~1% din subtitrări (PRO, Addic7ed); la 4 s ~2%. Idee cerută: setare „dynamic"
+  (oprire înainte de limită când există deja rezultate bune peste un punctaj).
 - **v1.5.8 (deploy 2026-11-04):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate cu `videoHash`, `videoSize`,
   `filename` ca de player (vezi „De făcut”); cache-ul raw e pe fișier. De comparat după deploy: timpii per sursă din Debug.
   Gazdă: rămâne Render gratuit (cron-job 24/7); varianta recomandată dacă se vrea liniște: Render Starter (~7 $/lună,
@@ -153,7 +159,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.8 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.9 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.

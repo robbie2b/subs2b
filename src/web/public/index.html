@@ -1010,7 +1010,7 @@
                   <div class="filter-section-header">
                     <div>
                       <h3>Connector timeout</h3>
-                      <p class="panel-subtitle">How long each native service may take to answer before it is skipped. A longer timeout finds more subtitles from slow services, a shorter one makes the list appear sooner.</p>
+                      <p class="panel-subtitle">How long each service and each imported addon may take to answer before it is skipped: one limit for all of them. A longer timeout finds more subtitles from slow sources, a shorter one makes the list appear sooner (Nuvio gives up on a whole addon after 20 seconds).</p>
                     </div>
                   </div>
                     <div class="card card-timeout-box">
@@ -1646,7 +1646,8 @@
           <label for="edit-addon-url">Manifest URL <span class="required-star" style="color: #ef4444;">*</span></label>
           <input type="text" id="edit-addon-url" class="form-input" required placeholder="https://.../manifest.json">
         </div>
-        <div class="timeout-field-group">
+        <!-- the timeout is one setting for everything now (Filters → Results, Connector timeout): this field is not used -->
+        <div class="timeout-field-group" style="display: none;">
           <label for="edit-addon-timeout" class="timeout-field-label">Timeout (ms)</label>
           <div class="timeout-input-wrap">
             <input type="number" id="edit-addon-timeout" class="form-input form-input-number" min="1000" max="60000"
