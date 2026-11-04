@@ -150,6 +150,23 @@ export async function loadWithAlternatives(token: AlignedToken, hosts: string[],
 }
 
 /**
+ * Whether the references agree with each other depends only on the references (not on the subtitle checked), and
+ * they are the same list for every subtitle of a film: it is worked out once (several pairwise alignments, seconds on
+ * a slow CPU). The list is the one kept by the reference cache, so the same list object comes back.
+ */
+const agreement = new WeakMap<Reference[], Promise<boolean>>();
+function referencesAgreeCached(refs: Reference[]): Promise<boolean> {
+  let known = agreement.get(refs);
+  if (!known) {
+    known = referencesAgreeInWorker(refs);
+    agreement.set(refs, known);
+    // a failure is not kept
+    known.catch(() => { if (agreement.get(refs) === known) agreement.delete(refs); });
+  }
+  return known;
+}
+
+/**
  * Aligns the subtitle; when it fits none of the references while the references agree with each other (so it was
  * clearly made for another release), the alternatives are tried in order and the first one that fits is served.
  */
@@ -163,7 +180,7 @@ async function alignOrReplace(
   baseUrl: string
 ): Promise<Served> {
   const result = await alignInWorker(text, refs, release, file);
-  if (fitsReferences(result) || result.references.length === 0 || alternatives.length === 0 || !(await referencesAgreeInWorker(refs))) {
+  if (fitsReferences(result) || result.references.length === 0 || alternatives.length === 0 || !(await referencesAgreeCached(refs))) {
     return { result };
   }
   for (const alt of alternatives) {
