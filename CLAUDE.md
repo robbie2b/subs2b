@@ -56,6 +56,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.8 (deploy 2026-11-04):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate cu `videoHash`, `videoSize`,
+  `filename` ca de player (vezi „De făcut”); cache-ul raw e pe fișier. De comparat după deploy: timpii per sursă din Debug.
+  Gazdă: rămâne Render gratuit (cron-job 24/7); varianta recomandată dacă se vrea liniște: Render Starter (~7 $/lună,
+  0,5 CPU, nu doarme, fără mutare; prețuri din memorie, neverificate live).
 - **v1.5.7 (deploy 2026-11-04):** (1) id-ul subtitrării = etichetă citibilă (`★ Subs.ro · 2160p BluRay · MainFrame`), pentru
   Nuvio care afișează id-ul; (2) Harry Potter: subtitrare al cărei fișier lipsește de pe site => înlocuită cu următoarea
   din aceeași limbă, fișierele stricate coboară la sfârșitul listei, motivul arată răspunsul site-ului. Detalii în
@@ -149,7 +153,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.7 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.8 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
@@ -294,7 +298,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   sau gol e ținut minte 3 h (în memorie) și `serverCanDownload` îl dă drept nedescărcabil, deci coboară la sfârșitul
   listei (un răspuns HTML/JSON nu, poate fi doar o blocare); (3) motivul invalid arată ce a spus site-ul când răspunsul
   e scurt și text. Verificat live pe 1.5.7 (2026-11-04 12:50): prima subtitrare (fișier lipsă) → HTTP 200, 1219 replici, înlocuită de a doua (Debug: „replaced by”, „already aligned (the subtitle could not be downloaded…)”); etichetele apar în listă.
-- **Pe ramură (nedeployat, 2026-11-04; cerut de utilizator):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate de
+- **v1.5.8 (2026-11-04; cerut de utilizator):** addonurile importate (Subs.ro, PRO, v3) sunt întrebate de
   noi doar cu `/subtitles/<type>/<id>.json`, FĂRĂ extra (`filename`, `videoHash`, `videoSize`) pe care le trimite playerul
   (`src/providers/genericStremioAddon.ts`): copiile din subs2b pot da rezultate mai slabe decât addonurile puse direct în
   Nuvio/Stremio (PRO/v3 pun întâi hash match-ul). De trimis extra în forma Stremio `/subtitles/<type>/<id>/<extra>.json`
