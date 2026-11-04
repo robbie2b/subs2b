@@ -56,6 +56,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.7 (deploy 2026-11-04):** (1) id-ul subtitrării = etichetă citibilă (`★ Subs.ro · 2160p BluRay · MainFrame`), pentru
+  Nuvio care afișează id-ul; (2) Harry Potter: subtitrare al cărei fișier lipsește de pe site => înlocuită cu următoarea
+  din aceeași limbă, fișierele stricate coboară la sfârșitul listei, motivul arată răspunsul site-ului. Detalii în
+  „De făcut” (secțiunile „Pe ramură” din 2026-11-04).
 - **v1.5.6 (deploy 2026-10-09):**
   - OpenSubtitles: limita zilnică atinsă blochează doar cheia respectivă (`openSubtitlesApiSource(key)` =
     `api.opensubtitles.com#<8 hex din sha256>`), nu toate configurațiile (un prieten cu profil separat).
@@ -145,7 +149,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   același release; fără ea, release-urile dublate în altă limbă nu pot fi sincronizate.
 - **v1.4.4 (deploy 2026-10-01):** motor Subsync mai rapid, fir separat, pornire din timp, playerul așteaptă decizia; rezerve la descărcare; referințe care cruță limita OpenSubtitles; log `[DOWNLOAD]`.
 - **v1.4.3 (deploy 2026-10-01):** Subsync verifică orice subtitrare care nu e de la același grup cu fișierul (cazul The Chaser).
-  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.6 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
+  Tagurile v1.4.2–v1.4.12, v1.5.0–v1.5.7 de pus (v1.4.7 n-a ajuns live) de pe calculatorul utilizatorului.
   - Test live The Chaser (REMUX Shamir, MULTi/francez): declanșat, 3 referințe „FRA BluRay Remux ZQ”, subtitrarea
     FraMeSToR „shifted −0.2 s ×0.959 in 2 parts” (82%). Ediția franceză rulează mai repede (×0.959 = 1/1.043, 25 fps).
     Utilizatorul a confirmat pe telefon: sincronizată la început și la final.
@@ -271,7 +275,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   („[ron · Subtitrari-noi.ro] …”; câmpul `provider` în deciziile noi, cele vechi n-au), iar numele cu multe release-uri
   (Subtitrari-noi.ro le listează pe toate, ex. Endgame ~70) apar scurtate: primul + „+ N more releases”, tot numele la
   hover sau tap.
-- **Pe ramură (nedeployat, pentru următorul deploy): etichete citibile ca id de subtitrare** (2026-11-04). Nuvio afișează
+- **v1.5.7: etichete citibile ca id de subtitrare** (2026-11-04). Nuvio afișează
   `id`-ul sub limbă (niciun player nu arată `title`), deci `id` = `★ Subs.ro · 2160p BluRay · MainFrame`
   (`src/utils/subtitleLabel.ts`): sursa, rezoluție + serviciu + sursă (REMUX/BluRay/BRRip/WEB-DL...), XviD când e cazul,
   grupul; ★ doar la nivelul de sus (hash match sau nume exact); max 44 caractere; depinde doar de subtitrare și fișier,
@@ -279,7 +283,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   folosește varianta cea mai apropiată de fișier. `title` rămâne numele release-ului. Testele vechi care căutau id-urile
   tehnice au fost adaptate (providerValidation, vttConvert). Nuvio are și el auto-sync, după pista embedded din fișier
   („Auto synced” / „autosync failed” în meniul lui; nu vine de la noi): se completează cu Subsync-ul nostru.
-- **Pe ramură (nedeployat): Harry Potter și piatra filozofală (2026-11-04).** Prima subtitrare (Subtitrari-noi
+- **v1.5.7: Harry Potter și piatra filozofală (2026-11-04).** Prima subtitrare (Subtitrari-noi
   `subtitrarinoi-24773`, release TASTED) dădea în Nuvio „autosync failed”, a doua (Subs.ro, același release) mergea.
   Cauza: nu format și nu antet. Site-ul răspunde 200 cu un text de 100 de octeți („Ne pare rău, subtitrarea nu este
   disponibilă momentan. Vă rugăm să contactați administratorul.”) în loc de arhivă, chiar și cu Referer și sesiune
@@ -289,7 +293,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   motivul, jurnalul „replaced”; fără alternative rămâne 502; (2) `utils/brokenFiles.ts`: un fișier fără bloc de timp
   sau gol e ținut minte 3 h (în memorie) și `serverCanDownload` îl dă drept nedescărcabil, deci coboară la sfârșitul
   listei (un răspuns HTML/JSON nu, poate fi doar o blocare); (3) motivul invalid arată ce a spus site-ul când răspunsul
-  e scurt și text. Nu verificat live (e pe ramură).
+  e scurt și text. Verificarea live: după deploy.
 - **Pentru mai târziu (cererea utilizatorului, 2026-10-02): „slot” ca la Stremio Community Subtitles.** Primul loc din listă
   = link fix către server (`no-store`); serverul trimite ce e ales acum. Pagină „Now playing” în interfață: alegi altă
   subtitrare dintre cele găsite și/sau muți manual (+/− s), fără să cauți în Stremio; alegerea ținută minte pe fișier și
