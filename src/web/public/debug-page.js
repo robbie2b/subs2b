@@ -1,6 +1,6 @@
 // Debug page: live server log + when/what the addon was used for.
 // Loaded after app.js; app.js calls startDebugPage()/stopDebugPage() when the page is shown/left.
-const debugState = { names: {}, logTimer: null, usageTimer: null, lastSeq: 0, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5 };
+const debugState = { names: {}, logTimer: null, usageTimer: null, lastSeq: 0, instance: '', seenLines: null, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5 };
 const PLAY_ICON = 'M8,5.14V19.14L19,12.14L8,5.14Z';
 const PAUSE_ICON = 'M14,19H18V5H14M6,19H10V5H6V19Z';
 
@@ -207,19 +207,27 @@ async function refreshLogs() {
   const box = document.getElementById('dbg-log');
   if (!base || !box || debugState.paused) return;
   try {
-    const res = await fetch(`${base}/logs.json?after=${debugState.lastSeq}`);
+    const res = await fetch(`${base}/logs.json?after=${debugState.lastSeq}&instance=${encodeURIComponent(debugState.instance || '')}`);
     if (!res.ok) return;
     const data = await res.json();
-    // The server restarted: its counter went back to zero
-    if (data.last < debugState.lastSeq) {
+    // Several server instances (Vercel) each have their own log and counter: a line is known by instance + number,
+    // and another instance answering is not a restart (the text stays).
+    const instance = data.instance || '';
+    if (!instance && data.last < debugState.lastSeq) {
+      // an older server without instance names: its counter went back to zero after a restart
       debugState.lastSeq = 0;
       box.textContent = '';
       return;
     }
     debugState.lastSeq = data.last;
-    if (!data.lines.length) return;
+    debugState.instance = instance;
+    const seen = debugState.seenLines || (debugState.seenLines = new Set());
+    const fresh = data.lines.filter(l => !seen.has(`${instance}:${l.seq}`));
+    for (const l of fresh) seen.add(`${instance}:${l.seq}`);
+    while (seen.size > 6000) seen.delete(seen.values().next().value);
+    if (!fresh.length) return;
     const fragment = document.createDocumentFragment();
-    for (const l of data.lines) fragment.appendChild(buildLogLine(l.text));
+    for (const l of fresh) fragment.appendChild(buildLogLine(l.text));
     box.appendChild(fragment);
     while (box.childElementCount > 1500) box.removeChild(box.firstElementChild);
     if (document.getElementById('dbg-autoscroll')?.checked) box.scrollTop = box.scrollHeight;

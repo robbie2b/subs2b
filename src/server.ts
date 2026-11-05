@@ -571,7 +571,7 @@ export function createServer(): express.Application {
     const key = await requireStoredConfig(req, res);
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
-    res.json(getLogLines(parseInt(String(req.query.after || '0'), 10) || 0));
+    res.json(getLogLines(parseInt(String(req.query.after || '0'), 10) || 0, typeof req.query.instance === 'string' ? req.query.instance : undefined));
   });
 
   // Which OpenSubtitles subtitles exist for an exact file hash, in ALL languages

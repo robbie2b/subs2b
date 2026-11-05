@@ -10,9 +10,19 @@ function remember(text: string): void {
   if (buffer.length > MAX_BUFFER_LINES) buffer.shift();
 }
 
-/** Log lines newer than `afterSeq` (0 = everything still in the buffer) */
-export function getLogLines(afterSeq: number = 0): { lines: Array<{ seq: number; text: string }>; last: number } {
-  return { lines: buffer.filter(l => l.seq > afterSeq), last: nextSeq - 1 };
+/**
+ * Names this process. On a host with several instances (Vercel) each one has its own log and its own counter: the
+ * Debug page uses the name to tell them apart (it must not take another instance's lower counter for a restart).
+ */
+export const INSTANCE_ID = Math.random().toString(36).slice(2, 8);
+
+/**
+ * Log lines newer than `afterSeq` (0 = everything still in the buffer). `afterSeq` only counts when `instance` is
+ * this process: a number from another instance means nothing here, so the whole buffer is sent.
+ */
+export function getLogLines(afterSeq: number = 0, instance?: string): { lines: Array<{ seq: number; text: string }>; last: number; instance: string } {
+  const after = instance === undefined || instance === INSTANCE_ID ? afterSeq : 0;
+  return { lines: buffer.filter(l => l.seq > after), last: nextSeq - 1, instance: INSTANCE_ID };
 }
 
 function stamp(level: string, message: string, context?: Record<string, unknown>): string {
