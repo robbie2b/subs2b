@@ -56,6 +56,15 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **Pagina Debug reorganizată (ramura `vercel`, 2026-11-05; cerut de utilizator):** ordinea: LIVE LOG, **LIVE ACTIVITY** (nou),
+  WHAT WAS ACCESSED, SERVICES & ADDONS, SUBSYNC DECISIONS, TV FORMAT TEST, SCORING RULES, DOWNLOAD FAILURES, WHEN IS THE ADDON USED
+  (jos de tot). LIVE ACTIVITY arată pașii serverului în engleză (REQUEST, SEARCH, SOURCE, RANK, LIST, SYNC, SEND, DONE, WARN),
+  grupați pe film; sursele individuale sunt ascunse până se pornește „Sources". Modul `src/utils/activity.ts` (buffer în memorie, 600
+  evenimente, nume de instanță ca la log), ruta `/<uuid>/debug/activity.json?after=&instance=`; evenimente emise din `providers/index.ts`,
+  `aggregator.ts`, `alignedPrepare.ts`, `alignment.ts`, `alignedProxy.ts`. Pe Vercel fiecare instanță are propriul buffer (ca la log):
+  pagina le amestecă, dar un pas poate lipsi dacă a fost pe altă instanță decât cea care răspunde la cerere. DOWNLOAD FAILURES are acum
+  paginare ca celelalte (5 implicit, 10/20/50, Prev/Next) și fiecare intrare se deschide cu clic (motivul complet).
+  Cursorul „?" de la numele serviciilor (SERVICES & ADDONS) scos. Test: `test/activity.test.ts`.
 - **Cronometru cap-coadă în Debug (ramura `vercel`, 2026-11-05; cerut de utilizator):** înainte, timpii erau împrăștiați și doar
   în logul din memoria unei instanțe. Acum se salvează în baza de date: (1) la fiecare listă, `details.timing` în `usage_events`
   (`totalMs`, `searchMs`, `scoringMs`, `stoppedEarly`) plus timpii pe sursă (`providers`, cu `waived` pentru cele neașteptate de

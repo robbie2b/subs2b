@@ -12,6 +12,7 @@ import { WyzieProvider } from './wyzie';
 import { GenericStremioAddonProvider } from './genericStremioAddon';
 import { Logger } from '../utils/logger';
 import { keepAlive } from '../utils/background';
+import { activity, filmLabel, fmtMs } from '../utils/activity';
 import { ENV } from '../config/env';
 
 const BUILTIN_PROVIDERS: SubtitleProvider[] = [
@@ -100,6 +101,11 @@ export async function executeParallelSearch(
     timeoutMs: config.providerTimeoutMs
   });
 
+  // (the searches for timing references are not shown as such: Subsync reports them in its own words)
+  const film = filmLabel(query.id, query.extra?.filename);
+  const shown = !query.allLanguages;
+  if (shown) activity('search', film, `Searching ${activeProviders.length} sources: ${activeProviders.map(p => p.name).join(', ')}`);
+
   const runProvider = (provider: SubtitleProvider): Promise<SearchOutcome> => {
     // One limit for everything, the Connector timeout (Filters → Results): the native services and the imported addons
     // alike. An imported addon used to keep its own timeout (20 s when imported), so one slow addon (opensubtitles PRO)
@@ -124,6 +130,11 @@ export async function executeParallelSearch(
     const waived = waivedEntries.get(provider.id);
     if (waived) Object.assign(waived, entry, { waived: undefined });
     else report?.push(entry);
+    if (shown) {
+      activity('source', film, entry.ok
+        ? `${entry.name}: ${entry.count} subtitle${entry.count === 1 ? '' : 's'} in ${fmtMs(entry.ms)}${waived ? ' (answered after the list was sent)' : ''}`
+        : `${entry.name} failed after ${fmtMs(entry.ms)}${entry.error ? ` (${entry.error.replace(/^Error: /, '').slice(0, 80)})` : ''}`);
+    }
   };
   const runTimed = async (provider: SubtitleProvider): Promise<SearchOutcome> => {
     const started = Date.now();
@@ -206,6 +217,7 @@ export async function executeParallelSearch(
     }
     if (options.outcome) options.outcome.stoppedEarly = true;
     Logger.info(`[DYNAMIC] stopped waiting after ${Date.now() - searchStarted} ms; still running in the background: ${waived.map(p => p.name).join(', ')}`);
+    if (shown) activity('search', film, `Stopped waiting after ${fmtMs(Date.now() - searchStarted)}: not waiting for ${waived.map(p => p.name).join(', ')} (they go on in the background)`);
     const items = gather();
     // the sources left running finish in the background (kept alive on Vercel) and complete the saved list
     keepAlive(all.then(() => options.onFullResult?.(gather())));
@@ -213,6 +225,7 @@ export async function executeParallelSearch(
   }
 
   const aggregatedSubtitles: RawSubtitleItem[] = gather();
+  if (shown) activity('search', film, `All ${activeProviders.length} sources answered after ${fmtMs(Date.now() - searchStarted)}: ${aggregatedSubtitles.length} subtitles found`);
 
   if (fallbackProviders.length > 0) {
     if (directFailed) {

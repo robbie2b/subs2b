@@ -1,6 +1,6 @@
 // Debug page: live server log + when/what the addon was used for.
 // Loaded after app.js; app.js calls startDebugPage()/stopDebugPage() when the page is shown/left.
-const debugState = { names: {}, logTimer: null, usageTimer: null, lastSeq: 0, instance: '', seenLines: null, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5 };
+const debugState = { names: {}, logTimer: null, usageTimer: null, lastSeq: 0, instance: '', seenLines: null, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5, dlEntries: [], dlPage: 1, dlPageSize: 5, openDl: new Set(), actTimer: null, actSeq: 0, actInstance: '', actSeen: null, actPaused: false, actLastFilm: '' };
 const PLAY_ICON = 'M8,5.14V19.14L19,12.14L8,5.14Z';
 const PAUSE_ICON = 'M14,19H18V5H14M6,19H10V5H6V19Z';
 
@@ -57,6 +57,46 @@ function startDebugPage() {
         renderSubsync();
       });
     }
+    // download failures: the same paging as the other lists, and a click opens one
+    try {
+      const savedDl = parseInt(localStorage.getItem('subs2b_dbg_dl_pagesize') || '', 10);
+      if ([5, 10, 20, 50].includes(savedDl)) debugState.dlPageSize = savedDl;
+    } catch (err) { /* storage may be blocked */ }
+    const dlSelect = document.getElementById('dbg-dl-page-size');
+    if (dlSelect) {
+      dlSelect.value = String(debugState.dlPageSize);
+      dlSelect.addEventListener('change', () => {
+        debugState.dlPageSize = parseInt(dlSelect.value, 10) || 5;
+        debugState.dlPage = 1;
+        try { localStorage.setItem('subs2b_dbg_dl_pagesize', String(debugState.dlPageSize)); } catch (err) { /* ignore */ }
+        renderDownloads();
+      });
+    }
+    document.getElementById('dbg-dl-prev')?.addEventListener('click', () => { debugState.dlPage--; renderDownloads(); });
+    document.getElementById('dbg-dl-next')?.addEventListener('click', () => { debugState.dlPage++; renderDownloads(); });
+    document.getElementById('dbg-downloads')?.addEventListener('click', event => {
+      const head = event.target.closest('.dbg-req-head');
+      if (!head) return;
+      const item = head.parentElement;
+      const key = item.dataset.key;
+      const open = item.classList.toggle('open');
+      if (open) debugState.openDl.add(key); else debugState.openDl.delete(key);
+    });
+    // live activity: the answer of every source is hidden until asked for; pause and clear like the log
+    const actBox = document.getElementById('dbg-activity');
+    document.getElementById('dbg-act-sources')?.addEventListener('change', event => {
+      actBox?.classList.toggle('hide-sources', !event.target.checked);
+    });
+    document.getElementById('dbg-act-pause')?.addEventListener('click', () => {
+      debugState.actPaused = !debugState.actPaused;
+      document.getElementById('dbg-act-pause-label').textContent = debugState.actPaused ? 'Resume' : 'Pause';
+      document.querySelector('#dbg-act-pause-icon path').setAttribute('d', debugState.actPaused ? PLAY_ICON : PAUSE_ICON);
+      document.getElementById('dbg-act-live')?.classList.toggle('paused', debugState.actPaused);
+    });
+    document.getElementById('dbg-act-clear')?.addEventListener('click', () => {
+      if (actBox) actBox.textContent = '';
+      debugState.actLastFilm = '';
+    });
     document.getElementById('dbg-subsync-prev')?.addEventListener('click', () => { debugState.subsyncPage--; renderSubsync(); });
     document.getElementById('dbg-subsync-next')?.addEventListener('click', () => { debugState.subsyncPage++; renderSubsync(); });
     document.getElementById('dbg-page-prev')?.addEventListener('click', () => { debugState.page--; renderRecent(); });
@@ -121,7 +161,7 @@ function startDebugPage() {
       const el = document.getElementById(id);
       if (el) el.textContent = why;
     }
-    for (const id of ['dbg-recent', 'dbg-subsync', 'dbg-downloads', 'dbg-rules']) {
+    for (const id of ['dbg-recent', 'dbg-subsync', 'dbg-downloads', 'dbg-rules', 'dbg-activity']) {
       const el = document.getElementById(id);
       if (el) el.innerHTML = `<div class="dbg-empty">${why}</div>`;
     }
@@ -137,14 +177,18 @@ function startDebugPage() {
   refreshDownloads();
   formatTest();
   refreshLogs();
+  refreshActivity();
   debugState.logTimer = setInterval(refreshLogs, 2000);
+  debugState.actTimer = setInterval(refreshActivity, 2000);
   debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); refreshDownloads(); }, 30000);
 }
 
 function stopDebugPage() {
   clearInterval(debugState.logTimer);
+  clearInterval(debugState.actTimer);
   clearInterval(debugState.usageTimer);
   debugState.logTimer = null;
+  debugState.actTimer = null;
   debugState.usageTimer = null;
 }
 
@@ -504,6 +548,88 @@ async function measureRules() {
   }
 }
 
+function renderDownloads() {
+  const box = document.getElementById('dbg-downloads');
+  const info = document.getElementById('dbg-dl-page-info');
+  if (!box) return;
+  const entries = debugState.dlEntries;
+  const total = entries.length;
+  const pages = Math.max(1, Math.ceil(total / debugState.dlPageSize));
+  debugState.dlPage = Math.min(Math.max(1, debugState.dlPage), pages);
+  const from = (debugState.dlPage - 1) * debugState.dlPageSize;
+  const slice = entries.slice(from, from + debugState.dlPageSize);
+  box.innerHTML = slice.length
+    ? slice.map(f => {
+      const key = `${f.at}|${f.host}|${f.release || ''}`;
+      const isOpen = debugState.openDl.has(key);
+      return `<div class="dbg-req${isOpen ? ' open' : ''}" data-key="${escapeHtmlDebug(key)}">`
+        + `<div class="dbg-req-head"><svg class="dbg-chev" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg>`
+        + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(f.release || f.host)}</div>`
+        + `<div class="dbg-req-sub">${escapeHtmlDebug(f.host)} · ${escapeHtmlDebug(f.place)}</div></div>`
+        + `<div class="dbg-req-side"><span class="dbg-tag ${f.recovered ? 'service' : 'addon'}">${f.recovered ? 'recovered' : 'failed'}</span>`
+        + `<div class="dbg-muted">${new Date(f.at).toLocaleString('en-GB', { hour12: false })}</div></div></div>`
+        + `<div class="dbg-req-body"><div class="dbg-flow">${escapeHtmlDebug(f.reason)}</div></div></div>`;
+    }).join('')
+    : '<div class="dbg-empty">No failed download yet.</div>';
+  if (info) info.textContent = total ? `${from + 1}-${from + slice.length} of ${total} · page ${debugState.dlPage}/${pages}` : '';
+  const prev = document.getElementById('dbg-dl-prev');
+  const next = document.getElementById('dbg-dl-next');
+  if (prev) prev.disabled = debugState.dlPage <= 1;
+  if (next) next.disabled = debugState.dlPage >= pages;
+}
+
+const ACTIVITY_TAGS = { request: 'REQUEST', search: 'SEARCH', source: 'SOURCE', rank: 'RANK', list: 'LIST', sync: 'SYNC', send: 'SEND', done: 'DONE', warn: 'WARN' };
+
+/** Adds the steps to the Live activity panel (a heading when the film changes) */
+function appendActivity(events) {
+  const box = document.getElementById('dbg-activity');
+  if (!box || !events.length) return;
+  if (box.querySelector('.dbg-empty')) box.textContent = '';
+  const fragment = document.createDocumentFragment();
+  for (const ev of events) {
+    if (ev.film !== debugState.actLastFilm) {
+      const heading = document.createElement('div');
+      heading.className = 'dbg-act-film';
+      heading.textContent = ev.film;
+      fragment.appendChild(heading);
+      debugState.actLastFilm = ev.film;
+    }
+    const d = new Date(ev.at);
+    const time = `${d.toLocaleTimeString('en-GB', { timeZone: 'Europe/Bucharest', hour12: false })}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+    const row = document.createElement('div');
+    row.className = `dbg-act-row act-${ev.kind}`;
+    row.innerHTML = `<span class="dbg-act-time">${time}</span><span class="dbg-act-tag">${ACTIVITY_TAGS[ev.kind] || ''}</span><span class="dbg-act-text">${escapeHtmlDebug(ev.text)}</span>`;
+    fragment.appendChild(row);
+  }
+  box.appendChild(fragment);
+  while (box.childElementCount > 900) box.removeChild(box.firstElementChild);
+  if (document.getElementById('dbg-act-autoscroll')?.checked) box.scrollTop = box.scrollHeight;
+}
+
+async function refreshActivity() {
+  const base = debugBase();
+  const box = document.getElementById('dbg-activity');
+  if (!base || !box || debugState.actPaused) return;
+  try {
+    const res = await fetch(`${base}/activity.json?after=${debugState.actSeq}&instance=${encodeURIComponent(debugState.actInstance || '')}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    // (several server instances, as on Vercel: a step is known by instance + number, and another instance answering
+    // does not clear anything)
+    const instance = data.instance || '';
+    debugState.actSeq = data.last;
+    debugState.actInstance = instance;
+    const seen = debugState.actSeen || (debugState.actSeen = new Set());
+    const fresh = data.events.filter(e => !seen.has(`${instance}:${e.seq}`));
+    for (const e of fresh) seen.add(`${instance}:${e.seq}`);
+    while (seen.size > 6000) seen.delete(seen.values().next().value);
+    fresh.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    appendActivity(fresh);
+  } catch (err) {
+    // the server may be waking up; try again on the next tick
+  }
+}
+
 async function refreshDownloads() {
   const base = debugBase();
   const box = document.getElementById('dbg-downloads');
@@ -517,16 +643,8 @@ async function refreshDownloads() {
     summary.textContent = data.lastWeek.length
       ? 'Last 7 days: ' + data.lastWeek.map(h => `${h.host} ${h.failed} failed${h.recovered ? `, ${h.recovered} recovered` : ''}`).join(' · ')
       : '';
-    const shown = data.entries.slice(0, 50);
-    box.innerHTML = shown.length
-      ? shown.map(f => `<div class="dbg-req open"><div class="dbg-req-head" style="cursor:default">`
-        + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(f.release || f.host)}</div>`
-        + `<div class="dbg-req-sub">${escapeHtmlDebug(f.host)} · ${escapeHtmlDebug(f.place)} · ${escapeHtmlDebug(f.reason)}</div></div>`
-        + `<div class="dbg-req-side"><span class="dbg-tag ${f.recovered ? 'service' : 'addon'}">${f.recovered ? 'recovered' : 'failed'}</span>`
-        + `<div class="dbg-muted">${new Date(f.at).toLocaleString('en-GB', { hour12: false })}</div></div>`
-        + `</div></div>`).join('')
-        + (data.entries.length > shown.length ? `<div class="dbg-flow dbg-muted">The newest ${shown.length} of ${data.entries.length} are listed.</div>` : '')
-      : '<div class="dbg-empty">No failed download yet.</div>';
+    debugState.dlEntries = data.entries || [];
+    renderDownloads();
   } catch (err) {
     // ignore
   }

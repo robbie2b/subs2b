@@ -1325,21 +1325,63 @@
           <div class="view-header">
             <div>
               <h1 class="view-title">Debug</h1>
-              <p class="view-subtitle">Live server log and when the addon is used</p>
+              <p class="view-subtitle">Live server log, what the server is doing now, and when the addon is used</p>
             </div>
           </div>
 
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
-                <div class="section-badge-header">WHEN IS THE ADDON USED</div>
-                <p class="section-desc-subtle" id="dbg-usage-summary">Loading...</p>
+                <div class="section-badge-header">LIVE LOG</div>
+                <p class="section-desc-subtle">Server log lines, refreshed every 2 seconds while this page is open (kept in memory, reset on restart).</p>
+              </div>
+              <div class="dbg-actions">
+                <span class="dbg-live" id="dbg-live"><i></i>Live</span>
+                <label class="dbg-switch" title="Keep the newest line in view">
+                  <input type="checkbox" id="dbg-autoscroll" checked><span class="dbg-switch-track"></span>Auto-scroll
+                </label>
+                <button class="dbg-btn" id="dbg-log-pause" type="button">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" id="dbg-pause-icon"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
+                  <span id="dbg-pause-label">Pause</span>
+                </button>
+                <button class="dbg-btn" id="dbg-log-copy" type="button" title="Copy every line shown to the clipboard">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"/></svg>
+                  <span id="dbg-copy-label">Copy logs</span>
+                </button>
+                <button class="dbg-btn" id="dbg-log-clear" type="button">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
+                  Clear
+                </button>
               </div>
             </div>
-            <div id="dbg-heatmap" class="dbg-heatmap"></div>
-            <div id="dbg-suggestion" class="dbg-suggestion"></div>
+            <div id="dbg-log" class="dbg-log" role="log" aria-live="off"></div>
           </div>
-
+          <div class="dbg-card">
+            <div class="dbg-head">
+              <div>
+                <div class="section-badge-header">LIVE ACTIVITY</div>
+                <p class="section-desc-subtle">What the server is doing right now, step by step: searching the sources, ranking, syncing and sending subtitles. Refreshed every 2 seconds while this page is open (kept in memory, reset on restart).</p>
+              </div>
+              <div class="dbg-actions">
+                <span class="dbg-live" id="dbg-act-live"><i></i>Live</span>
+                <label class="dbg-switch" title="Show the answer of every source, one line each">
+                  <input type="checkbox" id="dbg-act-sources"><span class="dbg-switch-track"></span>Sources
+                </label>
+                <label class="dbg-switch" title="Keep the newest step in view">
+                  <input type="checkbox" id="dbg-act-autoscroll" checked><span class="dbg-switch-track"></span>Auto-scroll
+                </label>
+                <button class="dbg-btn" id="dbg-act-pause" type="button">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" id="dbg-act-pause-icon"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
+                  <span id="dbg-act-pause-label">Pause</span>
+                </button>
+                <button class="dbg-btn" id="dbg-act-clear" type="button">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div id="dbg-activity" class="dbg-activity hide-sources" role="log" aria-live="off"><div class="dbg-empty">Nothing yet. Play something and its steps appear here.</div></div>
+          </div>
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
@@ -1366,7 +1408,6 @@
               </div>
             </div>
           </div>
-
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
@@ -1401,7 +1442,6 @@
               subtitles shown). <strong>Best score</strong>: average score of its best subtitle.
             </p>
           </div>
-
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
@@ -1428,7 +1468,6 @@
               </div>
             </div>
           </div>
-
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
@@ -1441,7 +1480,6 @@
               </div>
             </div>
           </div>
-
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
@@ -1454,44 +1492,42 @@
             </div>
             <div id="dbg-rules" class="dbg-list"><div class="dbg-empty">Press Measure.</div></div>
           </div>
-
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
                 <div class="section-badge-header">DOWNLOAD FAILURES</div>
-                <p class="section-desc-subtle">Subtitles this server could not download (kept 30 days, also after a restart), newest first. "Recovered" means a copy from another source was served instead.</p>
+                <p class="section-desc-subtle">Subtitles this server could not download (kept 30 days, also after a restart), newest first. "Recovered" means a copy from another source was served instead. Click one to see the full reason.</p>
+              </div>
+              <div class="dbg-actions">
+                <label class="dbg-perpage">Per page
+                  <select id="dbg-dl-page-size" class="dbg-select">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                  </select>
+                </label>
               </div>
             </div>
             <div id="dbg-dl-summary" class="dbg-flow dbg-muted"></div>
             <div id="dbg-downloads" class="dbg-list"><div class="dbg-empty">Nothing yet.</div></div>
+            <div class="dbg-pager" id="dbg-dl-pager">
+              <span id="dbg-dl-page-info" class="dbg-muted"></span>
+              <div class="dbg-actions">
+                <button class="dbg-btn" id="dbg-dl-prev" type="button">‹ Prev</button>
+                <button class="dbg-btn" id="dbg-dl-next" type="button">Next ›</button>
+              </div>
+            </div>
           </div>
-
           <div class="dbg-card">
             <div class="dbg-head">
               <div>
-                <div class="section-badge-header">LIVE LOG</div>
-                <p class="section-desc-subtle">Server log lines, refreshed every 2 seconds while this page is open (kept in memory, reset on restart).</p>
-              </div>
-              <div class="dbg-actions">
-                <span class="dbg-live" id="dbg-live"><i></i>Live</span>
-                <label class="dbg-switch" title="Keep the newest line in view">
-                  <input type="checkbox" id="dbg-autoscroll" checked><span class="dbg-switch-track"></span>Auto-scroll
-                </label>
-                <button class="dbg-btn" id="dbg-log-pause" type="button">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" id="dbg-pause-icon"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
-                  <span id="dbg-pause-label">Pause</span>
-                </button>
-                <button class="dbg-btn" id="dbg-log-copy" type="button" title="Copy every line shown to the clipboard">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"/></svg>
-                  <span id="dbg-copy-label">Copy logs</span>
-                </button>
-                <button class="dbg-btn" id="dbg-log-clear" type="button">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
-                  Clear
-                </button>
+                <div class="section-badge-header">WHEN IS THE ADDON USED</div>
+                <p class="section-desc-subtle" id="dbg-usage-summary">Loading...</p>
               </div>
             </div>
-            <div id="dbg-log" class="dbg-log" role="log" aria-live="off"></div>
+            <div id="dbg-heatmap" class="dbg-heatmap"></div>
+            <div id="dbg-suggestion" class="dbg-suggestion"></div>
           </div>
         </section>
 

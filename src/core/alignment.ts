@@ -7,6 +7,7 @@ import { readCues } from '../utils/subtitleCues';
 import { speechFlags, TimedCue } from '../utils/subsync';
 import { MIN_REFERENCE_CUES, Reference } from './alignDecision';
 import { executeParallelSearch } from '../providers';
+import { activity, filmLabel } from '../utils/activity';
 import { loadStoredReferences, storeReferences } from '../storage/referenceStore';
 import { serverCanDownload } from '../proxy/subtitleProxy';
 import { Logger } from '../utils/logger';
@@ -223,6 +224,7 @@ const REFERENCE_SEARCH_LIMIT_MS = 3000;
 
 async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
   const started = Date.now();
+  activity('sync', filmLabel(ctx.query.id, ctx.filename), 'No stored references: searching the sources in every language for subtitles made for this kind of file');
   // Only the built-in services take part (they can search in every language); addons and RegieLive are Romanian-only or fixed
   // The references are searched with a shorter time limit than the list: they are kept in the database, and a source that
   // is slow (Addic7ed's first search of a show takes ~7 s) must not hold the subtitle back for the full 6 s
@@ -238,8 +240,10 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
   const skipped = `skipped: ${stats.skipped.kind} of another kind or cut, ${stats.skipped.blocked} from a source refusing this server, ${stats.skipped.quality} forced/machine/low quality`;
   if (candidates.length === 0) {
     Logger.info(`[SUBSYNC] no reference candidates for ${ctx.query.id} (${raw.length} subtitles searched; ${skipped})`);
+    activity('warn', filmLabel(ctx.query.id, ctx.filename), `No usable timing reference among ${raw.length} subtitles searched (${skipped})`);
     return [];
   }
+  activity('sync', filmLabel(ctx.query.id, ctx.filename), `${candidates.length} timing reference candidate${candidates.length === 1 ? '' : 's'} found among ${raw.length} subtitles: downloading the best ones`);
   Logger.info(`[SUBSYNC] reference candidates for ${ctx.query.id} (${skipped})`, {
     candidates: candidates.map(c => `[${c.provider}] [${c.lang}] ${c.release || c.id}`)
   });
@@ -291,6 +295,7 @@ export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
     pending = loadStoredReferences(key).then(stored => {
       if (stored && stored.length) {
         Logger.info(`[SUBSYNC] ${stored.length} stored reference(s) for ${ctx.query.id} (nothing downloaded)`, { references: stored.map(r => r.label) });
+        activity('sync', filmLabel(ctx.query.id, ctx.filename), `${stored.length} stored timing reference${stored.length === 1 ? '' : 's'} found: nothing to download`);
         return stored;
       }
       return buildReferences(ctx).then(refs => { storeReferences(key, refs); return refs; });

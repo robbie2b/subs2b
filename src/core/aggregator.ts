@@ -15,6 +15,7 @@ import { needsReference, fromFileGroup, archivePickParams as buildArchivePickPar
 import { encodeAlignedToken, encodeFallbackToken, AlignedToken, MAX_ALTERNATIVES, MAX_BACKUPS } from './alignedToken';
 import { prepareAligned } from './alignedPrepare';
 import { keepAlive } from '../utils/background';
+import { activity, filmLabel, fmtMs } from '../utils/activity';
 import { formatTestUntil, formatTestEntries } from '../proxy/formatTest';
 import { isAllowedDownloadUrl, addonHostsOf, serverCanDownload } from '../proxy/subtitleProxy';
 
@@ -112,6 +113,7 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
   };
   const bestRank = priority(best.provider);
   if (pendingIds.some(id => priority(id) < bestRank)) return false;
+  activity('search', filmLabel(query.id, query.extra?.filename), `Good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider} (score ${detail.score}${topLevel ? ', exact match' : ''}); waiting for ${pendingIds.join(', ') || 'nobody'}`);
   Logger.info(`[DYNAMIC] good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider}, score ${detail.score}${topLevel ? ' (top level)' : ''}; waiting for: ${pendingIds.join(', ') || 'nobody'}`);
   return true;
 }
@@ -142,6 +144,8 @@ export async function getAggregatedSubtitles(
   configId?: string
 ): Promise<StremioSubtitlesResponse> {
   const requestStart = Date.now();
+  const film = filmLabel(query.id, query.extra?.filename);
+  activity('request', film, `Subtitle request: ${query.type} ${query.id}${query.extra?.filename ? '' : ' (the player sent no file name)'}`);
   // The file hash changes which OpenSubtitles results are flagged as exact matches, so it is part of the key
   const cacheKey = searchCacheKey(query, config);
 
@@ -158,6 +162,7 @@ export async function getAggregatedSubtitles(
     const running = inflightSearches.get(cacheKey);
     if (running) {
       Logger.info(`[CACHE] the same search is already running for ${query.id}: waiting for it`);
+      activity('search', film, 'The same search is already running: waiting for it');
       const shared = await running;
       rawSubtitles = shared.items;
       providerReport.push(...shared.report);
@@ -202,6 +207,7 @@ export async function getAggregatedSubtitles(
     }
   } else {
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);
+    activity('search', film, `Saved list found (${rawSubtitles.length} subtitles): no search needed`);
   }
 
   const searchMs = fromCache ? 0 : Date.now() - searchStart;
@@ -265,6 +271,7 @@ export async function getAggregatedSubtitles(
   }
 
   const afterDedupCount = orderedItems.length;
+  activity('rank', film, `${rawSubtitles.length} found → ${whitelistedItems.length} in your languages → ${afterDedupCount} after removing duplicates`);
   const keptIds = new Set(orderedItems.map(i => i.id));
   const dedupDropped = beforeDedupItems
     .filter(i => !keptIds.has(i.id))
@@ -287,6 +294,12 @@ export async function getAggregatedSubtitles(
       providerPriority: config.providerPriority
     });
     scoringMs = Date.now() - scoringStart;
+    if (ranked.items.length) {
+      const best = ranked.details[0];
+      activity('rank', film, `Ranked ${ranked.items.length} subtitle${ranked.items.length === 1 ? '' : 's'} in ${fmtMs(scoringMs)}; best: "${(ranked.items[0].release || '').slice(0, 70)}" from ${ranked.items[0].provider} (score ${best.score}${best.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r)) ? ', exact match' : ''})`);
+    } else {
+      activity('rank', film, 'Nothing to rank');
+    }
     Logger.info(
       `Scoring: ${orderedItems.length} -> ${ranked.items.length} subtitles (filename: ${ranked.usedFilename ? 'yes' : 'no'}${ranked.fallback ? ', fallback' : ''})`
     );
@@ -321,6 +334,7 @@ export async function getAggregatedSubtitles(
 
   if (subsyncVerdict.needed) {
     Logger.info(`[SUBSYNC] a timing reference is needed: ${subsyncVerdict.reason}`);
+    activity('sync', film, `Subsync: ${subsyncVerdict.reason}`);
     // A subtitle this server cannot download cannot be checked: it goes after the ones that can (the player picks
     // the first), still offered to be chosen by hand
     const filename = query.extra?.filename;
@@ -478,6 +492,8 @@ export async function getAggregatedSubtitles(
     subtitles.unshift(...formatTestEntries(baseUrl, configId!, first.url.startsWith(baseUrl + '/') ? first.url : `${baseUrl}/${configId}/sub/fallback/${encodeFallbackToken({ u: first.url, b: [], r: orderedItems[0].release })}.srt`, first.lang));
     Logger.info('[FORMAT TEST] the first subtitle is offered 4 more times at the top of the list');
   }
+
+  activity('list', film, `List ready in ${fmtMs(Date.now() - requestStart)}: ${subtitles.length} subtitle${subtitles.length === 1 ? '' : 's'} sent to the player${incomplete ? ' (kept only briefly: the search was not complete)' : ''}`);
 
   // the player keeps the list as long as this server does; an empty or incomplete list only briefly (and a test list
   // not at all)

@@ -5,8 +5,9 @@ import { applyAlignment } from '../utils/subsync';
 import { parseSubtitleQuery } from '../core/aggregator';
 import { decodeAlignedToken, decodeFallbackToken, linksOf } from '../core/alignedToken';
 import { recordAlignment, AlignmentResult } from '../core/alignment';
-import { prepareAligned, loadFirst, loadWithAlternatives, clearPrepared, Served } from '../core/alignedPrepare';
+import { prepareAligned, prepareAlignedPeek, loadFirst, loadWithAlternatives, clearPrepared, Served } from '../core/alignedPrepare';
 import { addonHostsOf, isAllowedDownloadUrl, sendSubtitleResponse } from './subtitleProxy';
+import { activity, filmLabel, fmtMs } from '../utils/activity';
 
 /**
  * How long the player is kept waiting for the alignment. The aligned subtitle is wanted from the first try, even
@@ -61,7 +62,11 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
 
     // the work may already be under way: the list starts the likely choice while the player opens the video
     const query = parseSubtitleQuery(token.t || 'movie', token.id, { filename: token.f });
+    const earlyPrepared = prepareAlignedPeek(token);
     const prep = prepareAligned(token, query, config, baseUrl);
+    const film = filmLabel(token.id, token.f);
+    const release = (token.r || 'subtitle').slice(0, 70);
+    activity('send', film, `Player asked for "${release}" (${earlyPrepared ? `prepared ${fmtMs(Date.now() - prep.startedAt)} ago` : 'preparing it now'})`);
 
     let text: string;
     try {
@@ -73,6 +78,11 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
 
     const log = (outcome: 'shifted' | 'unchanged' | 'timeout' | 'error', result?: AlignmentResult, reason?: string, replacedBy?: string, served?: Served) => {
       const t = served?.timing;
+      const waited = Date.now() - started;
+      const what = outcome === 'shifted' && result
+        ? `aligned: shifted ${result.decision.offset > 0 ? '+' : ''}${result.decision.offset} s${result.decision.ratio !== 1 ? ` ×${result.decision.ratio}` : ''}`
+        : outcome === 'unchanged' ? 'unchanged' : outcome === 'timeout' ? 'unchanged: Subsync took too long' : 'unchanged: Subsync failed';
+      activity(outcome === 'timeout' || outcome === 'error' ? 'warn' : 'done', film, `Sent "${replacedBy ? String(replacedBy).slice(0, 60) : release}" to the player (${what}); it waited ${fmtMs(waited)}`);
       recordAlignment(configKey, {
         ...(t ? {
           timing: {
@@ -116,6 +126,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       // and is logged once; the repeats are only a short line
       if (prep.reported) {
         Logger.info(`[SUBSYNC] served again from memory (decided earlier, nothing computed)`, { id: token.id, subtitle: replacedBy || token.r });
+        activity('done', film, `Sent "${release}" again from memory (nothing computed); it waited ${fmtMs(Date.now() - started)}`);
         const again = served.text ?? text;
         sendSubtitleResponse(res, result.decision.apply ? applyAlignment(again, result.decision.result!) : again, 'srt', 'subtitle.srt', 'public, max-age=3600');
         return;

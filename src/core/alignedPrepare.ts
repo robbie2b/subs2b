@@ -10,6 +10,7 @@ import { noteDownloadFailure } from '../utils/downloadJournal';
 import { AlignedToken, linksOf } from './alignedToken';
 import { getReferences, fitsReferences, AlignmentResult, Reference } from './alignment';
 import { alignInWorker, referencesAgreeInWorker } from './alignPool';
+import { activity, filmLabel, fmtMs } from '../utils/activity';
 import {
   addonHostsOf, isAllowedDownloadUrl, decompressBuffer, toCleanUtf8, validateAndFormatSubtitle
 } from '../proxy/subtitleProxy';
@@ -202,6 +203,11 @@ async function alignOrReplace(
  * The preparation of one aligned link, started now or already under way. `query` is the content being played
  * (built from the token: id, type and file name). The caller checks that the link may be downloaded.
  */
+/** Is a preparation for this link already under way (or done)? Does not start one. */
+export function prepareAlignedPeek(token: AlignedToken): boolean {
+  return prepared.has(preparedKey(token));
+}
+
 export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config: UserConfig, baseUrl: string): Prepared {
   const key = preparedKey(token);
   const existing = prepared.get(key);
@@ -210,11 +216,24 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
   const hosts = addonHostsOf(config);
   const started = Date.now();
   const timing = { original: 0, references: 0, compute: 0, ready: 0 };
+  const film = filmLabel(token.id, token.f);
+  const name = (token.r || 'subtitle').slice(0, 70);
+  activity('sync', film, `Preparing "${name}": downloading it and getting the timing references`);
   // the subtitle and the references are fetched at the same time
-  const loading = loadWithAlternatives(token, hosts, baseUrl).then(l => { timing.original = Date.now() - started; return l; });
+  const loading = loadWithAlternatives(token, hosts, baseUrl).then(l => {
+    timing.original = Date.now() - started;
+    activity(l.replacedBy ? 'warn' : 'sync', film, l.replacedBy
+      ? `"${name}" could not be downloaded: using the next one of the same language, "${String(l.replacedBy).slice(0, 60)}"`
+      : `Subtitle downloaded in ${fmtMs(timing.original)}`);
+    return l;
+  });
   const original = loading.then(l => l.text);
   const references = getReferences({ query, config, baseUrl, filename: token.f })
-    .then(refs => { timing.references = Date.now() - started; return refs; });
+    .then(refs => {
+      timing.references = Date.now() - started;
+      activity('sync', film, `${refs.length} timing reference${refs.length === 1 ? '' : 's'} ready after ${fmtMs(timing.references)}`);
+      return refs;
+    });
   const served = Promise.all([loading, references]).then(async ([loaded, refs]) => {
     const computeStart = Date.now();
     const s = await alignOrReplace(loaded.text, loaded.release, token.f, refs, loaded.alternatives, hosts, baseUrl);
@@ -225,13 +244,18 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
     }
     // (all from the start of the preparation; `ready` = when the aligned subtitle could be served)
     timing.ready = Date.now() - started;
+    const d = s.result.decision;
+    activity('sync', film, `Decision for "${name}": ${d.apply ? `shifted ${d.offset > 0 ? '+' : ''}${d.offset} s${d.ratio !== 1 ? ` ×${d.ratio}` : ''}${d.segments > 1 ? ` in ${d.segments} parts` : ''}` : (d.reason === 'already aligned' ? 'unchanged (already aligned)' : `unchanged (${d.reason})`)} · confidence ${Math.round(d.confidence * 100)}% · computed in ${fmtMs(timing.compute)}`);
     return { ...s, timing };
   });
   const entry: Prepared = { original, served, startedAt: started };
   prepared.set(key, entry);
   // a failure is not kept: the next request tries again (and a preparation nobody waits for never throws)
   original.catch(() => undefined);
-  served.catch(() => { if (prepared.get(key) === entry) prepared.delete(key); });
+  served.catch((err: unknown) => {
+    activity('warn', film, `Subsync failed for "${name}": ${(err instanceof Error ? err.message : String(err)).slice(0, 100)}`);
+    if (prepared.get(key) === entry) prepared.delete(key);
+  });
   return entry;
 }
 

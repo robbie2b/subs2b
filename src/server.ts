@@ -20,6 +20,7 @@ import { globalSubtitleCache } from './utils/cache';
 import { downloadFailures } from './utils/downloadJournal';
 import { createFormatTestHandler, setFormatTest, formatTestUntil } from './proxy/formatTest';
 import { Logger, getLogLines } from './utils/logger';
+import { getActivity } from './utils/activity';
 import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles, searchCacheKey } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
@@ -581,6 +582,14 @@ export function createServer(): express.Application {
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
     res.json(getLogLines(parseInt(String(req.query.after || '0'), 10) || 0, typeof req.query.instance === 'string' ? req.query.instance : undefined));
+  });
+
+  // What the server is doing step by step (poll with ?after=<last seq received>&instance=<instance name received>)
+  app.get('/:config/debug/activity.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(getActivity(parseInt(String(req.query.after || '0'), 10) || 0, typeof req.query.instance === 'string' ? req.query.instance : undefined));
   });
 
   // Which OpenSubtitles subtitles exist for an exact file hash, in ALL languages
