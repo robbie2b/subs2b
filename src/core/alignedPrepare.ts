@@ -26,7 +26,7 @@ export interface Served {
   text?: string;
   replacedBy?: string;
   /** where the time went (ms): downloading the subtitle, finding the references, computing */
-  timing?: { original: number; references: number; compute: number };
+  timing?: { original: number; references: number; compute: number; ready: number };
 }
 
 export interface Prepared {
@@ -209,7 +209,7 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
 
   const hosts = addonHostsOf(config);
   const started = Date.now();
-  const timing = { original: 0, references: 0, compute: 0 };
+  const timing = { original: 0, references: 0, compute: 0, ready: 0 };
   // the subtitle and the references are fetched at the same time
   const loading = loadWithAlternatives(token, hosts, baseUrl).then(l => { timing.original = Date.now() - started; return l; });
   const original = loading.then(l => l.text);
@@ -223,9 +223,11 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
       s.replacedBy = loaded.replacedBy;
       s.result.note = ['the subtitle could not be downloaded, the next one of the same language was used', s.result.note].filter(Boolean).join('; ');
     }
+    // (all from the start of the preparation; `ready` = when the aligned subtitle could be served)
+    timing.ready = Date.now() - started;
     return { ...s, timing };
   });
-  const entry: Prepared = { original, served, startedAt: Date.now() };
+  const entry: Prepared = { original, served, startedAt: started };
   prepared.set(key, entry);
   // a failure is not kept: the next request tries again (and a preparation nobody waits for never throws)
   original.catch(() => undefined);

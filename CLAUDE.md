@@ -56,6 +56,15 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **Cronometru cap-coadă în Debug (ramura `vercel`, 2026-11-05; cerut de utilizator):** înainte, timpii erau împrăștiați și doar
+  în logul din memoria unei instanțe. Acum se salvează în baza de date: (1) la fiecare listă, `details.timing` în `usage_events`
+  (`totalMs`, `searchMs`, `scoringMs`, `stoppedEarly`) plus timpii pe sursă (`providers`, cu `waived` pentru cele neașteptate de
+  dynamic timeout); (2) la fiecare decizie Subsync, coloana nouă `timing` JSONB în `subsync_decisions` (`subtitleMs`, `referencesMs`,
+  `computeMs`, `readyAfterMs` = de la începutul pregătirii până a fost gata, `askedAfterMs` = după cât a cerut-o playerul,
+  `waitedMs`). Debug arată „list ready in …", sursele de la cea mai lentă la cea mai rapidă și, la fiecare decizie, linia „time: …".
+  Atenție: `waitedMs`/`ms` e cât a așteptat playerul, NU timpul de la deschidere; `askedAfterMs` ≈ timpul dintre listă și cererea
+  subtitrării când a fost pregătită din timp. Se loghează doar prima cerere a unei subtitrări (repetările sunt „served again").
+  Test: `test/timingRecord.test.ts`. Parametri de test pe cererea de subtitrări: `?dynamic=1|0` și `?nocache=1` (doar pentru măsurători).
 - **Dynamic timeout (ramura `vercel`, 2026-11-05; cerut de utilizator, înainte refuzat):** setare nouă în Filters → Results
   (`dynamicTimeout`, `dynamicTimeoutScore`, implicit oprit / 40). Lista nu mai așteaptă tot Connector timeout (6 s) când a
   sosit ceva „bun": primul din clasament e la nivelul de sus (hash match sau nume exact) sau are scor ≥ prag, ȘI sursele pe care

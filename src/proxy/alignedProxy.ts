@@ -71,8 +71,20 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       return;
     }
 
-    const log = (outcome: 'shifted' | 'unchanged' | 'timeout' | 'error', result?: AlignmentResult, reason?: string, replacedBy?: string) => {
+    const log = (outcome: 'shifted' | 'unchanged' | 'timeout' | 'error', result?: AlignmentResult, reason?: string, replacedBy?: string, served?: Served) => {
+      const t = served?.timing;
       recordAlignment(configKey, {
+        ...(t ? {
+          timing: {
+            subtitleMs: t.original,
+            referencesMs: t.references,
+            computeMs: t.compute,
+            readyAfterMs: t.ready,
+            // (a request that itself started the preparation asks "at 0")
+            askedAfterMs: Math.max(0, started - prep.startedAt),
+            waitedMs: Date.now() - started
+          }
+        } : {}),
         at: new Date().toISOString(),
         id: token.id,
         filename: token.f,
@@ -118,10 +130,10 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       if (result.decision.apply) {
         const shifted = applyAlignment(body, result.decision.result!);
         Logger.info(`[SUBSYNC] shifted ${result.decision.offset} s${result.decision.ratio !== 1 ? ` x${result.decision.ratio}` : ''}${result.decision.segments > 1 ? ` in ${result.decision.segments} parts` : ''} (${result.decision.reason})`, { id: token.id, subtitle: replacedBy || token.r });
-        log('shifted', result, undefined, replacedBy);
+        log('shifted', result, undefined, replacedBy, served);
         sendSubtitleResponse(res, shifted, 'srt', 'subtitle.srt', 'public, max-age=3600');
       } else {
-        log('unchanged', result, undefined, replacedBy);
+        log('unchanged', result, undefined, replacedBy, served);
         sendSubtitleResponse(res, body, 'srt', 'subtitle.srt', 'public, max-age=3600');
       }
     } catch (err: unknown) {

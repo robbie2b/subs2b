@@ -3363,3 +3363,6 @@ button:active {
   .filter-section-header:has(> h3) { flex-wrap: wrap; gap: 8px; }
   .filter-section-header > h3 { width: 100%; }
 }
+
+/* Debug: a source that failed or timed out, in the list of source timings */
+.dbg-chip.dbg-bad { background: rgba(239, 68, 68, 0.16); color: #f87171; }

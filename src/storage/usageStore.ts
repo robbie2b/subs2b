@@ -23,8 +23,10 @@ export interface UsageDetails {
   scoringFallback: boolean;
   top: Array<{ rank: number; score: number; rejected: boolean; provider: string; release: string; reasons: string[] }>;
   /** how each provider did in this search (absent when the answer came from the cache) */
-  providers?: Array<{ id: string; name: string; ms: number; ok: boolean; count: number; error?: string }>;
+  providers?: Array<{ id: string; name: string; ms: number; ok: boolean; count: number; error?: string; waived?: boolean }>;
   cached?: boolean;
+  /** where the time of the list went (ms); absent in older records */
+  timing?: { totalMs: number; searchMs: number; scoringMs: number; stoppedEarly: boolean };
   /** whether a timing reference was needed for this request, and why (not) */
   subsync?: { triggered: boolean; reason: string };
 }

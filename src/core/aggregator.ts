@@ -30,7 +30,7 @@ function preferDownloadable(item: RawSubtitleItem): RawSubtitleItem {
 }
 
 /** Searches running now, by cache key (see getAggregatedSubtitles) */
-const inflightSearches = new Map<string, Promise<{ items: RawSubtitleItem[]; report: ProviderReport[]; incomplete: boolean }>>();
+const inflightSearches = new Map<string, Promise<{ items: RawSubtitleItem[]; report: ProviderReport[]; incomplete: boolean; stoppedEarly: boolean }>>();
 
 /** How long an empty list, or one from a search where a provider failed, is kept (minutes; normal lists: cacheTtlMinutes) */
 export const SHORT_CACHE_MINUTES = 2;
@@ -141,6 +141,7 @@ export async function getAggregatedSubtitles(
   baseUrl: string,
   configId?: string
 ): Promise<StremioSubtitlesResponse> {
+  const requestStart = Date.now();
   // The file hash changes which OpenSubtitles results are flagged as exact matches, so it is part of the key
   const cacheKey = searchCacheKey(query, config);
 
@@ -148,6 +149,8 @@ export async function getAggregatedSubtitles(
   const providerReport: ProviderReport[] = [];
   const fromCache = !!rawSubtitles;
   let incomplete = fromCache && globalSubtitleCache.isIncomplete(cacheKey);
+  let stoppedEarly = false;
+  const searchStart = Date.now();
 
   if (!rawSubtitles) {
     // The same search asked twice at once (a player and its retry, two devices opening the film) is made once:
@@ -159,6 +162,7 @@ export async function getAggregatedSubtitles(
       rawSubtitles = shared.items;
       providerReport.push(...shared.report);
       incomplete = shared.incomplete;
+      stoppedEarly = shared.stoppedEarly;
     } else {
       const search = (async () => {
         const report: ProviderReport[] = [];
@@ -183,7 +187,7 @@ export async function getAggregatedSubtitles(
         if (isIncomplete) {
           Logger.info(`[CACHE] kept ${SHORT_CACHE_MINUTES} min only: ${failedProviders.length ? failedProviders.map(r => r.name).join(', ') + ' failed or timed out' : 'the search stopped early (dynamic timeout)'}`);
         }
-        return { items, report, incomplete: isIncomplete };
+        return { items, report, incomplete: isIncomplete, stoppedEarly: outcome.stoppedEarly };
       })();
       inflightSearches.set(cacheKey, search);
       try {
@@ -191,6 +195,7 @@ export async function getAggregatedSubtitles(
         rawSubtitles = done.items;
         providerReport.push(...done.report);
         incomplete = done.incomplete;
+        stoppedEarly = done.stoppedEarly;
       } finally {
         inflightSearches.delete(cacheKey);
       }
@@ -198,6 +203,8 @@ export async function getAggregatedSubtitles(
   } else {
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);
   }
+
+  const searchMs = fromCache ? 0 : Date.now() - searchStart;
 
   Logger.info(`Request ${query.id}`, {
     filename: query.extra?.filename,
@@ -269,6 +276,8 @@ export async function getAggregatedSubtitles(
   const topLevel = new Set<RawSubtitleItem>();
 
   // Bazarr-style scoring: best match for the playing file goes first (players auto-pick position 1)
+  const scoringStart = Date.now();
+  let scoringMs = 0;
   try {
     const ranked = rankSubtitles(orderedItems, {
       filename: query.extra?.filename,
@@ -277,6 +286,7 @@ export async function getAggregatedSubtitles(
       providerBonus: { subsro: 8 },
       providerPriority: config.providerPriority
     });
+    scoringMs = Date.now() - scoringStart;
     Logger.info(
       `Scoring: ${orderedItems.length} -> ${ranked.items.length} subtitles (filename: ${ranked.usedFilename ? 'yes' : 'no'}${ranked.fallback ? ', fallback' : ''})`
     );
@@ -342,6 +352,9 @@ export async function getAggregatedSubtitles(
       usedFilename: debugUsedFilename,
       scoringFallback: debugFallback,
       subsync: { triggered: subsyncVerdict.needed, reason: subsyncVerdict.reason },
+      // where the time of this list went (ms): the whole request until the answer is built, the search of the sources,
+      // the ranking; `stoppedEarly` = the dynamic timeout did not wait for every source
+      timing: { totalMs: Date.now() - requestStart, searchMs, scoringMs, stoppedEarly },
       top: debugTop,
       // timings exist only for searches that really ran (a cached answer did not ask the providers again)
       ...(fromCache ? { cached: true } : { providers: providerReport })

@@ -380,6 +380,38 @@ function renderProviders(data) {
   }).join('');
 }
 
+/** 1234 -> "1.2 s", 87 -> "87 ms" */
+function fmtMsDebug(n) {
+  if (typeof n !== 'number' || isNaN(n)) return '-';
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)} s` : `${Math.round(n)} ms`;
+}
+
+/** Where the time of a list went: the whole request, the search, the ranking, and each source (slowest first) */
+function timingLines(d) {
+  const t = d.timing;
+  const providers = d.providers || [];
+  let html = '';
+  if (t) {
+    const parts = [
+      `<b>list ready in ${fmtMsDebug(t.totalMs)}</b>`,
+      d.cached ? 'from the saved list (no search)' : `search ${fmtMsDebug(t.searchMs)}`,
+      `ranking ${fmtMsDebug(t.scoringMs)}`
+    ];
+    if (t.stoppedEarly) parts.push('stopped early by the dynamic timeout');
+    html += `<div class="dbg-flow">Time: ${parts.join(' · ')}</div>`;
+  }
+  if (providers.length) {
+    const chips = providers.slice().sort((a, b) => b.ms - a.ms).map(p => {
+      const state = p.waived ? ' · not waited for' : (p.ok ? '' : ' · failed');
+      const cls = p.waived ? 'dbg-chip' : (p.ok ? 'dbg-chip' : 'dbg-chip dbg-bad');
+      const title = p.error ? ` title="${escapeHtmlDebug(p.error)}"` : '';
+      return `<span class="${cls}"${title}>${escapeHtmlDebug(p.name)} ${fmtMsDebug(p.ms)}${p.ok || p.waived ? ` · ${p.count}` : ''}${state}</span>`;
+    }).join('');
+    html += `<div class="dbg-flow dbg-muted">Sources (slowest first):</div><div class="dbg-sub-meta" style="margin:4px 0 8px">${chips}</div>`;
+  }
+  return html;
+}
+
 function renderRequest(e, tz) {
   const key = `${e.at}|${e.id}`;
   const when = new Date(e.at).toLocaleString('en-GB', { timeZone: tz, hour12: false });
@@ -387,7 +419,7 @@ function renderRequest(e, tz) {
   const title = e.filename
     ? escapeHtmlDebug(e.filename)
     : `<span class="dbg-muted">File name not sent</span>`;
-  const summary = d ? `${d.shown} of ${d.rawTotal} subtitles` : '';
+  const summary = d ? `${d.shown} of ${d.rawTotal} subtitles${d.timing ? ` · list ${fmtMsDebug(d.timing.totalMs)}` : ''}` : '';
   const isOpen = debugState.open.has(key);
 
   let body;
@@ -415,7 +447,7 @@ function renderRequest(e, tz) {
     const rejectedBlock = rejected.length
       ? `<details class="dbg-rejected"><summary>Rejected: ${rejected.length} (other title, year or episode)</summary><div class="dbg-subs">${rejected.map(rowOf).join('')}</div></details>`
       : '';
-    body = `<div class="dbg-flow">${flow}</div><div class="dbg-flow dbg-muted">${mode} ${sync}</div><div class="dbg-subs">${rows || '<div class="dbg-empty">Nothing to rank.</div>'}</div>`
+    body = `${timingLines(d)}<div class="dbg-flow">${flow}</div><div class="dbg-flow dbg-muted">${mode} ${sync}</div><div class="dbg-subs">${rows || '<div class="dbg-empty">Nothing to rank.</div>'}</div>`
       + (kept.length < d.afterScoring ? `<div class="dbg-flow dbg-muted">Only the top ${kept.length} of ${d.afterScoring} are listed.</div>` : '')
       + rejectedBlock;
   }
@@ -530,6 +562,13 @@ async function refreshSubsync() {
 }
 
 // The decisions are shown a page at a time (own page size, remembered in this browser)
+/** One line for where the time of a subtitle went (see AlignmentTiming) */
+function timingOfDecision(t) {
+  const asked = t.askedAfterMs > 100 ? `asked ${fmtMsDebug(t.askedAfterMs)} after the preparation began (prepared in advance)` : 'asked when the preparation began';
+  return `time: subtitle ${fmtMsDebug(t.subtitleMs)} · references ${fmtMsDebug(t.referencesMs)} (both from the start, in parallel) · computation ${fmtMsDebug(t.computeMs)}`
+    + ` → ready ${fmtMsDebug(t.readyAfterMs)} after the start · ${asked} · the player waited <b>${fmtMsDebug(t.waitedMs)}</b>`;
+}
+
 function renderSubsync() {
   const box = document.getElementById('dbg-subsync');
   const info = document.getElementById('dbg-subsync-page-info');
@@ -552,6 +591,7 @@ function renderSubsync() {
         + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(e.subtitle || '(subtitle)')}</div>`
         + `<div class="dbg-req-sub">for ${escapeHtmlDebug(e.filename)} · ${escapeHtmlDebug(e.reason)}</div>`
         + (e.replacedBy ? `<div class="dbg-req-sub">replaced by <b>${escapeHtmlDebug(e.replacedBy)}</b></div>` : '')
+        + (e.timing ? `<div class="dbg-req-sub">${timingOfDecision(e.timing)}</div>` : '')
         + `<div class="dbg-sub-meta" style="margin-top:6px">${refs}</div></div>`
         + `<div class="dbg-req-side"><span class="dbg-tag ${cls}">${escapeHtmlDebug(label)}</span><div class="dbg-muted">${new Date(e.at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Bucharest', hour12: false })} · ${e.ms} ms</div></div>`
         + `</div></div>`;
