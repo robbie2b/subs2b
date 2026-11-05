@@ -1,0 +1,5 @@
+# Caddy obtine singur certificatul HTTPS (Let's Encrypt) pentru domeniul din .env
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy subs2b:7000
+}

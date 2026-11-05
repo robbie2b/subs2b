@@ -1,0 +1,55 @@
+# subs2b pe un server propriu: aplicatia + Caddy (HTTPS automat). Pornit din folderul deploy/oracle cu:
+#   docker compose up -d --build
+# Valorile (DOMAIN, DATABASE_URL) vin din fisierul .env de langa acest fisier (vezi env.example).
+services:
+  subs2b:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: subs2b
+    restart: unless-stopped
+    # nu se deschide spre exterior: doar Caddy il vede
+    expose:
+      - "7000"
+    environment:
+      - PORT=7000
+      - HOST=0.0.0.0
+      - BASE_URL=https://${DOMAIN}
+      - DATABASE_URL=${DATABASE_URL}
+      - RATE_LIMIT_MAX=150
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:7000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    restart: unless-stopped
+    depends_on:
+      - subs2b
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:

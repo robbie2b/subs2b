@@ -56,6 +56,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **Mutare pe Oracle Cloud Always Free (în curs, 2026-11-05; decizia utilizatorului):** fișiere pregătite în `deploy/oracle/`
+  (`docker-compose.yml` cu aplicația + Caddy pentru HTTPS automat, `setup.sh`, `update.sh`, `env.example`, `INSTRUCTIUNI.md`
+  în română, pas cu pas). Serverul: Ubuntu 24.04 ARM, VM.Standard.A1.Flex 2 OCPU / 12 GB, adresă gratuită DuckDNS. Se clonează
+  ramura `work/subsync-engine` (repo public). Deploy-ul pe Oracle e DOAR manual (`update.sh`), ca și regula pentru Render.
+  Render rămâne pornit în timpul probei; baza rămâne Supabase (același UUID). Netestat: build-ul imaginii pe ARM (fără Docker
+  în cloud). Riscuri: „Out of capacity" la crearea A1, Oracle poate opri instanțele aproape nefolosite, unele site-uri pot
+  refuza IP-ul Oracle. Alte variante respinse: Hugging Face (Docker plătit), Northflank (incident de securitate, variabile
+  de mediu decriptate), IBM Code Engine (scalează la zero), Koyeb/Fly/Railway (fără plan gratuit potrivit).
 - **v1.5.10 (deploy 2026-11-04; eficiență):** analiză cap-coadă a căii unei căutări, cu benchmark local
   (`scratchpad/perf`, nu în repo). Cel mai scump: deduplicarea (tokeniza de două ori fiecare pereche, O(n²)): 300 de
   release-uri diferite = 119 ms → 13 ms; scoring (medoid pe perechi) 45 → 21 ms; `parseRelease` și `tokenize` ținute
