@@ -1,6 +1,7 @@
 import { configStorage } from './configStore';
 import { ensureTableSafely } from './dbTools';
 import { Logger } from '../utils/logger';
+import { keepAlive } from '../utils/background';
 import { attachDownloadFailureStore, restoreDownloadFailures, DownloadFailure } from '../utils/downloadJournal';
 
 /**
@@ -39,10 +40,10 @@ export async function startDownloadFailureStore(): Promise<void> {
     })));
     Logger.info(`[DOWNLOAD] ${res.rows.length} saved download failure(s) read`);
     attachDownloadFailureStore(f => {
-      void pool.query(
+      keepAlive(pool.query(
         `INSERT INTO download_failures (at, host, place, reason, recovered, release) VALUES ($1, $2, $3, $4, $5, $6)`,
         [f.at, f.host, f.place, f.reason, f.recovered, f.release || null]
-      ).catch(err => Logger.error('Could not save a download failure', err));
+      ).catch(err => Logger.error('Could not save a download failure', err)));
     });
   } catch (err) {
     Logger.error('Could not read the download failures', err);

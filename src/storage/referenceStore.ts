@@ -2,6 +2,7 @@ import zlib from 'zlib';
 import { configStorage } from './configStore';
 import { ensureTableSafely } from './dbTools';
 import { Logger } from '../utils/logger';
+import { keepAlive } from '../utils/background';
 import type { Reference } from '../core/alignDecision';
 
 /**
@@ -87,7 +88,7 @@ export async function loadStoredReferences(key: string): Promise<Reference[] | n
 /** Keeps the references (only a non-empty set). Never throws and never blocks the response. */
 export function storeReferences(key: string, refs: Reference[]): void {
   if (refs.length === 0) return;
-  void (async () => {
+  keepAlive((async () => {
     try {
       if (!(await ensureTable())) return;
       const pool = await configStorage.getPool();
@@ -102,5 +103,5 @@ export function storeReferences(key: string, refs: Reference[]): void {
     } catch (err) {
       Logger.error('Could not store Subsync references', err);
     }
-  })();
+  })());
 }

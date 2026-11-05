@@ -1,6 +1,7 @@
 import { configStorage } from './configStore';
 import { ensureTableSafely } from './dbTools';
 import { Logger } from '../utils/logger';
+import { keepAlive } from '../utils/background';
 import { attachRefusalStore, restoreRefusals } from '../utils/sourceHealth';
 
 /**
@@ -47,11 +48,11 @@ export async function startSourceBlockStore(): Promise<void> {
     Logger.info(`[SOURCES] saved source blocks read in ${Date.now() - started} ms: ${res.rows.length} still running`, { sources: res.rows.map((r: any) => r.source) });
     attachRefusalStore({
       save(source, until, reason) {
-        void pool!.query(
+        keepAlive(pool!.query(
           `INSERT INTO source_blocks (source, until, reason) VALUES ($1, $2, $3)
            ON CONFLICT (source) DO UPDATE SET until = EXCLUDED.until, reason = EXCLUDED.reason`,
           [source, new Date(until).toISOString(), reason.slice(0, 300)]
-        ).catch(err => Logger.error('Could not save a source block', err));
+        ).catch(err => Logger.error('Could not save a source block', err)));
       }
     });
   } catch (err) {

@@ -2,6 +2,7 @@ import { configStorage } from './configStore';
 import { enableRlsSql } from './dbTools';
 import { ownerOf } from './usageStore';
 import { Logger } from '../utils/logger';
+import { keepAlive } from '../utils/background';
 
 /**
  * What the automatic re-timing (Subsync) decided, kept for the Debug page.
@@ -79,7 +80,8 @@ export function recordAlignment(configKey: string, entry: AlignmentLogEntry): vo
   if (list.length > MAX_MEMORY) list.length = MAX_MEMORY;
   memory.set(owner, list);
 
-  void (async () => {
+  // (kept alive on Vercel: the instance may be frozen as soon as the answer is out, in the middle of the write)
+  keepAlive((async () => {
     try {
       if (!(await ensureTable())) return;
       const pool = await configStorage.getPool();
@@ -98,7 +100,7 @@ export function recordAlignment(configKey: string, entry: AlignmentLogEntry): vo
     } catch (err) {
       Logger.error('Could not record a Subsync decision', err);
     }
-  })();
+  })());
 }
 
 /** The latest decisions, newest first */
