@@ -6,6 +6,7 @@ import { normalizeLanguageCode } from '../utils/languages';
 import { titleInfoOf, titleTokens, jaccard } from '../utils/titleInfo';
 import { htmlText, BROWSER_UA } from '../utils/html';
 import { Logger } from '../utils/logger';
+import { keepAlive } from '../utils/background';
 
 /**
  * Addic7ed: TV series subtitles made for exact releases ("Version FoV", "BluRay.x264-TRiPS"), mostly English, some
@@ -115,6 +116,8 @@ function showsFor(query: SubtitleQuery, title: string, year: number | null): Pro
       return shows;
     });
     showCache.set(key, pending);
+    // (on Vercel the search goes on after the answer was sent only if the platform is told to keep the instance alive)
+    keepAlive(pending.catch(() => undefined));
     // a failure is not remembered for a week: tried again in 10 minutes
     pending.catch(() => { showCache.set(key, Promise.resolve([]), { ttl: 10 * 60 * 1000 }); });
   }

@@ -218,11 +218,17 @@ function absoluteUrl(item: RawSubtitleItem, ctx: ReferenceContext): string {
   return item.url;
 }
 
+/** How long the sources get when the references are searched (ms) */
+const REFERENCE_SEARCH_LIMIT_MS = 3000;
+
 async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
   const started = Date.now();
   // Only the built-in services take part (they can search in every language); addons and RegieLive are Romanian-only or fixed
+  // The references are searched with a shorter time limit than the list: they are kept in the database, and a source that
+  // is slow (Addic7ed's first search of a show takes ~7 s) must not hold the subtitle back for the full 6 s
   const referenceConfig: UserConfig = {
     ...ctx.config,
+    providerTimeoutMs: Math.min(ctx.config.providerTimeoutMs || REFERENCE_SEARCH_LIMIT_MS, REFERENCE_SEARCH_LIMIT_MS),
     customAddons: [],
     providers: { ...ctx.config.providers, regielive: { enabled: false, apiKey: '' } }
   };
