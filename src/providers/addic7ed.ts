@@ -130,6 +130,9 @@ export class Addic7edProvider extends BaseSubtitleProvider {
   readonly description = 'TV series subtitles made for exact releases, from Addic7ed (no key needed).';
   readonly requiresApiKey = false;
   readonly defaultEnabled = false;
+  // Its first search of a show takes ~7 s and it rarely gives the first subtitle (6 of 715 listed subtitles in the saved
+  // history): it gets 2.5 s. The search itself goes on in the background and is remembered, so a later request is fast.
+  readonly maxTimeoutMs = 2500;
 
   protected async executeSearch(query: SubtitleQuery, _context: ProviderContext, signal: AbortSignal): Promise<RawSubtitleItem[]> {
     if (query.season == null || query.episode == null) return [];
