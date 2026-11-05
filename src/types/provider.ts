@@ -64,8 +64,6 @@ export interface SubtitleProvider {
   readonly description: string;
   readonly requiresApiKey: boolean;
   readonly defaultEnabled: boolean;
-  /** a time limit of its own, never longer than the Connector timeout (a source that is slow and adds little must not hold the list) */
-  readonly maxTimeoutMs?: number;
   search(query: SubtitleQuery, context: ProviderContext): Promise<RawSubtitleItem[]>;
   searchWithStatus?(query: SubtitleQuery, context: ProviderContext): Promise<SearchOutcome>;
 }

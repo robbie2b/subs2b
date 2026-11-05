@@ -86,7 +86,7 @@ export async function executeParallelSearch(
     // One limit for everything, the Connector timeout (Filters → Results): the native services and the imported addons
     // alike. An imported addon used to keep its own timeout (20 s when imported), so one slow addon (opensubtitles PRO)
     // held the whole list for up to 20 s, which is also where Nuvio gives up on an addon.
-    const timeoutMs = Math.min(config.providerTimeoutMs, provider.maxTimeoutMs ?? Infinity);
+    const timeoutMs = config.providerTimeoutMs;
 
     const context: ProviderContext = {
       config,

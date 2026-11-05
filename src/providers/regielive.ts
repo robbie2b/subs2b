@@ -167,9 +167,6 @@ export class RegieLiveProvider extends BaseSubtitleProvider {
   readonly description = 'Romanian subtitles from RegieLive (the API Bazarr uses). Works without a key; a personal key is optional.';
   readonly requiresApiKey = false;
   readonly defaultEnabled = false;
-  // Answers in ~1 s when it works; when it does not (it hangs for the whole limit from some addresses, as it does from Vercel)
-  // it must not hold the list for 6 s: it gets 3 s.
-  readonly maxTimeoutMs = 3000;
 
   protected async executeSearch(
     query: SubtitleQuery,
