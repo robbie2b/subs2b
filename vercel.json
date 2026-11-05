@@ -10,5 +10,13 @@
       "includeFiles": "{dist/web/public/**,node_modules/node-unrar-js/dist/**}"
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
+  "regions": [
+    "fra1"
+  ]
 }

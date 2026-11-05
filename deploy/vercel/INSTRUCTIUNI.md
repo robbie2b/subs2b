@@ -33,6 +33,8 @@ Firul de calcul separat e oprit acolo (calculul Subsync ruleaza in cerere), iar 
 - Consumul: **Settings → Usage** → *Active CPU* (limita Hobby: 4 ore pe luna, dupa ea functia se opreste pana in luna urmatoare).
 - Nu ai nevoie de cron-job: functia porneste la cerere.
 
+- Regiunea functiei: `vercel.json` cere `fra1` (Frankfurt), ca sa fie aproape de Supabase si de site-urile de subtitrari; implicit ar fi Washington. Daca Vercel refuza regiunea pe Hobby, scoate linia `regions`.
+
 ## Necunoscute (nu le-am putut testa de aici)
 - Durata maxima a unei cereri pe Hobby (60 s sau 300 s, sursele se contrazic): `vercel.json` cere 60 s, iar asteptarea Subsync se opreste la 45 s.
 - Cat dureaza pornirea la rece a functiei si ce se pierde din memorie intre instante.
