@@ -26,7 +26,9 @@ function failAll(err: Error): void {
 }
 
 function getWorker(): Worker | null {
-  if (process.env.SUBSYNC_WORKER === '0' || workerBroken) return null;
+  // (on Vercel the worker file is not shipped as a separate file: the computation runs in the request's own process,
+  // unless SUBSYNC_WORKER=1 says otherwise)
+  if (process.env.SUBSYNC_WORKER === '0' || (process.env.VERCEL && process.env.SUBSYNC_WORKER !== '1') || workerBroken) return null;
   if (worker) return worker;
   try {
     // the same extension as this file: .js once built, .ts when run from source (tests, through tsx)

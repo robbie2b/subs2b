@@ -56,6 +56,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **Proba pe Vercel Hobby (ramura `vercel`, nedeployată pe Render, 2026-11-05):** `api/index.js` (aplicația Express ca funcție),
+  `vercel.json` (build `npm run build`, static din `dist/web/public`, rewrite spre `/api`, `maxDuration` 60),
+  `src/utils/background.ts` (`keepAlive` = `waitUntil` doar pe Vercel; pregătirea Subsync și `recordUsage`), firul de calcul oprit
+  pe Vercel (`SUBSYNC_WORKER=1` îl pornește), asteptarea Subsync 45 s pe Vercel. Verificat local cu `VERCEL=1`; netestat pe Vercel.
+  Instrucțiuni în `deploy/vercel/INSTRUCTIUNI.md`. Plan Hobby (din căutare): 4 h procesor activ/lună, 1 vCPU / 2 GB, oprire la depășire.
 - **Mutare pe Oracle Cloud Always Free (în curs, 2026-11-05; decizia utilizatorului):** fișiere pregătite în `deploy/oracle/`
   (`docker-compose.yml` cu aplicația + Caddy pentru HTTPS automat, `setup.sh`, `update.sh`, `env.example`, `INSTRUCTIUNI.md`
   în română, pas cu pas). Serverul: Ubuntu 24.04 ARM, VM.Standard.A1.Flex 2 OCPU / 12 GB, adresă gratuită DuckDNS. Se clonează

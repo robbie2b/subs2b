@@ -12,7 +12,8 @@ import { addonHostsOf, isAllowedDownloadUrl, sendSubtitleResponse } from './subt
  * How long the player is kept waiting for the alignment. The aligned subtitle is wanted from the first try, even
  * when it takes several seconds; only past this safety limit (something is stuck) the subtitle goes out unchanged.
  */
-const maxWaitMs = (): number => parseInt(process.env.SUBSYNC_MAX_WAIT_MS || '', 10) || 60000;
+// (on Vercel the function is cut at 60 s: the wait ends before that, so the player still gets the original subtitle)
+const maxWaitMs = (): number => parseInt(process.env.SUBSYNC_MAX_WAIT_MS || '', 10) || (process.env.VERCEL ? 45000 : 60000);
 
 const sleep = (ms: number) => new Promise<void>(resolve => { const t = setTimeout(resolve, ms); t.unref?.(); });
 

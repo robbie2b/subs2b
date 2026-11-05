@@ -14,6 +14,7 @@ import { recordUsage } from '../storage/usageStore';
 import { needsReference, fromFileGroup, archivePickParams as buildArchivePickParams } from './alignment';
 import { encodeAlignedToken, encodeFallbackToken, AlignedToken, MAX_ALTERNATIVES, MAX_BACKUPS } from './alignedToken';
 import { prepareAligned } from './alignedPrepare';
+import { keepAlive } from '../utils/background';
 import { formatTestUntil, formatTestEntries } from '../proxy/formatTest';
 import { isAllowedDownloadUrl, addonHostsOf, serverCanDownload } from '../proxy/subtitleProxy';
 
@@ -299,7 +300,7 @@ export async function getAggregatedSubtitles(
       ...record
     });
     // The same summary is stored with the usage timeline, so the Debug page can show it for older requests too
-    void recordUsage(configId, { id: query.id, type: query.type, filename: query.extra?.filename, details: record });
+    keepAlive(recordUsage(configId, { id: query.id, type: query.type, filename: query.extra?.filename, details: record }));
   }
 
   const addonHosts = addonHostsOf(config);
@@ -390,7 +391,7 @@ export async function getAggregatedSubtitles(
     // still opening (several seconds), so the subtitle is ready, or nearly, when the player asks for it
     const prepQuery = parseSubtitleQuery(query.type, query.id, { filename });
     for (const token of [...firstOfLanguage.values()].slice(0, MAX_PREPARED_LANGUAGES)) {
-      prepareAligned(token, prepQuery, config, baseUrl);
+      keepAlive(prepareAligned(token, prepQuery, config, baseUrl).served);
     }
   }
 
