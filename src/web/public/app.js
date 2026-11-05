@@ -81,6 +81,8 @@ const DEFAULT_CONFIG = {
     'pt-pt': 'pob'
   },
   providerTimeoutMs: 6000,
+  dynamicTimeout: false,
+  dynamicTimeoutScore: 40,
   deduplication: true,
   deduplicationStrategy: 'both',
   maxSubtitles: 0,
@@ -494,6 +496,13 @@ function applyConfigWithMigration(parsed) {
 
   if (typeof parsed.providerTimeoutMs === 'number') {
     merged.providerTimeoutMs = parsed.providerTimeoutMs;
+  }
+
+  if (typeof parsed.dynamicTimeout === 'boolean') {
+    merged.dynamicTimeout = parsed.dynamicTimeout;
+  }
+  if (typeof parsed.dynamicTimeoutScore === 'number') {
+    merged.dynamicTimeoutScore = parsed.dynamicTimeoutScore;
   }
 
   if (typeof parsed.deduplication === 'boolean') {
@@ -1460,6 +1469,7 @@ function setupFiltersActions() {
 
   setupMaxSubtitlesUI();
   setupConvertVttUI();
+  setupDynamicTimeoutUI();
   setupSubsyncUI();
 }
 
@@ -1476,6 +1486,37 @@ function setupSubsyncUI() {
     state.config.subsync = toggle.checked;
     notifyConfigChanged();
   });
+}
+
+function renderDynamicTimeout() {
+  const toggle = document.getElementById('toggle-dynamic-timeout');
+  if (toggle) toggle.checked = state.config.dynamicTimeout === true;
+  const score = document.getElementById('dynamic-timeout-score');
+  if (score) {
+    score.value = state.config.dynamicTimeoutScore || 40;
+    score.disabled = state.config.dynamicTimeout !== true;
+  }
+}
+
+function setupDynamicTimeoutUI() {
+  const toggle = document.getElementById('toggle-dynamic-timeout');
+  const score = document.getElementById('dynamic-timeout-score');
+  if (!toggle || !score) return;
+  renderDynamicTimeout();
+  toggle.addEventListener('change', () => {
+    state.config.dynamicTimeout = toggle.checked;
+    score.disabled = !toggle.checked;
+    notifyConfigChanged();
+  });
+  const saveScore = () => {
+    let val = parseInt(score.value, 10);
+    if (isNaN(val)) val = 40;
+    val = Math.max(5, Math.min(200, val));
+    state.config.dynamicTimeoutScore = val;
+    notifyConfigChanged();
+  };
+  score.addEventListener('change', () => { saveScore(); score.value = state.config.dynamicTimeoutScore; });
+  score.addEventListener('input', saveScore);
 }
 
 function renderConvertVtt() {
@@ -3032,6 +3073,7 @@ function renderAll() {
   renderInstallPageDetails();
   renderMaxSubtitles();
   renderConvertVtt();
+  renderDynamicTimeout();
   renderSubsync();
   updateStats();
 }

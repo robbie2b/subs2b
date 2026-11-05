@@ -32,6 +32,14 @@ export interface UserConfig {
   languageRemap: Record<string, string>;
   language_remapping?: Record<string, string>;
   providerTimeoutMs: number;
+  /**
+   * Dynamic timeout: the search does not wait for the whole Connector timeout when something good has already arrived
+   * (a hash match, an exact name match, or a score above `dynamicTimeoutScore`, with the sources the user ranks higher
+   * already answered). The sources still running finish in the background and complete the saved list.
+   */
+  dynamicTimeout?: boolean;
+  /** the score that counts as good enough for the dynamic timeout */
+  dynamicTimeoutScore?: number;
   deduplication: boolean;
   deduplicationStrategy?: 'both' | 'hash' | 'fuzzy';
 

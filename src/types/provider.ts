@@ -49,6 +49,8 @@ export interface ProviderReport {
   ok: boolean;
   count: number;
   error?: string;
+  /** not waited for: the dynamic timeout found something good before this source answered (its real answer replaces this entry when it comes) */
+  waived?: boolean;
 }
 
 export interface SearchOutcome {

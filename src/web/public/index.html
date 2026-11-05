@@ -1036,6 +1036,30 @@
                       </div>
                     </div>
                 </div>
+
+                <div class="card card-filter-pane" style="margin-top: 14px;">
+                  <div class="filter-section-header">
+                    <div>
+                      <h3>Dynamic timeout</h3>
+                      <p class="panel-subtitle">With this on, the list does not wait for the whole Connector timeout when something good has already arrived: an exact match for the playing file, or a subtitle with at least the score below, once the sources you rank higher in Priority have answered. The slower sources keep working in the background and complete the saved list for the next time.</p>
+                    </div>
+                    <div class="header-toggle">
+                      <label class="compact-switch" title="Dynamic timeout">
+                        <input type="checkbox" id="toggle-dynamic-timeout">
+                        <span class="compact-slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="card card-timeout-box">
+                    <div class="timeout-field-group">
+                      <label for="dynamic-timeout-score" class="timeout-field-label">Good enough from (score)</label>
+                      <div class="timeout-input-wrap">
+                        <input type="number" id="dynamic-timeout-score" class="form-input form-input-number" min="5" max="200" step="5" value="40">
+                      </div>
+                      <span class="timeout-field-desc">Exact matches always count. Typical scores: about 45 for a subtitle made for the same source and resolution, 90 or more for the exact release.</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
             </div>

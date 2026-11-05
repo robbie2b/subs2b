@@ -11,6 +11,7 @@ import { Addic7edProvider } from './addic7ed';
 import { WyzieProvider } from './wyzie';
 import { GenericStremioAddonProvider } from './genericStremioAddon';
 import { Logger } from '../utils/logger';
+import { keepAlive } from '../utils/background';
 import { ENV } from '../config/env';
 
 const BUILTIN_PROVIDERS: SubtitleProvider[] = [
@@ -33,10 +34,27 @@ export function getAllProviders(): SubtitleProvider[] {
   return [...BUILTIN_PROVIDERS];
 }
 
+/** The dynamic timeout: when is what has arrived enough, so the sources still running need not be waited for */
+export interface EarlyStop {
+  /** `pending` = the ids of the sources that have not answered yet */
+  isEnough(items: RawSubtitleItem[], pending: string[]): boolean;
+  /** how long to go on after "enough", for sources about to answer */
+  graceMs: number;
+}
+
+export interface SearchOptions {
+  earlyStop?: EarlyStop;
+  /** called with the complete list when the sources left running have finished, if the search stopped early */
+  onFullResult?: (items: RawSubtitleItem[]) => void;
+  /** tells the caller whether the search stopped early (the list is then not complete) */
+  outcome?: { stoppedEarly: boolean };
+}
+
 export async function executeParallelSearch(
   query: SubtitleQuery,
   config: UserConfig,
-  report?: ProviderReport[]
+  report?: ProviderReport[],
+  options: SearchOptions = {}
 ): Promise<RawSubtitleItem[]> {
   const activeProviders: SubtitleProvider[] = BUILTIN_PROVIDERS.filter(provider => {
     const provConfig = config.providers[provider.id];
@@ -99,12 +117,19 @@ export async function executeParallelSearch(
     return provider.search(query, context).then(items => ({ items, failed: false }));
   };
 
-  // Same as runProvider, but also notes how long the provider took and whether it worked
+  // Same as runProvider, but also notes how long the provider took and whether it worked. A provider that was not
+  // waited for (dynamic timeout) has a placeholder entry in the report: its real answer replaces it when it comes.
+  const waivedEntries = new Map<string, ProviderReport>();
+  const note = (provider: SubtitleProvider, entry: ProviderReport): void => {
+    const waived = waivedEntries.get(provider.id);
+    if (waived) Object.assign(waived, entry, { waived: undefined });
+    else report?.push(entry);
+  };
   const runTimed = async (provider: SubtitleProvider): Promise<SearchOutcome> => {
     const started = Date.now();
     try {
       const outcome = await runProvider(provider);
-      report?.push({
+      note(provider, {
         id: provider.id,
         name: provider.name,
         ms: Date.now() - started,
@@ -114,7 +139,7 @@ export async function executeParallelSearch(
       });
       return outcome;
     } catch (err) {
-      report?.push({
+      note(provider, {
         id: provider.id,
         name: provider.name,
         ms: Date.now() - started,
@@ -126,24 +151,68 @@ export async function executeParallelSearch(
     }
   };
 
-  const settledResults = await Promise.allSettled(activeProviders.map(runTimed));
-  const aggregatedSubtitles: RawSubtitleItem[] = [];
+  const searchStarted = Date.now();
+  const itemsOf = new Map<number, RawSubtitleItem[]>();
+  const pending = new Set<number>(activeProviders.map((_, i) => i));
   let directFailed = false;
+  // what has arrived so far, in the order of the providers
+  const gather = (): RawSubtitleItem[] => [...itemsOf.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, items]) => items);
 
-  settledResults.forEach((result, idx) => {
-    const provider = activeProviders[idx];
-    if (result.status === 'fulfilled') {
-      aggregatedSubtitles.push(...result.value.items);
-      if (provider.id === 'opensubtitles' && result.value.failed) {
-        directFailed = true;
-      }
-    } else {
-      Logger.error(`Provider [${provider.id}] search promise rejected`, result.reason);
-      if (provider.id === 'opensubtitles') {
-        directFailed = true;
-      }
+  // (the fallback mode of OpenSubtitles needs every answer: no early stop then)
+  const early = options.earlyStop && fallbackProviders.length === 0 && activeProviders.length > 1 ? options.earlyStop : null;
+  let graceTimer: ReturnType<typeof setTimeout> | undefined;
+  let stopEarly: () => void = () => undefined;
+  const earlyPromise = new Promise<'early'>(resolve => { stopEarly = () => resolve('early'); });
+
+  const check = (): void => {
+    if (!early || graceTimer || pending.size === 0) return;
+    let enough = false;
+    try {
+      enough = early.isEnough(gather(), [...pending].map(i => activeProviders[i].id));
+    } catch (err) {
+      Logger.error('Dynamic timeout check failed', err);
     }
-  });
+    if (enough) graceTimer = setTimeout(() => stopEarly(), early.graceMs);
+  };
+
+  const all = Promise.allSettled(activeProviders.map((provider, idx) =>
+    runTimed(provider).then(
+      outcome => {
+        itemsOf.set(idx, outcome.items);
+        if (provider.id === 'opensubtitles' && outcome.failed) directFailed = true;
+      },
+      err => {
+        Logger.error(`Provider [${provider.id}] search promise rejected`, err);
+        if (provider.id === 'opensubtitles') directFailed = true;
+      }
+    ).finally(() => {
+      pending.delete(idx);
+      check();
+    })
+  ));
+
+  const winner = early ? await Promise.race([all.then(() => 'all' as const), earlyPromise]) : (await all, 'all' as const);
+  if (graceTimer) clearTimeout(graceTimer);
+
+  if (winner === 'early') {
+    const waived = [...pending].map(i => activeProviders[i]);
+    for (const provider of waived) {
+      const entry: ProviderReport = {
+        id: provider.id, name: provider.name, ms: Date.now() - searchStarted, ok: true, count: 0,
+        error: 'not waited for: something good had already arrived', waived: true
+      };
+      waivedEntries.set(provider.id, entry);
+      report?.push(entry);
+    }
+    if (options.outcome) options.outcome.stoppedEarly = true;
+    Logger.info(`[DYNAMIC] stopped waiting after ${Date.now() - searchStarted} ms; still running in the background: ${waived.map(p => p.name).join(', ')}`);
+    const items = gather();
+    // the sources left running finish in the background (kept alive on Vercel) and complete the saved list
+    keepAlive(all.then(() => options.onFullResult?.(gather())));
+    return items;
+  }
+
+  const aggregatedSubtitles: RawSubtitleItem[] = gather();
 
   if (fallbackProviders.length > 0) {
     if (directFailed) {

@@ -74,6 +74,48 @@ export function parseSubtitleQuery(
   return { type, id, imdbId, season, episode, kitsuId, extra };
 }
 
+/** How long the search goes on after something good has arrived (ms), for sources about to answer */
+const DYNAMIC_GRACE_MS = 300;
+
+/**
+ * Dynamic timeout: is what has arrived so far enough? The subtitles are filtered by language and ranked as the final list
+ * will be. Enough means: the first one is on the top level (a hash match, or the exact release of the playing file) or
+ * scores at least `dynamicTimeoutScore`, AND every source the user ranks higher than the one that gave it has already
+ * answered (such a source could still bring a subtitle that goes before it).
+ */
+function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: SubtitleQuery, config: UserConfig): boolean {
+  const whitelist = config.languages && config.languages.length > 0 ? config.languages : DEFAULT_USER_CONFIG.languages;
+  const remap = config.language_remapping || config.languageRemap;
+  const wanted: RawSubtitleItem[] = [];
+  for (const sub of items) {
+    const v = validateAndNormalizeLanguage(sub.lang, config.allowUnknownLanguages, remap);
+    if (!v.valid || !v.normalizedLang || !isLanguageWhitelisted(v.normalizedLang, whitelist)) continue;
+    wanted.push({ ...sub, lang: v.normalizedLang });
+  }
+  if (wanted.length === 0) return false;
+  const ranked = rankSubtitles(wanted, {
+    filename: query.extra?.filename,
+    season: query.season,
+    episode: query.episode,
+    providerBonus: { subsro: 8 },
+    providerPriority: config.providerPriority
+  });
+  if (ranked.fallback || ranked.items.length === 0) return false;
+  const best = ranked.items[0];
+  const detail = ranked.details[0];
+  const topLevel = best.hashMatch === true || detail.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r));
+  const minScore = typeof config.dynamicTimeoutScore === 'number' ? config.dynamicTimeoutScore : 40;
+  if (!topLevel && detail.score < minScore) return false;
+  const priority = (id: string): number => {
+    const i = (config.providerPriority || []).findIndex(x => x.toLowerCase() === id.toLowerCase());
+    return i < 0 ? 999 : i;
+  };
+  const bestRank = priority(best.provider);
+  if (pendingIds.some(id => priority(id) < bestRank)) return false;
+  Logger.info(`[DYNAMIC] good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider}, score ${detail.score}${topLevel ? ' (top level)' : ''}; waiting for: ${pendingIds.join(', ') || 'nobody'}`);
+  return true;
+}
+
 /**
  * The key a search is kept under. The file hash changes which OpenSubtitles results are flagged as exact matches, so
  * it is part of it; so are the imported addons (two configurations with the same services but other addons must not
@@ -120,14 +162,26 @@ export async function getAggregatedSubtitles(
     } else {
       const search = (async () => {
         const report: ProviderReport[] = [];
-        const items = await executeParallelSearch(query, config, report);
-        // a search where a provider failed or timed out is kept only briefly: asked again soon, that provider may
-        // answer (an empty answer is not a failure)
+        const outcome = { stoppedEarly: false };
+        // Dynamic timeout: it needs the playing file's name to tell what is good (a hash match always counts)
+        const dynamic = config.dynamicTimeout === true && Boolean(query.extra?.filename || query.extra?.videoHash);
+        const items = await executeParallelSearch(query, config, report, {
+          ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config) } } : {}),
+          outcome,
+          // the sources that were not waited for have answered: the saved list is now the whole one
+          onFullResult: full => {
+            const failed = report.filter(r => !r.ok);
+            globalSubtitleCache.set(cacheKey, full, failed.length ? SHORT_CACHE_MINUTES : config.cacheTtlMinutes, failed.length > 0);
+            Logger.info(`[DYNAMIC] the sources left running have answered: ${full.length} subtitles saved for ${query.id}`);
+          }
+        });
+        // a search where a provider failed or timed out, or that stopped early, is kept only briefly: asked again soon,
+        // the answer may be better (an empty answer is not a failure)
         const failedProviders = report.filter(r => !r.ok);
-        const isIncomplete = failedProviders.length > 0;
+        const isIncomplete = failedProviders.length > 0 || outcome.stoppedEarly;
         globalSubtitleCache.set(cacheKey, items, isIncomplete ? SHORT_CACHE_MINUTES : config.cacheTtlMinutes, isIncomplete);
         if (isIncomplete) {
-          Logger.info(`[CACHE] kept ${SHORT_CACHE_MINUTES} min only: ${failedProviders.map(r => r.name).join(', ')} failed or timed out`);
+          Logger.info(`[CACHE] kept ${SHORT_CACHE_MINUTES} min only: ${failedProviders.length ? failedProviders.map(r => r.name).join(', ') + ' failed or timed out' : 'the search stopped early (dynamic timeout)'}`);
         }
         return { items, report, incomplete: isIncomplete };
       })();

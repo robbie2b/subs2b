@@ -56,6 +56,13 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **Dynamic timeout (ramura `vercel`, 2026-11-05; cerut de utilizator, înainte refuzat):** setare nouă în Filters → Results
+  (`dynamicTimeout`, `dynamicTimeoutScore`, implicit oprit / 40). Lista nu mai așteaptă tot Connector timeout (6 s) când a
+  sosit ceva „bun": primul din clasament e la nivelul de sus (hash match sau nume exact) sau are scor ≥ prag, ȘI sursele pe care
+  utilizatorul le pune mai sus în Priority au răspuns deja. Încă 300 ms de grație. Sursele rămase termină în fundal (`keepAlive`
+  pe Vercel) și completează lista din cache (lista timpurie e ținută 2 min). Cod: `executeParallelSearch(..., { earlyStop })`
+  în `providers/index.ts`, `goodEnough` în `aggregator.ts`; Debug arată sursele neașteptate ca „waived". Test: `test/dynamicTimeout.test.ts`.
+  Limite per sursă (Addic7ed 2,5 s, RegieLive 3 s) încercate și scoase la cererea utilizatorului: o singură limită globală.
 - **Proba pe Vercel Hobby (ramura `vercel`, nedeployată pe Render, 2026-11-05):** `api/index.js` (aplicația Express ca funcție),
   `vercel.json` (build `npm run build`, static din `dist/web/public`, rewrite spre `/api`, `maxDuration` 60),
   `src/utils/background.ts` (`keepAlive` = `waitUntil` doar pe Vercel; pregătirea Subsync și `recordUsage`), firul de calcul oprit

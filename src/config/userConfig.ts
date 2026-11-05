@@ -46,6 +46,8 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'pt-pt': 'pob'
   },
   providerTimeoutMs: 6000,
+  dynamicTimeout: false,
+  dynamicTimeoutScore: 40,
   deduplication: true,
   deduplicationStrategy: 'both',
   maxSubtitles: 0,
@@ -211,6 +213,10 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
     providerTimeoutMs: typeof partial.providerTimeoutMs === 'number'
       ? Math.max(2000, Math.min(15000, partial.providerTimeoutMs))
       : DEFAULT_USER_CONFIG.providerTimeoutMs,
+    dynamicTimeout: typeof partial.dynamicTimeout === 'boolean' ? partial.dynamicTimeout : DEFAULT_USER_CONFIG.dynamicTimeout,
+    dynamicTimeoutScore: typeof partial.dynamicTimeoutScore === 'number' && isFinite(partial.dynamicTimeoutScore)
+      ? Math.max(5, Math.min(200, Math.round(partial.dynamicTimeoutScore)))
+      : DEFAULT_USER_CONFIG.dynamicTimeoutScore,
     deduplication: typeof partial.deduplication === 'boolean'
       ? partial.deduplication
       : DEFAULT_USER_CONFIG.deduplication,
