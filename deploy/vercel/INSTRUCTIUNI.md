@@ -35,6 +35,12 @@ Firul de calcul separat e oprit acolo (calculul Subsync ruleaza in cerere), iar 
 
 - Regiunea functiei: `vercel.json` cere `fra1` (Frankfurt), ca sa fie aproape de Supabase si de site-urile de subtitrari; implicit ar fi Washington. Daca Vercel refuza regiunea pe Hobby, scoate linia `regions`.
 
+## Baza de date (important pe Vercel)
+- Pe Vercel o instanta care nu se poate conecta la baza de date NU mai trece pe fisierul local (ar servi configuratia implicita, nu a ta):
+  cererea esueaza, iar urmatoarea incearca din nou (dupa 3 secunde). Numarul de conexiuni per instanta e 3 (`PG_POOL_MAX` il schimba).
+- Daca in log apare des „Connection terminated due to connection timeout": pune in Vercel (nu pe Render) adresa **Transaction pooler** din
+  Supabase (Connect → Transaction pooler, portul 6543) ca `DATABASE_URL`. Render si Vercel impreuna pot depasi limita de conexiuni.
+
 ## Necunoscute (nu le-am putut testa de aici)
 - Durata maxima a unei cereri pe Hobby (60 s sau 300 s, sursele se contrazic): `vercel.json` cere 60 s, iar asteptarea Subsync se opreste la 45 s.
 - Cat dureaza pornirea la rece a functiei si ce se pierde din memorie intre instante.

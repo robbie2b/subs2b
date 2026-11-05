@@ -66,10 +66,16 @@ class ConfigStorage {
   private useDatabase = false;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private lastInitFailure = 0;
 
   public async initialize(): Promise<void> {
     if (this.initialized) return;
     if (this.initPromise) return this.initPromise;
+    // On Vercel a failed connection is not turned into the local-file fallback (see below): the next request tries
+    // again, but not at once, so a database that is down does not make every request wait for the connection timeout
+    if (process.env.VERCEL && this.lastInitFailure && Date.now() - this.lastInitFailure < 3000) {
+      throw new Error('The database is not reachable right now');
+    }
 
     this.initPromise = (async () => {
       const dbUrl = (process.env.DATABASE_URL || ENV.DATABASE_URL || '').trim();
@@ -85,7 +91,8 @@ class ConfigStorage {
           const pool = new Pool({
             connectionString: dbUrl,
             ssl,
-            max: 10,
+            // (few connections per instance on Vercel: many instances share the database's connection limit)
+            max: parseInt(process.env.PG_POOL_MAX || '', 10) || (process.env.VERCEL ? 3 : 10),
             idleTimeoutMillis: 30000,
             connectionTimeoutMillis: 10000,
             // no query may hang for ever (a lock nobody releases): it fails after 20 s, with the reason in the log
@@ -124,12 +131,21 @@ class ConfigStorage {
           this.initialized = true;
           return;
         } catch (err: any) {
-          Logger.error('Failed to connect to PostgreSQL at DATABASE_URL. Falling back to local filesystem storage.', err);
           this.useDatabase = false;
           if (this.pool) {
             try { await this.pool.end(); } catch {}
             this.pool = null;
           }
+          if (process.env.VERCEL) {
+            // A serverless instance that fell back to the local file would not find any saved configuration and would
+            // answer with the default one (other lists, no keys) for as long as it lives. An error is better: the
+            // player is told to try again, and the next request connects again.
+            Logger.error('Failed to connect to PostgreSQL at DATABASE_URL: this request fails, the next one tries again.', err);
+            this.lastInitFailure = Date.now();
+            this.initPromise = null;
+            throw new Error('The database is not reachable right now');
+          }
+          Logger.error('Failed to connect to PostgreSQL at DATABASE_URL. Falling back to local filesystem storage.', err);
         }
       }
 

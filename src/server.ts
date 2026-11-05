@@ -360,7 +360,13 @@ export function createServer(): express.Application {
       return;
     }
 
-    const saveResult = await configStorage.saveConfigAsync(uuid, password, mergeWithDefaults(config));
+    let saveResult;
+    try {
+      saveResult = await configStorage.saveConfigAsync(uuid, password, mergeWithDefaults(config));
+    } catch {
+      res.status(503).json({ success: false, error: 'The database is not reachable right now, try again.' });
+      return;
+    }
     if (!saveResult.success) {
       const isDbError = saveResult.error?.includes('Database write failed');
       res.status(isDbError ? 500 : 401).json({ success: false, error: saveResult.error || 'Could not save the configuration.' });
@@ -390,7 +396,13 @@ export function createServer(): express.Application {
       return;
     }
 
-    const authResult = await configStorage.authenticateAndGetConfigAsync(uuid, password);
+    let authResult;
+    try {
+      authResult = await configStorage.authenticateAndGetConfigAsync(uuid, password);
+    } catch {
+      res.status(503).json({ success: false, error: 'The database is not reachable right now, try again.' });
+      return;
+    }
     if (!authResult.success || !authResult.config) {
       res.status(401).json({ success: false, error: 'Invalid UUID or password.' });
       return;
@@ -445,8 +457,14 @@ export function createServer(): express.Application {
   // ---- Diagnostics: only reachable with the UUID of a stored configuration (which is already the addon's credential) ----
   const requireStoredConfig = async (req: Request, res: Response): Promise<string | null> => {
     const key = req.params.config;
-    if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
-      res.status(404).json({ error: 'not found' });
+    try {
+      if (!key || !isUuid(key) || !(await configStorage.getConfigByUuidAsync(key))) {
+        res.status(404).json({ error: 'not found' });
+        return null;
+      }
+    } catch {
+      // the database is not reachable (Vercel): not "not found", just try again
+      res.status(503).json({ error: 'the database is not reachable right now, try again' });
       return null;
     }
     return key;
