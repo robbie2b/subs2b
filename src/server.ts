@@ -21,7 +21,7 @@ import { downloadFailures } from './utils/downloadJournal';
 import { createFormatTestHandler, setFormatTest, formatTestUntil } from './proxy/formatTest';
 import { Logger, getLogLines } from './utils/logger';
 import { configStorage, isUuid } from './storage/configStore';
-import { parseSubtitleQuery, getAggregatedSubtitles } from './core/aggregator';
+import { parseSubtitleQuery, getAggregatedSubtitles, searchCacheKey } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { getDebug } from './utils/debugLog';
 import { getUsage, getProviderStats, getRuleImpact } from './storage/usageStore';
@@ -426,7 +426,7 @@ export function createServer(): express.Application {
   const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
     try {
       const configParam = req.params.config;
-      const userConfig = await decodeUserConfigAsync(configParam);
+      let userConfig = await decodeUserConfigAsync(configParam);
       const { type, id, extra } = req.params;
 
       // Merge the query string with the arguments Stremio puts in the path (":extra", e.g. filename=...&videoHash=...)
@@ -437,7 +437,16 @@ export function createServer(): express.Application {
         }
       }
 
+      // Testing aids (the players never send them): ?dynamic=1|0 sets the dynamic timeout for this request only, and
+      // ?nocache=1 forgets the saved list of this film first, so a timing test really searches
+      const dynamicParam = extraArgs.dynamic;
+      const noCache = extraArgs.nocache === '1';
+      delete extraArgs.dynamic;
+      delete extraArgs.nocache;
+      if (dynamicParam === '1' || dynamicParam === '0') userConfig = { ...userConfig, dynamicTimeout: dynamicParam === '1' };
+
       const query = parseSubtitleQuery(type, id, extraArgs);
+      if (noCache) globalSubtitleCache.delete(searchCacheKey(query, userConfig));
       const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
       const response = await getAggregatedSubtitles(query, userConfig, getBaseUrl(req), debugKey);
 

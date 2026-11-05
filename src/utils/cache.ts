@@ -44,6 +44,11 @@ export class SubtitleCache {
     this.cache.set(key, { items: subtitles, incomplete }, { ttl: Math.round((ttlMinutes || 30) * 60 * 1000) });
   }
 
+  /** forgets one saved list */
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
   clear(): void {
     this.cache.clear();
   }
