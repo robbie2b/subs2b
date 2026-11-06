@@ -421,6 +421,8 @@ export async function getAggregatedSubtitles(
     if (finalUrl.startsWith('/')) {
       // Archive downloads also learn what is being played, to pick the right file inside a season pack
       if (finalUrl.startsWith('/sub/proxy?')) finalUrl += archivePickParams;
+      // a Subs.ro pack opened on demand needs this configuration's key, read on the server (never put in a link)
+      if (finalUrl.startsWith('/proxy/download/subsro/') && finalUrl.includes('/pick.srt?') && configId) finalUrl += `&c=${configId}`;
       finalUrl = `${baseUrl}${finalUrl}`;
     } else if (
       config.convertVttToSrt !== false &&

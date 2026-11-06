@@ -3,7 +3,8 @@ import http from 'http';
 import { AddressInfo } from 'net';
 import axios from 'axios';
 import AdmZip from 'adm-zip';
-import { SubsroDirectProvider, seasonsOf, choosePacks, entriesFor, entryToken, excludesEpisode } from '../src/providers/subsroDirect';
+import { SubsroDirectProvider, seasonsOf, choosePacks, entriesFor, entryToken, excludesEpisode, lazyRelease } from '../src/providers/subsroDirect';
+import { configStorage } from '../src/storage/configStore';
 import { clearSubsroMemory } from '../src/storage/subsroStore';
 import { handleSubsroDownload } from '../src/proxy/subsroDownload';
 import { DEFAULT_USER_CONFIG } from '../src/config/userConfig';
@@ -62,24 +63,29 @@ async function main(): Promise<void> {
 
   // --- the provider, with a faked API ---
   const pack = new AdmZip();
-  pack.addFile('Show.S04.1080p.DSNP.WEB-DL-PHOENiX/Show.S04E20.Patriot.Games.1080p.DSNP.WEB-DL-PHOENiX.srt', Buffer.from(SRT('Salut, și ț')));
+  pack.addFile('Show.S04.1080p.DSNP.WEB-DL-PHOENiX/Show.S04E20.Patriot.Games.1080p.DSNP.WEB-DL-PHOENiX.srt', Buffer.from(SRT('Salut, \u0219i \u021b')));
   pack.addFile('Show.S04.DSNP.WEB-DL-VELUN/Show.S04E20.Patriot.Games.DSNP.WEB-DL-VELUN.ro.srt', Buffer.from(SRT('hello two')));
   pack.addFile('Show.S04.DSNP.WEB-DL-VELUN/Show.S04E21.Other.DSNP.WEB-DL-VELUN.ro.srt', Buffer.from(SRT('other episode')));
   const packBytes = pack.toBuffer();
 
   const calls: string[] = [];
   const realGet = axios.get;
+  let downloadDelay = 0;
   (axios as any).get = async (url: string, opts?: any) => {
+    if (url.startsWith('http://127.0.0.1')) return realGet(url, opts);   // the test's own asks to the local server
     calls.push(url.replace('https://api.subs.ro/v1.0', ''));
     if (opts?.headers?.['X-Subs-Api-Key'] !== 'test-key-1234567890') throw Object.assign(new Error('unauthorized'), { response: { status: 401 } });
     if (url.endsWith('/quota')) return { status: 200, data: { quota: { used: 10, remaining: 290, total: 300, type: 'api_key' } } };
     if (url.includes('/search/imdbid/tt0182576')) return { status: 200, data: { status: 200, items: [
-      { id: 2, title: 'Family Guy - Sezoanele 1-24', language: 'ro', updatedAt: '2025-02-01T00:00:00Z' },
-      { id: 3, title: 'Family Guy - Sezonul 4', language: 'ro', updatedAt: '2024-01-01T00:00:00Z' },
+      { id: 2, title: 'Family Guy - Sezoanele 1-24', description: 'Sezoanele 1-24 complete, pentru WEB-DL', language: 'ro', updatedAt: '2025-02-01T00:00:00Z' },
+      { id: 3, title: 'Family Guy - Sezonul 4', description: 'Sezonul 4 complet', language: 'ro', updatedAt: '2024-01-01T00:00:00Z' },
       { id: 5, title: 'Family Guy - Sezonul 5', language: 'ro', updatedAt: '2024-01-03T00:00:00Z' },
       { id: 121280, title: 'Family Guy - Sezonul 23', language: 'ro', updatedAt: '2025-03-01T00:00:00Z' }
     ] } };
-    if (/\/subtitle\/(2|3)\/download$/.test(url)) return { status: 200, data: new Uint8Array(packBytes).buffer };
+    if (/\/subtitle\/(2|3)\/download$/.test(url)) {
+      if (downloadDelay) await new Promise(r => setTimeout(r, downloadDelay));
+      return { status: 200, data: new Uint8Array(packBytes).buffer };
+    }
     throw new Error('unexpected request ' + url);
   };
 
@@ -87,62 +93,76 @@ async function main(): Promise<void> {
   const config = { ...DEFAULT_USER_CONFIG, languages: ['ron'] };
   const context = { config, providerConfig: { enabled: true, apiKey: 'test-key-1234567890' }, timeoutMs: 5000 } as any;
   clearSubsroMemory();
+  const FILE = 'Family.Guy.S04E20.Patriot.Games.1080p.DSNP.WEB-DL.AAC2.0.H.264-PHOENiX.mkv';
+  const q420 = { ...series('tt0182576', 4, 20), extra: { filename: FILE } } as any;
 
-  const first = await provider.searchWithStatus(series('tt0182576', 4, 20), context);
+  const first = await provider.searchWithStatus(q420, context);
   const costly = calls.filter(c => !c.endsWith('/quota'));
-  check('a new series: one search and one pack of season 4 (the best), none of the other seasons', costly.length === 2 && costly[0].startsWith('/search/') && /\/subtitle\/(2|3)\/download/.test(costly[1]), costly);
-  check('every file of the episode is a subtitle, named as its release', !first.failed && first.items.length === 2 && first.items.some(i => /PHOENiX/.test(i.release || '')) && first.items.some(i => /VELUN/.test(i.release || '')), first.items.map(i => i.release));
-  check('the links are this server\'s own (no key in them)', first.items.every(i => i.url.startsWith('/proxy/download/subsro/') && i.url.endsWith('.srt') && !/test-key/.test(i.url)), first.items[0]?.url);
+  check('a new series: ONE request (the search), no pack downloaded for the list', costly.length === 1 && costly[0].startsWith('/search/'), costly);
+  check('the packs of season 4 are listed (not the other seasons), each as a pick link', !first.failed && first.items.length === 2 && first.items.every(i => /\/pick\.srt\?/.test(i.url)), first.items.map(i => i.url));
+  check('named as the episode, with what the description says', first.items.every(i => /S04E20/.test(i.release || '')) && first.items.some(i => /WEB-DL/i.test(i.release || '')), first.items.map(i => i.release));
+  check('the links are this server\'s own (no key in them)', first.items.every(i => i.url.startsWith('/proxy/download/subsro/') && !/test-key/.test(i.url)), first.items[0]?.url);
   check('the provider is Subs.ro, in Romanian', first.items.every(i => i.lang === 'ron' && i.providerName === 'Subs.ro'));
+  check('a film\'s pack is named by the releases its description lists', /Film\.2017\.2160p/.test(lazyRelease({ id: 1, title: 'Film', description: 'Film.2017.2160p.UHD.BluRay.REMUX-OMFUG; Film.2017.1080p-FGT' }, { season: null, episode: null })));
+
+  // --- the download route: the pack is downloaded only now, once, and the file closest to the playing one is served ---
+  const realConfigGet = configStorage.getConfigByUuidAsync.bind(configStorage);
+  (configStorage as any).getConfigByUuidAsync = async (uuid: string) => uuid === 'cfg-1' ? { providers: { subsrodirect: { enabled: true, apiKey: 'test-key-1234567890' } } } : null;
+  const app = express();
+  app.get('/proxy/download/subsro/:packId/:entry', handleSubsroDownload);
+  const server = http.createServer(app);
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const pickLink = first.items[0].url.replace(/\/subtitle\/.*/, '') + '&c=cfg-1';
+  const pick3 = first.items.find(i => /\/subsro\/3\//.test(i.url))!.url + '&c=cfg-1';
 
   calls.length = 0;
-  const again = await provider.searchWithStatus(series('tt0182576', 4, 21), context);
-  check('the next episode of the season costs no request (the search and the pack are kept)', calls.filter(c => !c.endsWith('/quota')).length === 0 && again.items.length === 1 && again.items.every(i => /S04E21/.test(i.release || '')), { calls, n: again.items.length });
+  downloadDelay = 150;
+  const together = await Promise.all([1, 2, 3].map(() => axios.get(base + pick3, { validateStatus: () => true })));
+  downloadDelay = 0;
+  const downloads = calls.filter(c => /\/download$/.test(c));
+  check('three asks at the same moment: ONE download of the pack', downloads.length === 1, downloads);
+  check('the file closest to the playing file is served (PHOENiX), in UTF-8', together.every(r => r.status === 200 && String(r.data).includes('Salut, \u0219i \u021b')), together.map(r => r.status));
+  calls.length = 0;
+  const again = await axios.get(base + pick3, { validateStatus: () => true });
+  check('asked again: no request (the pack is kept)', again.status === 200 && calls.filter(c => !c.endsWith('/quota')).length === 0, calls);
+  const noKey = await axios.get(base + first.items.find(i => /\/subsro\/2\//.test(i.url))!.url, { validateStatus: () => true });
+  check('a pack not kept, with no configuration to read the key from: refused, nothing asked', noKey.status === 404 && calls.filter(c => /\/download$/.test(c)).length === 0, noKey.status);
+  void pickLink;
+
+  // the pack is kept now: the next search lists its real files (and costs nothing)
+  calls.length = 0;
+  const kept = await provider.searchWithStatus(q420, context);
+  const keptCalls = calls.filter(c => !c.endsWith('/quota'));
+  check('a pack kept lists its real files, named as their releases', keptCalls.length === 0 && kept.items.some(i => /PHOENiX/.test(i.release || '') && /VELUN/.test(i.release || '') === false) && kept.items.some(i => /VELUN/.test(i.release || '')), { keptCalls, rel: kept.items.map(i => i.release) });
+  const entryLink = kept.items.find(i => /PHOENiX/.test(i.release || ''))!.url;
+  check('those links are served from the pack too', (await axios.get(base + entryLink, { validateStatus: () => true })).status === 200);
+
+  calls.length = 0;
+  const next = await provider.searchWithStatus({ ...series('tt0182576', 4, 21), extra: { filename: 'Family.Guy.S04E21.x.mkv' } } as any, context);
+  check('the next episode of the season: no new search, the kept pack answers', calls.filter(c => !c.endsWith('/quota')).length === 0 && next.items.some(i => /S04E21/.test(i.release || '')), { calls, n: next.items.length });
 
   calls.length = 0;
   const refs = await provider.searchWithStatus({ ...series('tt0182576', 4, 20), allLanguages: true }, context);
   check('the timing references never spend a request here', refs.items.length === 0 && calls.length === 0, calls);
-  const noKey = await provider.searchWithStatus(series('tt0182576', 4, 20), { ...context, providerConfig: { enabled: true, apiKey: '' } });
-  check('without a key nothing is asked', noKey.items.length === 0 && calls.length === 0, calls);
+  const noKeyAtAll = await provider.searchWithStatus(q420, { ...context, providerConfig: { enabled: true, apiKey: '' } });
+  check('without a key nothing is asked', noKeyAtAll.items.length === 0 && calls.length === 0, calls);
 
-  // a film: the best pack has enough subtitles, so the others are not opened (one request each)
-  const filmPack = new AdmZip();
-  ['A', 'B', 'C', 'D', 'E'].forEach((g, n) => filmPack.addFile(`Film.2017.2160p.UHD.BluRay.REMUX.HEVC-${g}${n}.srt`, Buffer.from(SRT('film ' + g))));
-  const filmBytes = filmPack.toBuffer();
-  calls.length = 0;
-  (axios as any).get = async (url: string) => {
-    calls.push(url.replace('https://api.subs.ro/v1.0', ''));
-    if (url.endsWith('/quota')) return { status: 200, data: { quota: { used: 1, remaining: 299, total: 300 } } };
-    if (url.includes('/search/imdbid/tt7777771')) return { status: 200, data: { items: [
-      { id: 21, title: 'Film', description: 'Film.2017.720p.BluRay.x264-FGT', language: 'ro', updatedAt: '2018-04-01T00:00:00Z' },
-      { id: 22, title: 'Film', description: 'Film.2017.2160p.UHD.BluRay.REMUX.HEVC-OMFUG', language: 'ro', updatedAt: '2018-03-01T00:00:00Z' },
-      { id: 23, title: 'Film', description: 'Film (2017), pentru WEB-DL', language: 'ro', updatedAt: '2018-05-01T00:00:00Z' }
-    ] } };
-    if (/\/subtitle\/\d+\/download$/.test(url)) return { status: 200, data: new Uint8Array(filmBytes).buffer };
-    throw new Error('unexpected ' + url);
-  };
-  const filmOut = await provider.searchWithStatus({ ...movie('tt7777771'), extra: { filename: 'Film.2017.2160p.UHD.BluRay.REMUX.HEVC-OMFUG.mkv' } } as any, context);
-  const filmCalls = calls.filter(c => !c.endsWith('/quota'));
-  check('a film costs one search and one pack (the best), however many subtitles it holds', filmCalls.length === 2 && /\/subtitle\/22\/download/.test(filmCalls[1]) && filmOut.items.length === 5, { filmCalls, n: filmOut.items.length });
-
-  // the best pack has nothing for the episode: the next one is opened
+  // a pack that turns out not to have the episode: 404 once, then it is skipped for free
   const packA = new AdmZip(); packA.addFile('Show.S01E01.WEB-DL-AAA.srt', Buffer.from(SRT('one')));
-  const packB = new AdmZip(); packB.addFile('Show.S01E09.WEB-DL-BBB.srt', Buffer.from(SRT('nine')));
   calls.length = 0;
-  (axios as any).get = async (url: string) => {
+  (axios as any).get = async (url: string, opts?: any) => {
+    if (url.startsWith('http://127.0.0.1')) return realGet(url, opts);
     calls.push(url.replace('https://api.subs.ro/v1.0', ''));
     if (url.endsWith('/quota')) return { status: 200, data: { quota: { used: 1, remaining: 299, total: 300 } } };
-    if (url.includes('/search/imdbid/tt7777772')) return { status: 200, data: { items: [
-      { id: 31, title: 'Show - Sezonul 1', description: 'Sezonul 1', language: 'ro', updatedAt: '2024-05-01T00:00:00Z' },
-      { id: 32, title: 'Show - Sezonul 1', description: 'Sezonul 1', language: 'ro', updatedAt: '2024-04-01T00:00:00Z' }
-    ] } };
+    if (url.includes('/search/imdbid/tt7777772')) return { status: 200, data: { items: [{ id: 31, title: 'Show - Sezonul 1', description: 'Sezonul 1', language: 'ro', updatedAt: '2024-05-01T00:00:00Z' }] } };
     if (url.endsWith('/subtitle/31/download')) return { status: 200, data: new Uint8Array(packA.toBuffer()).buffer };
-    if (url.endsWith('/subtitle/32/download')) return { status: 200, data: new Uint8Array(packB.toBuffer()).buffer };
     throw new Error('unexpected ' + url);
   };
-  const second = await provider.searchWithStatus(series('tt7777772', 1, 9), context);
-  const secondCalls = calls.filter(c => !c.endsWith('/quota'));
-  check('when the best pack has nothing for the episode the next one is opened', secondCalls.length === 3 && second.items.length === 1 && /S01E09/.test(second.items[0].release || ''), { secondCalls, n: second.items.length });
+  const listed = await provider.searchWithStatus({ ...series('tt7777772', 1, 9), extra: { filename: 'Show.S01E09.mkv' } } as any, context);
+  const miss = await axios.get(base + listed.items[0].url + '&c=cfg-1', { validateStatus: () => true });
+  const afterMiss = await provider.searchWithStatus({ ...series('tt7777772', 1, 9), extra: { filename: 'Show.S01E09.mkv' } } as any, context);
+  check('a pack without the episode is a 404, and the next search leaves it out', miss.status === 404 && afterMiss.items.length === 0, { miss: miss.status, n: afterMiss.items.length });
 
   // near the daily limit the source is left alone
   (axios as any).get = async (url: string) => {
@@ -156,15 +176,6 @@ async function main(): Promise<void> {
   check('under 15 requests left today: reported as failed, no search made', limited.failed && /limit/.test(limited.error || '') && calls.every(c => c.endsWith('/quota')), { failed: limited.failed, error: limited.error, calls });
   (axios as any).get = realGet;
 
-  // --- the download route: from the kept pack, no request ---
-  const app = express();
-  app.get('/proxy/download/subsro/:packId/:entry', handleSubsroDownload);
-  const server = http.createServer(app);
-  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
-  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const link = first.items.find(i => /PHOENiX/.test(i.release || ''))!.url;
-  const ok = await axios.get(base + link, { validateStatus: () => true });
-  check('the subtitle is served from the pack, in UTF-8', ok.status === 200 && String(ok.data).includes('Salut, și ț') && String(ok.data).includes('00:00:01,000 --> 00:00:03,000'), { status: ok.status, body: String(ok.data).slice(0, 80) });
   const nope = await axios.get(`${base}/proxy/download/subsro/3/${entryToken('../../etc/passwd')}.srt`, { validateStatus: () => true });
   check('a file the pack was not listed with is refused', nope.status === 404, nope.status);
   const unknown = await axios.get(`${base}/proxy/download/subsro/999/${entryToken('x.srt')}.srt`, { validateStatus: () => true });
@@ -172,6 +183,7 @@ async function main(): Promise<void> {
   const bad = await axios.get(`${base}/proxy/download/subsro/abc/${entryToken('x.srt')}.srt`, { validateStatus: () => true });
   check('a pack id that is not a number is refused', bad.status === 400, bad.status);
   server.close();
+  (configStorage as any).getConfigByUuidAsync = realConfigGet;
 
   // --- the place in the priority list ---
   const { mergeWithDefaults } = await import('../src/config/userConfig');

@@ -5,7 +5,7 @@ import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provid
 import { shortHash } from '../utils/ids';
 import { parseRelease, rankSubtitles } from '../utils/scorer';
 import { listSrtEntries } from '../utils/archiveEntries';
-import { getSearch, setSearch, getPack, setPack } from '../storage/subsroStore';
+import { getSearch, setSearch, getPack, setPack, SubsroPack } from '../storage/subsroStore';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
 
@@ -22,12 +22,8 @@ import { USER_AGENT } from '../config/version';
 export const SUBSRO_API = 'https://api.subs.ro/v1.0';
 export const SUBSRO_PROVIDER_ID = 'subsrodirect';
 const MAX_PACKS = 3;
-/**
- * Packs are opened one after the other, the best first, until a subtitle was found (each opened pack is a request): the
- * next one only when the best has nothing for the episode. The other sources give the alternatives, and the player gets
- * its few subtitles from all of them together.
- */
-const WANTED_SUBTITLES = 1;
+/** Packs listed without being opened (each is one request, only when one of its subtitles is asked for) */
+const MAX_LAZY_PACKS = 2;
 const MAX_PACK_BYTES = 60 * 1024 * 1024;
 /** Below this many requests left today the source is not used any more (the quota check itself is free) */
 const QUOTA_RESERVE = 15;
@@ -144,6 +140,53 @@ async function remainingToday(apiKey: string, signal: AbortSignal): Promise<numb
   }
 }
 
+
+// --- one pack: from memory, the database, or the API when new or changed (the only place that spends a request) ---
+const inflight = new Map<string, Promise<SubsroPack>>();
+
+/**
+ * The pack, downloaded only when it is needed (a subtitle of it was asked for). Several asks at the same moment share one
+ * download; a pack kept in memory or in the database, in the version wanted, costs nothing.
+ */
+export function fetchPack(id: string, version: string, apiKey: string, signal?: AbortSignal): Promise<SubsroPack> {
+  const key = `${id}|${version}`;
+  const running = inflight.get(key);
+  if (running) return running;
+  const task = (async () => {
+    const stored = await getPack(id);
+    if (stored && (!version || stored.version === version)) return stored;
+    const ac = new AbortController();
+    const left = await remainingToday(apiKey, ac.signal);
+    if (left !== null && left < QUOTA_RESERVE) throw new Error(`Subs.ro daily limit almost reached (${left} requests left today)`);
+    const res = await axios.get<ArrayBuffer>(`${SUBSRO_API}/subtitle/${encodeURIComponent(id)}/download`, {
+      headers: { 'X-Subs-Api-Key': apiKey, Accept: 'application/json', 'User-Agent': USER_AGENT },
+      responseType: 'arraybuffer', timeout: 25000, maxContentLength: MAX_PACK_BYTES, signal
+    });
+    const archive = Buffer.from(res.data);
+    const entries = await listSrtEntries(archive);
+    const pack: SubsroPack = { version, entries, archive };
+    setPack(id, pack);
+    return pack;
+  })();
+  inflight.set(key, task);
+  const done = () => { inflight.delete(key); };
+  task.then(done, done);
+  return task;
+}
+
+/** What a pack is called in the list before it is opened: its description names the releases of a film; a series pack gets the episode */
+export function lazyRelease(item: SubsroItem, query: Pick<SubtitleQuery, 'season' | 'episode'>): string {
+  const description = (item.description || '').replace(/\s+/g, ' ').trim();
+  const title = (item.title || '').trim();
+  if (query.season != null && query.episode != null) {
+    const show = title.replace(/\s*[-–]?\s*(?:sezonul|sezoanele|season)\b.*$/i, '').trim() || title;
+    const hints = (description.match(/\b(?:2160p|1080p|720p|480p|WEB-DL|WEBRip|WEB|BluRay|BDRip|BRRip|HDTV|DVDRip|REMUX)\b/gi) || []).slice(0, 3).join(' ');
+    return `${show.replace(/\s+/g, '.')}.S${String(query.season).padStart(2, '0')}E${String(query.episode).padStart(2, '0')}${hints ? ' ' + hints : ''}`.slice(0, 200);
+  }
+  // a film: a description that lists release names is the best name there is
+  return (/\w\.\w+\.\w/.test(description) ? description : `${title} ${description}`.trim()).slice(0, 400);
+}
+
 export class SubsroDirectProvider extends BaseSubtitleProvider {
   readonly id = SUBSRO_PROVIDER_ID;
   readonly name = 'Subs.ro (direct)';
@@ -153,22 +196,6 @@ export class SubsroDirectProvider extends BaseSubtitleProvider {
 
   private headers(apiKey: string) {
     return { 'X-Subs-Api-Key': apiKey, Accept: 'application/json', 'User-Agent': USER_AGENT };
-  }
-
-  /** The pack (from memory, the database, or the API when new or changed): one request only in the last case */
-  private async packOf(item: SubsroItem, apiKey: string, signal: AbortSignal) {
-    const id = String(item.id);
-    const version = String(item.updatedAt || item.createdAt || '');
-    const stored = await getPack(id);
-    if (stored && stored.version === version) return stored;
-    const res = await axios.get<ArrayBuffer>(`${SUBSRO_API}/subtitle/${encodeURIComponent(id)}/download`, {
-      headers: this.headers(apiKey), responseType: 'arraybuffer', timeout: 25000, maxContentLength: MAX_PACK_BYTES, signal
-    });
-    const archive = Buffer.from(res.data);
-    const entries = await listSrtEntries(archive);
-    const pack = { version, entries, archive };
-    setPack(id, pack);
-    return pack;
   }
 
   protected async executeSearch(query: SubtitleQuery, context: ProviderContext, signal: AbortSignal): Promise<RawSubtitleItem[]> {
@@ -190,15 +217,16 @@ export class SubsroDirectProvider extends BaseSubtitleProvider {
 
     const languages = context.config.languages && context.config.languages.length > 0 ? context.config.languages : ['ron', 'eng'];
     const packs = choosePacks(items, query, languages, query.extra?.filename);
-    const wanted = WANTED_SUBTITLES;
     const out: RawSubtitleItem[] = [];
-    // the best pack first; the next ones only while there are too few subtitles (a pack kept already costs nothing)
+    let lazy = 0;
+    // A pack already kept lists its real files (no request). One not kept is listed as it is, from what the search says,
+    // and downloaded only when a subtitle of it is asked for: nothing is downloaded that nobody uses.
     for (const item of packs) {
-      if (out.length >= wanted || signal.aborted) break;
-      try {
-        const pack = await this.packOf(item, apiKey, signal);
-        const lang = LANGUAGES[(item.language || '').toLowerCase()];
-        for (const entry of entriesFor(pack.entries, query)) {
+      const lang = LANGUAGES[(item.language || '').toLowerCase()];
+      const version = String(item.updatedAt || item.createdAt || '');
+      const kept = await getPack(String(item.id));
+      if (kept && kept.version === version) {
+        for (const entry of entriesFor(kept.entries, query)) {
           const release = path.basename(entry).replace(/\.srt$/i, '');
           out.push({
             id: `${SUBSRO_PROVIDER_ID}-${item.id}-${shortHash(entry)}`,
@@ -211,9 +239,20 @@ export class SubsroDirectProvider extends BaseSubtitleProvider {
             hearingImpaired: /\[cc\]|\.cc\.|\[hi\]|\(hi\)|hearing/i.test(release)
           });
         }
-      } catch (err) {
-        if (signal.aborted) break;
-        Logger.warn(`Subs.ro pack ${item.id} could not be read`, { reason: err instanceof Error ? err.message : String(err) });
+      } else if (lazy < MAX_LAZY_PACKS) {
+        lazy++;
+        const params = new URLSearchParams({ v: version });
+        if (query.season != null && query.episode != null) { params.set('s', String(query.season)); params.set('e', String(query.episode)); }
+        if (query.extra?.filename) params.set('vf', query.extra.filename);
+        out.push({
+          id: `${SUBSRO_PROVIDER_ID}-${item.id}`,
+          provider: this.id,
+          providerName: 'Subs.ro',
+          url: `/proxy/download/subsro/${encodeURIComponent(String(item.id))}/pick.srt?${params.toString()}`,
+          lang,
+          release: lazyRelease(item, query),
+          format: 'srt'
+        });
       }
     }
     return out;
