@@ -125,6 +125,13 @@ async function main(): Promise<void> {
   check('a pack id that is not a number is refused', bad.status === 400, bad.status);
   server.close();
 
+  // --- the place in the priority list ---
+  const { mergeWithDefaults } = await import('../src/config/userConfig');
+  const prio = mergeWithDefaults({ providerPriority: ['org.stremio.subsro', 'regielive', 'org.stremio.opensubtitlesv3', 'opensubtitles', 'subsrodirect'] } as any).providerPriority;
+  check('Subs.ro (direct) takes the place of the Subs.ro addon in an old priority list', prio[0] === 'subsrodirect' && prio[1] === 'org.stremio.subsro' && prio.filter(i => i === 'subsrodirect').length === 1, prio);
+  const prio2 = mergeWithDefaults({ providerPriority: ['regielive', 'subsrodirect', 'org.stremio.subsro'] } as any).providerPriority;
+  check('and stays where it is when it is already above the addon', prio2[1] === 'subsrodirect' && prio2[2] === 'org.stremio.subsro', prio2);
+
   // --- the key check of the Services page (the quota check: free) ---
   const { createServer } = await import('../src/server');
   const appUnderTest = createServer();

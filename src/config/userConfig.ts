@@ -170,6 +170,14 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
   if (providerPriority.length === 0) {
     providerPriority.push(...DEFAULT_USER_CONFIG.providerPriority);
   }
+  // Subs.ro (direct) replaces the community Subs.ro addon: where the addon is ranked, the direct service takes its place
+  // (added at the end of an old list it would be waited behind every other source by the dynamic timeout)
+  const subsroAddon = providerPriority.findIndex(id => id.toLowerCase() === 'org.stremio.subsro');
+  const subsroDirect = providerPriority.indexOf('subsrodirect');
+  if (subsroAddon >= 0 && subsroDirect > subsroAddon) {
+    providerPriority.splice(subsroDirect, 1);
+    providerPriority.splice(subsroAddon, 0, 'subsrodirect');
+  }
 
   const rawRemap = (partial.language_remapping && typeof partial.language_remapping === 'object')
     ? partial.language_remapping
