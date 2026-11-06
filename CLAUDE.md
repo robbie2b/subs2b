@@ -57,6 +57,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **DECIZIE (2026-11-06, utilizatorul): rămânem la addonul comunității Subs.ro, NU la integrarea directă.** Testul lui: integrarea directă dă mult mai puține
+  rezultate decât addonul (addonul listează fiecare fișier din toate arhivele; varianta „descărcare la cerere" listează max 2 pachete după descriere, ca să
+  nu consume cereri). Serviciul `subsrodirect` (v1.5.14–1.5.21) rămâne în cod, OPRIT implicit, fără efect cât timp nu e pornit; poate fi șters. Nu mai
+  reluăm ideea fără motiv nou. Lecție: măsoară rezultatele (nu doar cererile) înainte să construiești un înlocuitor.
 - **Subs.ro direct, serviciu nativ `subsrodirect` (2026-11-06, cerut de utilizator; NEDEPLOYAT):** `providers/subsroDirect.ts`,
   `storage/subsroStore.ts` (tabela `subsro_cache`, RLS pornit; căutarea 6 h, pachetele până se schimbă `updatedAt`, gzip, partajate între
   instanțe), `utils/archiveEntries.ts` (listare/extragere ZIP+RAR), `proxy/subsroDownload.ts` (ruta `/proxy/download/subsro/:packId/:entry`,
