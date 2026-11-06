@@ -82,7 +82,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   <3% și intră în top <20% (din ultimele 150 de cereri clasate) nu se mai așteaptă (`winRate`/`inTopRate` în `getProviderSpeeds`).
   (9) Pragul implicit „Dynamic timeout score" e 30 (era 40); configurațiile deja salvate își păstrează valoarea din Filters → Results.
   (10) Unealta Debug `/debug/connect.json`: 3 cereri la rând spre fiecare sursă cu agentul implicit vs conexiune nouă, ca să se vadă dacă
-  reutilizarea conexiunilor câștigă ceva (Node ≥19 are keepAlive implicit în agentul global, deci probabil deja e așa). (4) Live activity: când prima subtitrare e de la grupul
+  reutilizarea conexiunilor câștigă ceva (Node ≥19 are keepAlive implicit în agentul global, deci probabil deja e așa).
+  Măsurat pe Vercel: conexiunile sunt deja reutilizate (a doua cerere la aceeași sursă e cu 20–180 ms mai rapidă); Subs.ro are 360–535 ms
+  pentru o cerere goală. **Limita Subs.ro: 300 cereri/zi pe cheia gratuită** (utilizatorul a văzut 105 azi, 2026-11-06, la mijlocul zilei);
+  Nuvio are doar addonul subs2b, deci toate trec prin noi. Contor de cereri pe gazdă și zi (`utils/requestCounter.ts` = interceptor axios,
+  `storage/requestCountStore.ts`, tabela `request_counts`, ruta `/debug/requests.json`, card „REQUESTS TO THE SOURCES" în Debug) ca să
+  comparăm cu panoul Subs.ro; verificat pe Postgres 16 (NEDEPLOYAT). Planuri discutate: descărcări și liste salvate în DB (partajate între
+  instanțe), oprire de siguranță la ~270/zi, integrare directă api.subs.ro (`/v1.0/search/imdbid/{id}`, antet `X-Subs-Api-Key`; cere
+  domeniile `api.subs.ro` și `subs.ro` permise în mediu și cheia prin `request_credential`). (4) Live activity: când prima subtitrare e de la grupul
   fișierului (link direct, nu trece prin server) lista are `meta.direct`, iar cardul arată „sent as it is" la Player asked/Delivered
   și se închide după 4 s (înainte părea că „nu s-a întâmplat nimic"). Idei rămase: prag dynamic 30, pregătirea episodului următor, plafon pentru calcul.
 - **v1.5.11 (ramura `vercel`, 2026-11-06; cerut de utilizator):** LIVE ACTIVITY nu mai e consolă de text: un card pe fiecare Play, cu o bară

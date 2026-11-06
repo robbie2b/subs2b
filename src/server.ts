@@ -22,6 +22,8 @@ import { createFormatTestHandler, setFormatTest, formatTestUntil } from './proxy
 import { Logger, getLogLines } from './utils/logger';
 import { getActivity, attachActivitySink } from './utils/activity';
 import { persistActivity, readStoredActivity } from './storage/activityStore';
+import { installRequestCounter, attachRequestCountSink, memoryRequestCounts } from './utils/requestCounter';
+import { saveRequestCounts, readRequestCounts } from './storage/requestCountStore';
 import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles, searchCacheKey } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
@@ -131,6 +133,9 @@ export function createServer(): express.Application {
   const app = express();
   // the Live activity steps are saved too, so every instance shows all of them
   attachActivitySink(persistActivity);
+  // every request to a source is counted per host and day (the sources have daily limits)
+  installRequestCounter(axios);
+  attachRequestCountSink(saveRequestCounts);
 
   // Render (and most hosts) sit behind a reverse proxy: needed for correct client IPs / rate limiting
   app.set('trust proxy', 1);
@@ -565,6 +570,23 @@ export function createServer(): express.Application {
     } catch (err: unknown) {
       res.status(500).json({ database: true, error: err instanceof Error ? err.message : String(err) });
     }
+  });
+
+  // Requests made to each host today and yesterday (UTC), all instances together
+  app.get('/:config/debug/requests.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const rows = (await readRequestCounts(2)) || memoryRequestCounts();
+    const days = new Map<string, Array<{ host: string; n: number }>>();
+    for (const r of rows) {
+      if (!days.has(r.day)) days.set(r.day, []);
+      days.get(r.day)!.push({ host: r.host, n: r.n });
+    }
+    res.json({
+      now: new Date().toISOString(),
+      days: [...days.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([day, hosts]) => ({ day, total: hosts.reduce((s, h) => s + h.n, 0), hosts: hosts.sort((a, b) => b.n - a.n) }))
+    });
   });
 
   // Does reusing connections to the sources save time from here? Three requests in a row to each host with the default

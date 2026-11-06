@@ -187,13 +187,14 @@ function startDebugPage() {
   refreshProviders();
   refreshSubsync();
   refreshDownloads();
+  refreshRequestCounts();
   formatTest();
   refreshLogs();
   refreshActivity();
   debugState.logTimer = setInterval(refreshLogs, 2000);
   debugState.actTimer = setInterval(refreshActivity, 2000);
   debugState.actTick = setInterval(tickActivity, 1000);
-  debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); refreshDownloads(); }, 30000);
+  debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); refreshDownloads(); refreshRequestCounts(); }, 30000);
 }
 
 function stopDebugPage() {
@@ -800,6 +801,25 @@ async function refreshActivity() {
     }
   } catch (err) {
     // the server may be waking up; try again on the next tick
+  }
+}
+
+/** Requests per host: today and yesterday (UTC) */
+async function refreshRequestCounts() {
+  const base = debugBase();
+  const box = document.getElementById('dbg-requests');
+  if (!base || !box) return;
+  try {
+    const res = await fetch(`${base}/requests.json`);
+    if (!res.ok) return;
+    const data = await res.json();
+    box.innerHTML = data.days.length
+      ? data.days.slice(0, 2).map((d, i) =>
+        `<div class="dbg-req-day"><div class="dbg-req-head" style="cursor:default"><strong>${i === 0 && d.day === data.now.slice(0, 10) ? 'Today' : escapeHtmlDebug(d.day)}</strong> <span class="dbg-muted">${escapeHtmlDebug(d.day)} · ${d.total} requests</span></div>`
+        + `<div class="act-chips">${d.hosts.slice(0, 14).map(h => `<span class="act-chip"><i style="background:#60a5fa"></i>${escapeHtmlDebug(h.host)} <em>${h.n}</em></span>`).join('')}</div></div>`).join('')
+      : '<div class="dbg-empty">Nothing counted yet (counting starts with this version).</div>';
+  } catch (err) {
+    // ignore
   }
 }
 
