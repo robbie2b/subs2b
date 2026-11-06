@@ -553,7 +553,15 @@ export function createServer(): express.Application {
       return;
     }
     try {
-      res.json({ database: true, ...(await databaseActivity(pool) as object) });
+      // how long the database takes to answer from here: the first query (may open a connection), then five in a row
+      const times: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const t0 = Date.now();
+        await pool.query('SELECT 1');
+        times.push(Date.now() - t0);
+      }
+      const latency = { firstMs: times[0], nextMs: times.slice(1), medianNextMs: [...times.slice(1)].sort((a, b) => a - b)[2] };
+      res.json({ database: true, latency, ...(await databaseActivity(pool) as object) });
     } catch (err: unknown) {
       res.status(500).json({ database: true, error: err instanceof Error ? err.message : String(err) });
     }
