@@ -3,7 +3,7 @@ import http from 'http';
 import { AddressInfo } from 'net';
 import axios from 'axios';
 import AdmZip from 'adm-zip';
-import { SubsroDirectProvider, seasonsOf, choosePacks, entriesFor, entryToken } from '../src/providers/subsroDirect';
+import { SubsroDirectProvider, seasonsOf, choosePacks, entriesFor, entryToken, excludesEpisode } from '../src/providers/subsroDirect';
 import { clearSubsroMemory } from '../src/storage/subsroStore';
 import { handleSubsroDownload } from '../src/proxy/subsroDownload';
 import { DEFAULT_USER_CONFIG } from '../src/config/userConfig';
@@ -39,7 +39,16 @@ async function main(): Promise<void> {
   const picked = choosePacks(items, { season: 4, episode: 20 }, ['ron']).map(i => i.id);
   check('a series opens only the packs of its season, in the languages wanted (not season 23, 5, English, "alt")', JSON.stringify(picked) === '[2,3]', picked);
   check('English too when wanted', choosePacks(items, { season: 4, episode: 20 }, ['ron', 'eng']).length === 3);
-  check('a film opens every pack in the languages wanted', choosePacks(items, { season: null, episode: null }, ['ron']).length === 4);
+  check('a film: at most three packs, whatever the languages', choosePacks(items, { season: null, episode: null }, ['ron']).length === 3);
+  check('a pack that says it holds other episodes is left out ("Ep.1-4", "Ep. 3"), an unclear one is not',
+    excludesEpisode('Ep.1-4', 20) && !excludesEpisode('Ep.1-4', 3) && excludesEpisode('Ep. 3', 4) && !excludesEpisode('Sezonul 4 complet', 20) && !excludesEpisode('NOU! Episodul 15. Sezonul 12, ep. 14-15', 3) && !excludesEpisode('', 5));
+  const film = [
+    { id: 11, title: 'Film', description: 'Film.2017.720p.BluRay.x264-FGT', language: 'ro', updatedAt: '2018-04-01T00:00:00Z' },
+    { id: 12, title: 'Film', description: 'Film.2017.2160p.UHD.BluRay.REMUX.HEVC.TrueHD.7.1-OMFUG', language: 'ro', updatedAt: '2018-03-01T00:00:00Z' },
+    { id: 13, title: 'Film', description: 'Film (2017), pentru WEB-DL', language: 'ro', updatedAt: '2018-05-01T00:00:00Z' }
+  ];
+  const byFile = choosePacks(film, { season: null, episode: null }, ['ron'], 'Film.2017.2160p.UHD.BluRay.REMUX.HEVC.TrueHD.7.1-OMFUG.mkv').map(i => i.id);
+  check('the pack that describes the playing file\'s release goes first', byFile[0] === 12, byFile);
 
   const entries = [
     'DSNP/Show.S04.1080p.DSNP.WEB-DL-PHOENiX/Show.S04E20.Patriot.Games.1080p.DSNP.WEB-DL-PHOENiX.srt',
@@ -95,6 +104,26 @@ async function main(): Promise<void> {
   check('the timing references never spend a request here', refs.items.length === 0 && calls.length === 0, calls);
   const noKey = await provider.searchWithStatus(series('tt0182576', 4, 20), { ...context, providerConfig: { enabled: true, apiKey: '' } });
   check('without a key nothing is asked', noKey.items.length === 0 && calls.length === 0, calls);
+
+  // a film: the best pack has enough subtitles, so the others are not opened (one request each)
+  const filmPack = new AdmZip();
+  ['A', 'B', 'C', 'D', 'E'].forEach((g, n) => filmPack.addFile(`Film.2017.2160p.UHD.BluRay.REMUX.HEVC-${g}${n}.srt`, Buffer.from(SRT('film ' + g))));
+  const filmBytes = filmPack.toBuffer();
+  calls.length = 0;
+  (axios as any).get = async (url: string) => {
+    calls.push(url.replace('https://api.subs.ro/v1.0', ''));
+    if (url.endsWith('/quota')) return { status: 200, data: { quota: { used: 1, remaining: 299, total: 300 } } };
+    if (url.includes('/search/imdbid/tt7777771')) return { status: 200, data: { items: [
+      { id: 21, title: 'Film', description: 'Film.2017.720p.BluRay.x264-FGT', language: 'ro', updatedAt: '2018-04-01T00:00:00Z' },
+      { id: 22, title: 'Film', description: 'Film.2017.2160p.UHD.BluRay.REMUX.HEVC-OMFUG', language: 'ro', updatedAt: '2018-03-01T00:00:00Z' },
+      { id: 23, title: 'Film', description: 'Film (2017), pentru WEB-DL', language: 'ro', updatedAt: '2018-05-01T00:00:00Z' }
+    ] } };
+    if (/\/subtitle\/\d+\/download$/.test(url)) return { status: 200, data: new Uint8Array(filmBytes).buffer };
+    throw new Error('unexpected ' + url);
+  };
+  const filmOut = await provider.searchWithStatus({ ...movie('tt7777771'), extra: { filename: 'Film.2017.2160p.UHD.BluRay.REMUX.HEVC-OMFUG.mkv' } } as any, context);
+  const filmCalls = calls.filter(c => !c.endsWith('/quota'));
+  check('a film costs one search and one pack when the best pack has enough subtitles', filmCalls.length === 2 && /\/subtitle\/22\/download/.test(filmCalls[1]) && filmOut.items.length === 5, { filmCalls, n: filmOut.items.length });
 
   // near the daily limit the source is left alone
   (axios as any).get = async (url: string) => {

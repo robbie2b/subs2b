@@ -3,7 +3,7 @@ import axios from 'axios';
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
 import { shortHash } from '../utils/ids';
-import { parseRelease } from '../utils/scorer';
+import { parseRelease, rankSubtitles } from '../utils/scorer';
 import { listSrtEntries } from '../utils/archiveEntries';
 import { getSearch, setSearch, getPack, setPack } from '../storage/subsroStore';
 import { Logger } from '../utils/logger';
@@ -21,7 +21,9 @@ import { USER_AGENT } from '../config/version';
 
 export const SUBSRO_API = 'https://api.subs.ro/v1.0';
 export const SUBSRO_PROVIDER_ID = 'subsrodirect';
-const MAX_PACKS = 4;
+const MAX_PACKS = 3;
+/** Packs are opened one after the other, the best first, until this many subtitles were found (each opened pack is a request) */
+const DEFAULT_WANTED_SUBTITLES = 5;
 const MAX_PACK_BYTES = 60 * 1024 * 1024;
 /** Below this many requests left today the source is not used any more (the quota check itself is free) */
 const QUOTA_RESERVE = 15;
@@ -51,8 +53,25 @@ export function seasonsOf(item: Pick<SubsroItem, 'title' | 'description'>): { fr
   return null;
 }
 
-/** The packs worth opening for what is being played (the newest first, at most MAX_PACKS) */
-export function choosePacks(items: SubsroItem[], query: Pick<SubtitleQuery, 'season' | 'episode'>, languages: string[]): SubsroItem[] {
+/**
+ * A pack whose description plainly says it holds other episodes ("Ep.1-4", "Episoadele 5-9", "Ep. 3") cannot have the
+ * one being played. Anything less clear stays a candidate (a wrong guess would hide a good subtitle).
+ */
+export function excludesEpisode(description: string | undefined, episode: number): boolean {
+  const text = (description || '').trim().toLowerCase().replace(/[.!\s]+$/g, '');
+  if (!text || /complet|toate|sezon/.test(text)) return false;
+  const range = /^(?:ep(?:isoadele|isodul)?\.?\s*)(\d{1,3})\s*[-–]\s*(\d{1,3})$/.exec(text);
+  if (range) return episode < parseInt(range[1], 10) || episode > parseInt(range[2], 10);
+  const single = /^(?:ep(?:isodul)?\.?\s*)(\d{1,3})$/.exec(text);
+  return single ? episode !== parseInt(single[1], 10) : false;
+}
+
+/**
+ * The packs worth opening for what is being played, the best match for the playing file first. A film's pack says in
+ * its description which releases it holds, so the order follows the same scoring as the subtitles themselves; where that
+ * says nothing the newest goes first. At most MAX_PACKS.
+ */
+export function choosePacks(items: SubsroItem[], query: Pick<SubtitleQuery, 'season' | 'episode'>, languages: string[], filename?: string | null): SubsroItem[] {
   const isSeries = query.season != null && query.episode != null;
   const wanted = items.filter(i => {
     const lang = LANGUAGES[(i.language || '').toLowerCase()];
@@ -61,10 +80,26 @@ export function choosePacks(items: SubsroItem[], query: Pick<SubtitleQuery, 'sea
   const chosen = wanted.filter(i => {
     if (!isSeries) return true;
     const seasons = seasonsOf(i);
-    return seasons ? query.season! >= seasons.from && query.season! <= seasons.to : false;
+    if (!seasons || query.season! < seasons.from || query.season! > seasons.to) return false;
+    return !excludesEpisode(i.description, query.episode!);
   });
   const when = (i: SubsroItem) => Date.parse(i.updatedAt || i.createdAt || '') || 0;
-  return chosen.sort((a, b) => when(b) - when(a)).slice(0, MAX_PACKS);
+  const byDate = chosen.slice().sort((a, b) => when(b) - when(a));
+  if (!filename || byDate.length < 2) return byDate.slice(0, MAX_PACKS);
+  // closest to the playing file first (the description is a list of release names; a title alone says little)
+  try {
+    const asItems: RawSubtitleItem[] = byDate.map((i, n) => ({
+      id: String(n), provider: SUBSRO_PROVIDER_ID, providerName: 'Subs.ro', url: '', lang: 'x',
+      release: ((i.description || '').replace(/\s+/g, ' ').trim() || i.title || '').slice(0, 400)
+    }));
+    const ranked = rankSubtitles(asItems, { filename, season: query.season ?? null, episode: query.episode ?? null });
+    if (!ranked.fallback && ranked.items.length === byDate.length) {
+      return ranked.items.map(r => byDate[parseInt(r.id, 10)]).slice(0, MAX_PACKS);
+    }
+  } catch {
+    // the order by date stands
+  }
+  return byDate.slice(0, MAX_PACKS);
 }
 
 /** Episode written in a file name without a full S01E02 marker ("Show - 04", "Show E04") */
@@ -150,34 +185,33 @@ export class SubsroDirectProvider extends BaseSubtitleProvider {
     }
 
     const languages = context.config.languages && context.config.languages.length > 0 ? context.config.languages : ['ron', 'eng'];
-    const packs = choosePacks(items, query, languages);
+    const packs = choosePacks(items, query, languages, query.extra?.filename);
+    const wanted = context.config.maxSubtitles && context.config.maxSubtitles > 0 ? context.config.maxSubtitles : DEFAULT_WANTED_SUBTITLES;
     const out: RawSubtitleItem[] = [];
-    const queue = [...packs];
-    // three packs at a time (each can be a few MB)
-    await Promise.all([0, 1, 2].map(async () => {
-      for (let item = queue.shift(); item; item = queue.shift()) {
-        try {
-          const pack = await this.packOf(item, apiKey, signal);
-          const lang = LANGUAGES[(item.language || '').toLowerCase()];
-          for (const entry of entriesFor(pack.entries, query)) {
-            const release = path.basename(entry).replace(/\.srt$/i, '');
-            out.push({
-              id: `${SUBSRO_PROVIDER_ID}-${item.id}-${shortHash(entry)}`,
-              provider: this.id,
-              providerName: 'Subs.ro',
-              url: `/proxy/download/subsro/${encodeURIComponent(String(item.id))}/${entryToken(entry)}.srt`,
-              lang,
-              release,
-              format: 'srt',
-              hearingImpaired: /\[cc\]|\.cc\.|\[hi\]|\(hi\)|hearing/i.test(release)
-            });
-          }
-        } catch (err) {
-          if (signal.aborted) return;
-          Logger.warn(`Subs.ro pack ${item.id} could not be read`, { reason: err instanceof Error ? err.message : String(err) });
+    // the best pack first; the next ones only while there are too few subtitles (a pack kept already costs nothing)
+    for (const item of packs) {
+      if (out.length >= wanted || signal.aborted) break;
+      try {
+        const pack = await this.packOf(item, apiKey, signal);
+        const lang = LANGUAGES[(item.language || '').toLowerCase()];
+        for (const entry of entriesFor(pack.entries, query)) {
+          const release = path.basename(entry).replace(/\.srt$/i, '');
+          out.push({
+            id: `${SUBSRO_PROVIDER_ID}-${item.id}-${shortHash(entry)}`,
+            provider: this.id,
+            providerName: 'Subs.ro',
+            url: `/proxy/download/subsro/${encodeURIComponent(String(item.id))}/${entryToken(entry)}.srt`,
+            lang,
+            release,
+            format: 'srt',
+            hearingImpaired: /\[cc\]|\.cc\.|\[hi\]|\(hi\)|hearing/i.test(release)
+          });
         }
+      } catch (err) {
+        if (signal.aborted) break;
+        Logger.warn(`Subs.ro pack ${item.id} could not be read`, { reason: err instanceof Error ? err.message : String(err) });
       }
-    }));
+    }
     return out;
   }
 }
