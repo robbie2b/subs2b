@@ -11,7 +11,7 @@ import { rankSubtitles } from '../utils/scorer';
 import { subtitleLabel } from '../utils/subtitleLabel';
 import { recordDebug, DebugTopEntry } from '../utils/debugLog';
 import { recordUsage } from '../storage/usageStore';
-import { needsReference, fromFileGroup, archivePickParams as buildArchivePickParams } from './alignment';
+import { needsReference, fromFileGroup, getReferences, archivePickParams as buildArchivePickParams } from './alignment';
 import { encodeAlignedToken, encodeFallbackToken, AlignedToken, MAX_ALTERNATIVES, MAX_BACKUPS } from './alignedToken';
 import { prepareAligned } from './alignedPrepare';
 import { keepAlive } from '../utils/background';
@@ -146,6 +146,13 @@ export async function getAggregatedSubtitles(
   const requestStart = Date.now();
   const film = filmLabel(query.id, query.extra?.filename);
   activity('request', film, `Subtitle request: ${query.type} ${query.id}${query.extra?.filename ? '' : ' (the player sent no file name)'}`, { step: 'request', state: 'done', ms: 0 });
+  // The timing references for Subsync are searched now, in parallel with the list: nearly every subtitle needs them,
+  // and they depend only on the content and the file (the later preparation shares this search through the same key).
+  // Shared and remembered by `getReferences`, which reads the stored ones first.
+  if (config.subsync !== false && configId && query.extra?.filename && !query.allLanguages) {
+    const refQuery = parseSubtitleQuery(query.type, query.id, { filename: query.extra.filename });
+    keepAlive(getReferences({ query: refQuery, config, baseUrl, filename: query.extra.filename }).catch(() => []));
+  }
   // The file hash changes which OpenSubtitles results are flagged as exact matches, so it is part of the key
   const cacheKey = searchCacheKey(query, config);
 

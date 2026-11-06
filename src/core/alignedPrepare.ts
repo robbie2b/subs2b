@@ -8,7 +8,7 @@ import { isBlocked, noteRefusal, statusOf } from '../utils/sourceHealth';
 import { noteBrokenFile, isBrokenFileReason } from '../utils/brokenFiles';
 import { noteDownloadFailure } from '../utils/downloadJournal';
 import { AlignedToken, linksOf } from './alignedToken';
-import { getReferences, fitsReferences, AlignmentResult, Reference } from './alignment';
+import { getReferences, refreshReferences, referencesCameFromStore, fitsReferences, AlignmentResult, Reference } from './alignment';
 import { alignInWorker, referencesAgreeInWorker } from './alignPool';
 import { activity, filmLabel, fmtMs } from '../utils/activity';
 import {
@@ -236,7 +236,18 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
     });
   const served = Promise.all([loading, references]).then(async ([loaded, refs]) => {
     const computeStart = Date.now();
-    const s = await alignOrReplace(loaded.text, loaded.release, token.f, refs, loaded.alternatives, hosts, baseUrl);
+    let s = await alignOrReplace(loaded.text, loaded.release, token.f, refs, loaded.alternatives, hosts, baseUrl);
+    // Stored references that fit nothing may be for another cut of the film: new ones are searched once and the
+    // subtitle is checked again (Avatar: the stored ones said 0%, fresh ones 88-92%)
+    if (!fitsReferences(s.result) && !s.replacedBy && /fits well enough|disagree|single reference/.test(s.result.decision.reason) && referencesCameFromStore(refs)) {
+      activity('sync', film, 'The stored timing references fit nothing: searching new ones (once)');
+      const fresh = await refreshReferences({ query, config, baseUrl, filename: token.f }).catch(() => null);
+      if (fresh) {
+        activity('sync', film, `${fresh.length} new timing reference${fresh.length === 1 ? '' : 's'} found: checking the subtitle again`);
+        s = await alignOrReplace(loaded.text, loaded.release, token.f, fresh, loaded.alternatives, hosts, baseUrl);
+        s.result.note = ['stored references fitted nothing: checked again with new ones', s.result.note].filter(Boolean).join('; ');
+      }
+    }
     timing.compute = Date.now() - computeStart;
     if (loaded.replacedBy && !s.replacedBy) {
       s.replacedBy = loaded.replacedBy;

@@ -288,6 +288,33 @@ export function referenceKey(id: string, filename: string): string {
  * References for one episode/file kind: from memory, else from the database (kept once found, so they are never
  * downloaded twice), else searched and downloaded. Shared by concurrent requests.
  */
+/** Reference lists that came from the database (not searched just now) */
+const storedLists = new WeakSet<Reference[]>();
+export function referencesCameFromStore(refs: Reference[]): boolean {
+  return storedLists.has(refs);
+}
+
+/** When the references of a key were last searched again because the stored ones fitted nothing */
+const refreshedAt = new Map<string, number>();
+const REFRESH_COOLDOWN_MS = 60 * 60 * 1000;
+
+/**
+ * The stored references fitted nothing: they may be for another cut of the film (a key does not tell everything the
+ * file name leaves out). Searches new ones once (not again within an hour for the same key) and keeps them when
+ * something was found. Null when it was done recently or nothing new was found.
+ */
+export async function refreshReferences(ctx: ReferenceContext): Promise<Reference[] | null> {
+  const key = referenceKey(ctx.query.id, ctx.filename);
+  const last = refreshedAt.get(key);
+  if (last && Date.now() - last < REFRESH_COOLDOWN_MS) return null;
+  refreshedAt.set(key, Date.now());
+  const fresh = await buildReferences(ctx);
+  if (fresh.length === 0) return null;
+  storeReferences(key, fresh);
+  referenceCache.set(key, Promise.resolve(fresh));
+  return fresh;
+}
+
 export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
   const key = referenceKey(ctx.query.id, ctx.filename);
   let pending = referenceCache.get(key);
@@ -296,6 +323,7 @@ export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
       if (stored && stored.length) {
         Logger.info(`[SUBSYNC] ${stored.length} stored reference(s) for ${ctx.query.id} (nothing downloaded)`, { references: stored.map(r => r.label) });
         activity('sync', filmLabel(ctx.query.id, ctx.filename), `${stored.length} stored timing reference${stored.length === 1 ? '' : 's'} found: nothing to download`);
+        storedLists.add(stored);
         return stored;
       }
       return buildReferences(ctx).then(refs => { storeReferences(key, refs); return refs; });

@@ -351,7 +351,15 @@ async function main() {
       return q.allLanguages ? providerItems : providerItems.filter(i => i.lang === 'ron');
     };
     const q = parseSubtitleQuery('series', 'tt13146488:1:1', { filename: CRU });
-    const list = await getAggregatedSubtitles(q, stored, baseUrl, uuid);
+    let allLanguageSearches = 0;
+    const baseExecute = (OpenSubtitlesProvider.prototype as any).executeSearch;
+    (OpenSubtitlesProvider.prototype as any).executeSearch = async (qq: SubtitleQuery) => { if (qq.allLanguages) allLanguageSearches++; return baseExecute(qq); };
+    clearReferenceCache();
+    const listPromise = getAggregatedSubtitles(q, stored, baseUrl, uuid);
+    await new Promise(r => setTimeout(r, 5));
+    check('the reference search starts with the list (in parallel), not after it', allLanguageSearches > 0, allLanguageSearches);
+    const list = await listPromise;
+    (OpenSubtitlesProvider.prototype as any).executeSearch = baseExecute;
     const wrapped = list.subtitles.filter(s => s.url.includes('/sub/aligned/'));
     check('BEFORE/AFTER: with only an HD subtitle for a 2160p file, the link is wrapped', list.subtitles.length === 1 && wrapped.length === 1, list.subtitles.map(s => s.url));
     const token = decodeAlignedToken((wrapped[0]?.url.split('/sub/aligned/')[1] || '').replace('.srt', ''));

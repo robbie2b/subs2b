@@ -56,6 +56,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.12 (ramura `vercel`, 2026-11-06; commit local, NEPUSH, deploy doar la cererea utilizatorului):** (1) căutarea referințelor Subsync
+  pornește la T0, în paralel cu lista (`getAggregatedSubtitles` apelează `getReferences`, partajat prin cheie cu `prepareAligned`);
+  în date, playerul cere subtitrarea imediat ce primește lista (`askedAfterMs` ≈ 0), deci nu există marjă: timp până la subtitrare =
+  listă + așteptare (mediană ~4 s, p90 ~13 s înainte). (2) Referințe salvate care nu se potrivesc deloc („no reference fits well
+  enough" / „disagree" / „single reference") sunt căutate din nou o singură dată (`refreshReferences`, cooldown 1 h pe cheie) și
+  subtitrarea se verifică iar; cheia (`referenceKey`) nu conține numele întreg, deci nu vede montaje diferite nemenționate (Avatar:
+  salvate 0%, proaspete 88–92%). Test nou în `test/subsync.test.ts` pentru pornirea la T0; calea de reîmprospătare NU e testată
+  (cere Postgres pentru referințe salvate). Idei rămase: prag dynamic 30, pregătirea episodului următor, plafon pentru calcul.
 - **v1.5.11 (ramura `vercel`, 2026-11-06; cerut de utilizator):** LIVE ACTIVITY nu mai e consolă de text: un card pe fiecare Play, cu o bară
   de 8 puncte (Request, Search, Rank, List sent, References, Compute, Player asked, Delivered; punctul activ pulsează, bara albastră
   în lucru, VERDE o singură culoare când a reușit, galben dacă s-a terminat cu probleme) și dedesubt câte o bulină pe sursă (verde
