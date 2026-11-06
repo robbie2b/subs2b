@@ -20,7 +20,8 @@ import { globalSubtitleCache } from './utils/cache';
 import { downloadFailures } from './utils/downloadJournal';
 import { createFormatTestHandler, setFormatTest, formatTestUntil } from './proxy/formatTest';
 import { Logger, getLogLines } from './utils/logger';
-import { getActivity } from './utils/activity';
+import { getActivity, attachActivitySink } from './utils/activity';
+import { persistActivity, readStoredActivity } from './storage/activityStore';
 import { configStorage, isUuid } from './storage/configStore';
 import { parseSubtitleQuery, getAggregatedSubtitles, searchCacheKey } from './core/aggregator';
 import { SUPPORTED_LANGUAGES } from './utils/languages';
@@ -128,6 +129,8 @@ const KEY_VALIDATORS: Record<string, (apiKey: string) => Promise<KeyValidation>>
 
 export function createServer(): express.Application {
   const app = express();
+  // the Live activity steps are saved too, so every instance shows all of them
+  attachActivitySink(persistActivity);
 
   // Render (and most hosts) sit behind a reverse proxy: needed for correct client IPs / rate limiting
   app.set('trust proxy', 1);
@@ -589,7 +592,11 @@ export function createServer(): express.Application {
     const key = await requireStoredConfig(req, res);
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
-    res.json(getActivity(parseInt(String(req.query.after || '0'), 10) || 0, typeof req.query.instance === 'string' ? req.query.instance : undefined));
+    const after = parseInt(String(req.query.after || '0'), 10) || 0;
+    const instance = typeof req.query.instance === 'string' ? req.query.instance : undefined;
+    // the saved steps (every instance) when there is a database; else the memory of this instance
+    const stored = await readStoredActivity(instance === 'db' ? after : 0);
+    res.json(stored || getActivity(after, instance));
   });
 
   // Which OpenSubtitles subtitles exist for an exact file hash, in ALL languages

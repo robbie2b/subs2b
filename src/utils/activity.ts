@@ -54,8 +54,17 @@ export function fmtMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)} s` : `${Math.round(ms)} ms`;
 }
 
+let sink: ((event: ActivityEvent) => void) | null = null;
+
+/** Every step is also handed to this (the database store), so all server instances can show it */
+export function attachActivitySink(save: (event: ActivityEvent) => void): void {
+  sink = save;
+}
+
 export function activity(kind: ActivityKind, film: string, text: string, meta?: ActivityMeta): void {
-  buffer.push({ seq: nextSeq++, at: new Date().toISOString(), kind, film, text, ...(meta ? { meta } : {}) });
+  const event: ActivityEvent = { seq: nextSeq++, at: new Date().toISOString(), kind, film, text, ...(meta ? { meta } : {}) };
+  buffer.push(event);
+  try { sink?.(event); } catch { /* the page must never break a search */ }
   if (buffer.length > MAX_EVENTS) buffer.shift();
 }
 
