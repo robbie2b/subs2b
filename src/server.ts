@@ -113,6 +113,22 @@ const KEY_VALIDATORS: Record<string, (apiKey: string) => Promise<KeyValidation>>
     }
   },
 
+  // Subs.ro: the quota check answers for a good key and does not count as a request
+  async subsrodirect(apiKey) {
+    try {
+      const res = await axios.get('https://api.subs.ro/v1.0/quota', {
+        headers: { 'X-Subs-Api-Key': apiKey, Accept: 'application/json', 'User-Agent': USER_AGENT },
+        timeout: 8000,
+        validateStatus: () => true
+      });
+      if (res.status === 200 && res.data?.quota) return { valid: true };
+      if (res.status === 401 || res.status === 403) return { valid: false, error: 'Subs.ro did not accept this key.' };
+      return { valid: false, error: `Subs.ro answered HTTP ${res.status}.` };
+    } catch (err: any) {
+      return { valid: false, error: `Could not reach Subs.ro: ${err?.code || err?.message || 'error'}.` };
+    }
+  },
+
   async subsource(apiKey) {
     if (apiKey.length < 6) {
       return { valid: false, error: 'Invalid API key.' };

@@ -69,7 +69,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   + 2 pachete, 8 subtitrări cu nume reale, 1,7 s) și pe Postgres 16. Test: `test/subsroDirect.test.ts`. După deploy: utilizatorul pune cheia în
   Services, pornește „Subs.ro (direct)" și oprește addonul Subs.ro din Addons ca să nu fie duble. Testele mele consumă din cota lui: acum 12 azi
   (105 → 117).
-- **v1.5.14 = Subs.ro direct (vezi mai jos, deploy 2026-11-06).** **v1.5.12–v1.5.13 (ramura `vercel`, 2026-11-06; deploy la cererea utilizatorului):** (1.5.13 = referințe mai rapide, memoria „fără referințe", prag 30, `connect.json`) (1) căutarea referințelor Subsync
+- **v1.5.15 = fix: validarea cheii Subs.ro în Services (lipsea → X roșu) și linkul corect https://subs.ro/utilizator/api. v1.5.14 = Subs.ro direct (vezi mai jos, deploy 2026-11-06).** **v1.5.12–v1.5.13 (ramura `vercel`, 2026-11-06; deploy la cererea utilizatorului):** (1.5.13 = referințe mai rapide, memoria „fără referințe", prag 30, `connect.json`) (1) căutarea referințelor Subsync
   pornește la T0, în paralel cu lista (`getAggregatedSubtitles` apelează `getReferences`, partajat prin cheie cu `prepareAligned`);
   în date, playerul cere subtitrarea imediat ce primește lista (`askedAfterMs` ≈ 0), deci nu există marjă: timp până la subtitrare =
   listă + așteptare (mediană ~4 s, p90 ~13 s înainte). (2) Referințe salvate care nu se potrivesc deloc („no reference fits well

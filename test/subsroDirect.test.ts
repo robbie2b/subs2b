@@ -125,6 +125,29 @@ async function main(): Promise<void> {
   check('a pack id that is not a number is refused', bad.status === 400, bad.status);
   server.close();
 
+  // --- the key check of the Services page (the quota check: free) ---
+  const { createServer } = await import('../src/server');
+  const appUnderTest = createServer();
+  const srv2 = http.createServer(appUnderTest);
+  await new Promise<void>(r => srv2.listen(0, '127.0.0.1', r));
+  const base2 = `http://127.0.0.1:${(srv2.address() as AddressInfo).port}`;
+  const realGet2 = axios.get;
+  (axios as any).get = async (url: string, opts?: any) => {
+    if (url.startsWith(base2)) return realGet2(url, opts);
+    if (url.endsWith('/v1.0/quota')) {
+      if (opts?.headers?.['X-Subs-Api-Key'] === 'good-key-12345') return { status: 200, data: { quota: { used: 1, remaining: 299, total: 300 } } };
+      return { status: 401, data: { message: 'bad key' } };
+    }
+    throw new Error('unexpected ' + url);
+  };
+  const post = (key: string) => axios.request({ url: `${base2}/api/validate-key/subsrodirect`, method: 'POST', data: { apiKey: key }, validateStatus: () => true });
+  const okKey = await post('good-key-12345');
+  const badKey = await post('wrong-key');
+  (axios as any).get = realGet2;
+  check('a good Subs.ro key is accepted by the Services page check', okKey.status === 200 && okKey.data?.valid === true, okKey.data);
+  check('a wrong Subs.ro key is refused with a reason', badKey.data?.valid === false && /did not accept/.test(badKey.data?.error || ''), badKey.data);
+  srv2.close();
+
   if (failed) { console.error(`${failed} Subs.ro check(s) failed`); process.exit(1); }
   console.log('All Subs.ro checks passed');
   process.exit(0);

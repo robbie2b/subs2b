@@ -114,7 +114,7 @@ const SERVICES_META = {
   subsrodirect: {
     id: 'subsrodirect',
     name: 'Subs.ro (direct)',
-    helpText: 'Your free key is on <a href="https://subs.ro/api" target="_blank" rel="noopener noreferrer">subs.ro/api</a> (300 requests a day). Searches the packs of the season being played only and keeps what it fetches, so it spends far fewer requests than the Subs.ro addon. Turn the Subs.ro addon off when this one is on.'
+    helpText: 'Your free key is on <a href="https://subs.ro/utilizator/api" target="_blank" rel="noopener noreferrer">subs.ro/utilizator/api</a> (300 requests a day). Searches the packs of the season being played only and keeps what it fetches, so it spends far fewer requests than the Subs.ro addon. Turn the Subs.ro addon off when this one is on.'
   },
   wyzie: {
     id: 'wyzie',

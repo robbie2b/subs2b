@@ -10,7 +10,7 @@ import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
 
 /**
- * Subs.ro through its own API (https://api.subs.ro/v1.0, docs at subs.ro/api; a free key, 300 requests a day).
+ * Subs.ro through its own API (https://api.subs.ro/v1.0, key from subs.ro/utilizator/api, docs at subs.ro/api; a free key, 300 requests a day).
  *
  * A search by IMDb id returns one entry per archive ("pack": a film, or a season, or several seasons), not one per
  * subtitle; the subtitles are the .srt files inside, one folder per release. The ideas follow the community Subs.ro
