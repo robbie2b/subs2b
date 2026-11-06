@@ -95,7 +95,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   a doua listă a aceluiași film +0. Deci un titlu NOU costă ~4 cereri la Subs.ro (nu 5–9 per Play), iar realegerile lui Nuvio nu costă;
   la 300/zi încap ~75 de titluri noi pe zi, mai mult decât uzul normal (~15–20). Integrarea directă (căutare 1 + pachet 1 = ~2 per titlu) ar tăia
   la jumătate, dar am renunțat deocamdată (pierdem numele de release din addon, sau descărcăm pachetul de 16 MB la fiecare căutare). Cheia
-  Subs.ro a utilizatorului e în mediul cloud ca secret de rețea pentru `api.subs.ro` (injectat de proxy, nu se vede); `api.subs.ro` e în lista
+  **Împărțirea (a doua măsurătoare, film nou „The Fall", cota citită la 120 ms):** căutarea prin addon = +2 la Subs.ro (la 1,2 s), prima
+  descărcare = +1 (la 1,6 s); Weapons dăduse +4 în total (variază cu numărul de pachete). Subs2b a trimis addonului exact 2 cereri (căutare +
+  pregătirea primei subtitrări); restul îl face addonul. Un titlu nou costă deci 3–4, iar un titlu deja atins (de oricine: cache-ul addonului
+  e comun) costă 0. Panoul lor număra 105 la ~19 liste. Total consumat de testele mele azi: 9 (105 → 114).
+  Cheia Subs.ro a utilizatorului e în mediul cloud ca secret de rețea pentru `api.subs.ro` (injectat de proxy, nu se vede); `api.subs.ro` e în lista
   permisă. Cererile mele de test au consumat 6 din cotă (105 → 111). (4) Live activity: când prima subtitrare e de la grupul
   fișierului (link direct, nu trece prin server) lista are `meta.direct`, iar cardul arată „sent as it is" la Player asked/Delivered
   și se închide după 4 s (înainte părea că „nu s-a întâmplat nimic"). Idei rămase: prag dynamic 30, pregătirea episodului următor, plafon pentru calcul.
