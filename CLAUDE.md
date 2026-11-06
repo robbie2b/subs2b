@@ -57,6 +57,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.23 — plafon de 12 s pentru așteptarea Subsync pe Vercel (era 45 s).** Din codul Nuvio (TV și telefon, citit): descărcarea unei subtitrări pentru
+  auto-sync are timeout 15 s; peste asta Nuvio n-are ce arăta din verificare. Telefonul (NuvioMobile 0.6.8-beta): la start alege subtitrarea preferată și, cât timp
+  indexează pista din fișier, descarcă în paralel până la 6 alternative din aceeași limbă (de aici 1–3 cereri pe Play) și le compară cu pista; la alegerea manuală
+  verifică doar subtitrarea aleasă. Nuvio compară varianta deja sincronizată de noi, deci nu se adună două corecturi. `SUBSYNC_MAX_WAIT_MS` suprascrie plafonul.
 - **v1.5.22 — așteptare după riscul de schimbare (2026-11-06, „eficientizăm și mai tare").** Date (413 cereri clasate): Subs.ro (addonul) câștigă 84% din
   cereri (342/405), RegieLive 4%, PRO 3%, OpenSubtitles 3%, restul <2%. Măsurat pe 21 de liste de azi: lista mediană 1,5 s, 14 din 21 oprite devreme;
   decizie Subsync gata la mediană 0,7 s (p90 2,8 s; la început 2,5 s / 7,5 s); jucătorul a așteptat mediană 0,6 s. Rămâneau listele de 6 s când cel mai

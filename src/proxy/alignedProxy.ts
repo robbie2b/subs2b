@@ -14,7 +14,9 @@ import { activity, filmLabel, fmtMs } from '../utils/activity';
  * when it takes several seconds; only past this safety limit (something is stuck) the subtitle goes out unchanged.
  */
 // (on Vercel the function is cut at 60 s: the wait ends before that, so the player still gets the original subtitle)
-const maxWaitMs = (): number => parseInt(process.env.SUBSYNC_MAX_WAIT_MS || '', 10) || (process.env.VERCEL ? 45000 : 60000);
+// Nuvio (phone and TV) gives up on a subtitle download after 15 s and then has nothing to show from the check; on Vercel the
+// original goes out after 12 s at the latest (the computation takes under 3 s nine times in ten). SUBSYNC_MAX_WAIT_MS overrides.
+const maxWaitMs = (): number => parseInt(process.env.SUBSYNC_MAX_WAIT_MS || '', 10) || (process.env.VERCEL ? 12000 : 60000);
 
 const sleep = (ms: number) => new Promise<void>(resolve => { const t = setTimeout(resolve, ms); t.unref?.(); });
 
