@@ -78,8 +78,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   listează release-urile din el, deci se ordonează cu același scorer), și următorul doar cât timp sunt prea puține subtitrări (`maxSubtitles`, altfel
   5); max 3 pachete; un pachet de serial a cărui descriere spune doar alte episoade („Ep.1-4") se omite (`excludesEpisode`). Un film nou: 1 căutare +
   1 pachet = 2 cereri când primul pachet are destule. Debug: `/debug/subsro.json?imdb=tt…` arată ce a păstrat căutarea (pachete, descrieri, fișiere),
-  fără cereri la Subs.ro. Observat la The Greatest Showman: pachetele de film sunt mici (0,1–0,3 MB, 1–8 fișiere), descrierile lor listează numele release-urilor.
-- **v1.5.18 = pachetele Subs.ro se deschid pe rând, cel mai potrivit întâi (2 cereri la un film nou). v1.5.16 = Subs.ro (direct) ia locul addonului Subs.ro în Priority. v1.5.15 = fix: validarea cheii Subs.ro în Services (lipsea → X roșu) și linkul corect https://subs.ro/utilizator/api. v1.5.14 = Subs.ro direct (vezi mai jos, deploy 2026-11-06).** **v1.5.12–v1.5.13 (ramura `vercel`, 2026-11-06; deploy la cererea utilizatorului):** (1.5.13 = referințe mai rapide, memoria „fără referințe", prag 30, `connect.json`) (1) căutarea referințelor Subsync
+  fără cereri la Subs.ro.
+  **v1.5.19:** Peacemaker S01E01 cu două fișiere video (2026-11-06 14:09): cota 124→127 = 1 căutare + 2 pachete (cele două pachete „Sezonul 1" ale serialului,
+  ambele păstrate), TOATE la prima redare; a doua redare (alt fișier) a costat 0 (348 ms, din păstrate). Pachetul cel mai bun avea doar 2 fișiere pentru
+  episod și ținta era 3 → s-a deschis și al doilea. Acum ținta e 2 subtitrări (`WANTED_SUBTITLES`), independent de `maxSubtitles`: un episod nou costă de regulă
+  1 căutare + 1 pachet. Observat la The Greatest Showman: pachetele de film sunt mici (0,1–0,3 MB, 1–8 fișiere), descrierile lor listează numele release-urilor.
+- **v1.5.19 = ținta de 2 subtitrări pe sursă (Subs.ro: de regulă 2 cereri la un titlu nou). v1.5.18 = pachetele Subs.ro se deschid pe rând, cel mai potrivit întâi (2 cereri la un film nou). v1.5.16 = Subs.ro (direct) ia locul addonului Subs.ro în Priority. v1.5.15 = fix: validarea cheii Subs.ro în Services (lipsea → X roșu) și linkul corect https://subs.ro/utilizator/api. v1.5.14 = Subs.ro direct (vezi mai jos, deploy 2026-11-06).** **v1.5.12–v1.5.13 (ramura `vercel`, 2026-11-06; deploy la cererea utilizatorului):** (1.5.13 = referințe mai rapide, memoria „fără referințe", prag 30, `connect.json`) (1) căutarea referințelor Subsync
   pornește la T0, în paralel cu lista (`getAggregatedSubtitles` apelează `getReferences`, partajat prin cheie cu `prepareAligned`);
   în date, playerul cere subtitrarea imediat ce primește lista (`askedAfterMs` ≈ 0), deci nu există marjă: timp până la subtitrare =
   listă + așteptare (mediană ~4 s, p90 ~13 s înainte). (2) Referințe salvate care nu se potrivesc deloc („no reference fits well

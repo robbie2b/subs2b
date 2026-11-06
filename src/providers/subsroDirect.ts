@@ -22,8 +22,12 @@ import { USER_AGENT } from '../config/version';
 export const SUBSRO_API = 'https://api.subs.ro/v1.0';
 export const SUBSRO_PROVIDER_ID = 'subsrodirect';
 const MAX_PACKS = 3;
-/** Packs are opened one after the other, the best first, until this many subtitles were found (each opened pack is a request) */
-const DEFAULT_WANTED_SUBTITLES = 5;
+/**
+ * Packs are opened one after the other, the best first, until this many subtitles were found (each opened pack is a
+ * request). Two releases of the episode are enough: the player gets three subtitles in all, from every source, and the
+ * timing check settles the rest.
+ */
+const WANTED_SUBTITLES = 2;
 const MAX_PACK_BYTES = 60 * 1024 * 1024;
 /** Below this many requests left today the source is not used any more (the quota check itself is free) */
 const QUOTA_RESERVE = 15;
@@ -186,7 +190,7 @@ export class SubsroDirectProvider extends BaseSubtitleProvider {
 
     const languages = context.config.languages && context.config.languages.length > 0 ? context.config.languages : ['ron', 'eng'];
     const packs = choosePacks(items, query, languages, query.extra?.filename);
-    const wanted = context.config.maxSubtitles && context.config.maxSubtitles > 0 ? context.config.maxSubtitles : DEFAULT_WANTED_SUBTITLES;
+    const wanted = WANTED_SUBTITLES;
     const out: RawSubtitleItem[] = [];
     // the best pack first; the next ones only while there are too few subtitles (a pack kept already costs nothing)
     for (const item of packs) {

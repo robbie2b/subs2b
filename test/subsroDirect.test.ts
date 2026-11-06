@@ -90,14 +90,14 @@ async function main(): Promise<void> {
 
   const first = await provider.searchWithStatus(series('tt0182576', 4, 20), context);
   const costly = calls.filter(c => !c.endsWith('/quota'));
-  check('a new series: one search and the two packs of season 4, none of the other seasons', costly.length === 3 && costly[0].startsWith('/search/') && costly.slice(1).every(c => /\/subtitle\/(2|3)\/download/.test(c)), costly);
-  check('every file of the episode is a subtitle, named as its release', !first.failed && first.items.length === 4 && first.items.some(i => /PHOENiX/.test(i.release || '')) && first.items.some(i => /VELUN/.test(i.release || '')), first.items.map(i => i.release));
+  check('a new series: one search and one pack of season 4 (it holds two releases of the episode), none of the other seasons', costly.length === 2 && costly[0].startsWith('/search/') && /\/subtitle\/(2|3)\/download/.test(costly[1]), costly);
+  check('every file of the episode is a subtitle, named as its release', !first.failed && first.items.length === 2 && first.items.some(i => /PHOENiX/.test(i.release || '')) && first.items.some(i => /VELUN/.test(i.release || '')), first.items.map(i => i.release));
   check('the links are this server\'s own (no key in them)', first.items.every(i => i.url.startsWith('/proxy/download/subsro/') && i.url.endsWith('.srt') && !/test-key/.test(i.url)), first.items[0]?.url);
   check('the provider is Subs.ro, in Romanian', first.items.every(i => i.lang === 'ron' && i.providerName === 'Subs.ro'));
 
   calls.length = 0;
   const again = await provider.searchWithStatus(series('tt0182576', 4, 21), context);
-  check('the next episode of the season costs no request (the search and the packs are kept)', calls.filter(c => !c.endsWith('/quota')).length === 0 && again.items.length === 2 && again.items.every(i => /S04E21/.test(i.release || '')), { calls, n: again.items.length });
+  check('the next episode costs at most the other pack, not a new search (the search and the first pack are kept)', calls.filter(c => !c.endsWith('/quota')).length === 1 && /\/subtitle\/(2|3)\/download/.test(calls.filter(c => !c.endsWith('/quota'))[0]) && again.items.length === 2 && again.items.every(i => /S04E21/.test(i.release || '')), { calls, n: again.items.length });
 
   calls.length = 0;
   const refs = await provider.searchWithStatus({ ...series('tt0182576', 4, 20), allLanguages: true }, context);
