@@ -58,8 +58,10 @@ export async function databaseActivity(pool: Pool): Promise<unknown> {
     ORDER BY xact_start NULLS LAST
     LIMIT 50`);
   const tables = await pool.query(`
-    SELECT t AS table, to_regclass('public.' || t) IS NOT NULL AS exists
-    FROM unnest(ARRAY['configurations', 'usage_events', 'subsync_decisions', 'subsync_references', 'source_blocks', 'download_failures']) AS t`);
+    SELECT t AS table, to_regclass('public.' || t) IS NOT NULL AS exists,
+           CASE WHEN to_regclass('public.' || t) IS NULL THEN NULL ELSE round(pg_total_relation_size(to_regclass('public.' || t)) / 1048576.0, 1) END AS mb,
+           CASE WHEN to_regclass('public.' || t) IS NULL THEN NULL ELSE (SELECT reltuples::bigint FROM pg_class WHERE oid = to_regclass('public.' || t)) END AS approx_rows
+    FROM unnest(ARRAY['configurations', 'usage_events', 'subsync_decisions', 'subsync_references', 'source_blocks', 'download_failures', 'activity_events']) AS t`);
   return {
     pool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount },
     tables: tables.rows,
