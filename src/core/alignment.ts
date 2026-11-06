@@ -8,7 +8,7 @@ import { speechFlags, TimedCue } from '../utils/subsync';
 import { MIN_REFERENCE_CUES, Reference } from './alignDecision';
 import { executeParallelSearch } from '../providers';
 import { activity, filmLabel } from '../utils/activity';
-import { loadStoredReferences, storeReferences } from '../storage/referenceStore';
+import { loadStoredReferences, storeReferences, noReferencesKnown, storeNoReferences } from '../storage/referenceStore';
 import { serverCanDownload } from '../proxy/subtitleProxy';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
@@ -326,7 +326,14 @@ export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
         storedLists.add(stored);
         return stored;
       }
-      return buildReferences(ctx).then(refs => { storeReferences(key, refs); return refs; });
+      // another instance searched lately and found nothing: no new search (it would only make the player wait)
+      return noReferencesKnown(key).then(none => {
+        if (none) {
+          activity('warn', filmLabel(ctx.query.id, ctx.filename), 'No timing references: a search a moment ago found none (not searching again for 15 min)', { step: 'references', state: 'warn' });
+          return [] as Reference[];
+        }
+        return buildReferences(ctx).then(refs => { if (refs.length) storeReferences(key, refs); else storeNoReferences(key); return refs; });
+      });
     }).then(refs => {
       // "nothing found" is remembered for a shorter time, so a later try can succeed
       if (refs.length === 0) referenceCache.set(key, pending!, { ttl: 15 * 60 * 1000 });

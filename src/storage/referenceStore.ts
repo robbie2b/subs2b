@@ -85,6 +85,43 @@ export async function loadStoredReferences(key: string): Promise<Reference[] | n
   }
 }
 
+/** "Nothing found" is remembered only this long: new subtitles may appear */
+const NO_REFERENCES_MINUTES = 15;
+
+/** Was a search for these references made lately (by any instance) and found nothing? Never throws. */
+export async function noReferencesKnown(key: string): Promise<boolean> {
+  try {
+    if (!(await ensureTable())) return false;
+    const pool = await configStorage.getPool();
+    const res = await pool!.query(
+      `SELECT 1 FROM subsync_references WHERE ref_key = $1 AND created_at > NOW() - INTERVAL '${NO_REFERENCES_MINUTES} minutes'`,
+      ['none|' + key]
+    );
+    return res.rows.length > 0;
+  } catch (err) {
+    Logger.error('Could not read the "no references" mark', err);
+    return false;
+  }
+}
+
+/** Remembers that a search found no references, so the other server instances need not search again */
+export function storeNoReferences(key: string): void {
+  keepAlive((async () => {
+    try {
+      if (!(await ensureTable())) return;
+      const pool = await configStorage.getPool();
+      await pool!.query(
+        `INSERT INTO subsync_references (ref_key, data) VALUES ($1, $2)
+         ON CONFLICT (ref_key) DO UPDATE SET created_at = NOW()`,
+        ['none|' + key, packReferences([])]
+      );
+      if (Math.random() < 0.05) await pool!.query(`DELETE FROM subsync_references WHERE ref_key LIKE 'none|%' AND created_at < NOW() - INTERVAL '1 day'`);
+    } catch (err) {
+      Logger.error('Could not save the "no references" mark', err);
+    }
+  })());
+}
+
 /** Keeps the references (only a non-empty set). Never throws and never blocks the response. */
 export function storeReferences(key: string, refs: Reference[]): void {
   if (refs.length === 0) return;

@@ -72,7 +72,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   sau făceau un al doilea card): `storage/activityStore.ts`, tabela `activity_events` (RLS pornit), scrisă în loturi la ~200 ms (un
   INSERT pe lot, nu pe pas), păstrată 24 h; `activity.json` citește din DB (`instance` = „db", cursorul = id) și cade pe memorie fără DB.
   `attachActivitySink` în `createServer`. Pagina unește un card făcut din pași sosiți înaintea lui „request" cu acela. Verificat pe
-  Postgres 16 local (30 de pași = 1 lot, citire completă și incrementală); netestat pe Supabase. (4) Live activity: când prima subtitrare e de la grupul
+  Postgres 16 local (30 de pași = 1 lot, citire completă și incrementală); netestat pe Supabase.
+  (6) „Fără referințe" ținut minte în DB 15 min (`noReferencesKnown` / `storeNoReferences`, rând `none|<cheie>` în `subsync_references`):
+  înainte, o instanță care nu găsea referințe nu spunea celorlalte, iar fiecare subtitrare cerută de Nuvio mai căuta 3 s degeaba
+  (Avatar: The Last Airbender, 2160p WEB, nu există referințe). Verificat pe Postgres 16 local. NEDEPLOYAT (comis local, 2026-11-06). (4) Live activity: când prima subtitrare e de la grupul
   fișierului (link direct, nu trece prin server) lista are `meta.direct`, iar cardul arată „sent as it is" la Player asked/Delivered
   și se închide după 4 s (înainte părea că „nu s-a întâmplat nimic"). Idei rămase: prag dynamic 30, pregătirea episodului următor, plafon pentru calcul.
 - **v1.5.11 (ramura `vercel`, 2026-11-06; cerut de utilizator):** LIVE ACTIVITY nu mai e consolă de text: un card pe fiecare Play, cu o bară
