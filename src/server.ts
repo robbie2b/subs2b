@@ -22,6 +22,7 @@ import { createFormatTestHandler, setFormatTest, formatTestUntil } from './proxy
 import { Logger, getLogLines } from './utils/logger';
 import { getActivity, attachActivitySink } from './utils/activity';
 import { persistActivity, readStoredActivity } from './storage/activityStore';
+import { handleSubsroDownload } from './proxy/subsroDownload';
 import { installRequestCounter, attachRequestCountSink, memoryRequestCounts } from './utils/requestCounter';
 import { saveRequestCounts, readRequestCounts } from './storage/requestCountStore';
 import { configStorage, isUuid } from './storage/configStore';
@@ -726,6 +727,7 @@ export function createServer(): express.Application {
   // /sub/proxy/:data and /proxy/subtitle/:data  legacy links with a base64 URL
   app.get(['/sub/proxy', '/sub/proxy/:data', '/proxy/subtitle/:data'], handleUnifiedSubtitleProxy);
   app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
+  app.get('/proxy/download/subsro/:packId/:entry', handleSubsroDownload);
   app.get('/proxy/download/regielive/:data', handleRegieLiveDownload);
   app.get(['/:config/sub/convert/:data.srt', '/:config/sub/convert.srt'], subtitlesLimiter, handleVttConvert);
   app.get('/:config/sub/aligned/:data.srt', subtitlesLimiter, createAlignedHandler(getBaseUrl));

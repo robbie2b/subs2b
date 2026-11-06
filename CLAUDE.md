@@ -56,6 +56,19 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **Subs.ro direct, serviciu nativ `subsrodirect` (2026-11-06, cerut de utilizator; NEDEPLOYAT):** `providers/subsroDirect.ts`,
+  `storage/subsroStore.ts` (tabela `subsro_cache`, RLS pornit; căutarea 6 h, pachetele până se schimbă `updatedAt`, gzip, partajate între
+  instanțe), `utils/archiveEntries.ts` (listare/extragere ZIP+RAR), `proxy/subsroDownload.ts` (ruta `/proxy/download/subsro/:packId/:entry`,
+  fără cheie în link, servește din pachetul păstrat, 404 dacă nu mai e), rând „Subs.ro (direct)" în Services (grupul „Requires API key", cheia
+  de la subs.ro/api). Cum merge: o căutare `GET api.subs.ro/v1.0/search/imdbid/tt…` (antet `X-Subs-Api-Key`) dă un rezultat pe PACHET (film /
+  sezon / sezoane), nu pe subtitrare; se deschid doar pachetele sezonului cerut (max 4) și fiecare fișier .srt al episodului devine o
+  subtitrare cu numele release-ului (PHOENiX, VELUN...). Addonul comunității (github.com/allecsc/stremio-subs-ro, GPL v3, citit, nu copiat)
+  descarcă TOATE arhivele titlului la fiecare căutare, în cache de 30 min global (max 30 arhive): de aici 3–4 cereri la un film nou și până la
+  1+15 la Family Guy cu cache gol. `/quota` e gratuit: sub 15 cereri rămase azi sursa nu mai e întrebată („daily limit almost reached").
+  Referințele Subsync NU o folosesc (`allLanguages` → [] și dezactivată în `buildReferences`). Testat real (film The Fall, 3 cereri: 1 căutare
+  + 2 pachete, 8 subtitrări cu nume reale, 1,7 s) și pe Postgres 16. Test: `test/subsroDirect.test.ts`. După deploy: utilizatorul pune cheia în
+  Services, pornește „Subs.ro (direct)" și oprește addonul Subs.ro din Addons ca să nu fie duble. Testele mele consumă din cota lui: acum 12 azi
+  (105 → 117).
 - **v1.5.12–v1.5.13 (ramura `vercel`, 2026-11-06; deploy la cererea utilizatorului):** (1.5.13 = referințe mai rapide, memoria „fără referințe", prag 30, `connect.json`) (1) căutarea referințelor Subsync
   pornește la T0, în paralel cu lista (`getAggregatedSubtitles` apelează `getReferences`, partajat prin cheie cu `prepareAligned`);
   în date, playerul cere subtitrarea imediat ce primește lista (`askedAfterMs` ≈ 0), deci nu există marjă: timp până la subtitrare =

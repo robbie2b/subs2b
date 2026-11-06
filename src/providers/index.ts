@@ -5,6 +5,7 @@ import { SubDLProvider } from './subdl';
 import { SubsourceProvider } from './subsource';
 import { RegieLiveProvider } from './regielive';
 import { TitrariProvider } from './titrari';
+import { SubsroDirectProvider } from './subsroDirect';
 import { SubtitrariNoiProvider } from './subtitrariNoi';
 import { YifyProvider } from './yify';
 import { Addic7edProvider } from './addic7ed';
@@ -20,6 +21,7 @@ const BUILTIN_PROVIDERS: SubtitleProvider[] = [
   new SubDLProvider(),
   new SubsourceProvider(),
   new RegieLiveProvider(),
+  new SubsroDirectProvider(),
   new TitrariProvider(),
   new SubtitrariNoiProvider(),
   new YifyProvider(),

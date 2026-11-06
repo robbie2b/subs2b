@@ -17,7 +17,8 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'subtitrarinoi': { enabled: false, apiKey: '' },
     'yify': { enabled: false, apiKey: '' },
     'addic7ed': { enabled: false, apiKey: '' },
-    'wyzie': { enabled: false, apiKey: '' }
+    'wyzie': { enabled: false, apiKey: '' },
+    'subsrodirect': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
@@ -29,7 +30,8 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'subtitrarinoi',
     'yify',
     'addic7ed',
-    'wyzie'
+    'wyzie',
+    'subsrodirect'
   ],
   languages: ['ron', 'eng'],
   allowUnknownLanguages: false,
@@ -198,7 +200,8 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
       'subtitrarinoi': { enabled: false, apiKey: '' },
       'yify': { enabled: false, apiKey: '' },
       'addic7ed': { enabled: false, apiKey: '' },
-      'wyzie': { enabled: false, apiKey: '' }
+      'wyzie': { enabled: false, apiKey: '' },
+      'subsrodirect': { enabled: false, apiKey: '' }
     },
     customAddons,
     providerPriority,

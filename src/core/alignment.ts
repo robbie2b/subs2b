@@ -234,7 +234,7 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
     ...ctx.config,
     providerTimeoutMs: Math.min(ctx.config.providerTimeoutMs || REFERENCE_SEARCH_LIMIT_MS, REFERENCE_SEARCH_LIMIT_MS),
     customAddons: [],
-    providers: { ...ctx.config.providers, regielive: { enabled: false, apiKey: '' } }
+    providers: { ...ctx.config.providers, regielive: { enabled: false, apiKey: '' }, subsrodirect: { enabled: false, apiKey: '' } }
   };
   const load = async (item: RawSubtitleItem): Promise<Reference> => {
     const text = await fetchText(absoluteUrl(item, ctx), REFERENCE_DOWNLOAD_TIMEOUT_MS);
