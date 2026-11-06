@@ -4,6 +4,7 @@ import { getAggregatedSubtitles, parseSubtitleQuery, searchCacheKey } from '../s
 import { globalSubtitleCache } from '../src/utils/cache';
 import { DEFAULT_USER_CONFIG } from '../src/config/userConfig';
 import { UserConfig } from '../src/types/config';
+import { setSourceSpeeds, clearSourceSpeeds } from '../src/utils/sourceSpeed';
 
 let failed = 0;
 function check(label: string, ok: boolean, info?: unknown): void {
@@ -50,9 +51,25 @@ async function main(): Promise<void> {
   const two = await ask('tt0000012', config({ dynamicTimeout: false }));
   check('without the dynamic timeout the list waits for the slow source', two.ms >= 2800 && two.answer.subtitles.length === 2, { ms: two.ms, n: two.answer.subtitles.length });
 
-  // 3. a source ranked higher by the user than the one with the good subtitle is waited for
+  // 3. an exact match does not wait for a source ranked higher by the user
   const three = await ask('tt0000013', config({ providerPriority: ['slow', 'fast'] }));
-  check('a higher-ranked source that has not answered is waited for only a short time (2 s), not until it times out', three.ms >= 1900 && three.ms < 2800 && three.answer.subtitles.length === 1, { ms: three.ms, n: three.answer.subtitles.length });
+  check('an exact match is not held back by a higher-ranked source that has not answered', three.ms < 1500 && three.answer.subtitles.length === 1, { ms: three.ms, n: three.answer.subtitles.length });
+
+  // 3b. a good, not exact, subtitle waits for a higher-ranked source: at most 2 s when its speed is not known...
+  const noSpeed = await ask('tt0000031', config({ providerPriority: ['slow', 'near'], dynamicTimeoutScore: 5, customAddons: [addon('near'), addon('slow')] }));
+  check('a higher-ranked source of unknown speed is waited for at most 2 s', noSpeed.ms >= 1900 && noSpeed.ms < 2800 && noSpeed.answer.subtitles.length === 1, { ms: noSpeed.ms, n: noSpeed.answer.subtitles.length });
+  // ...as long as it usually takes when it is known, and not at all when it often fails
+  const speedConfig = (patch: Partial<UserConfig>) => config({ providerPriority: ['slow', 'near'], dynamicTimeoutScore: 5, subsync: false, customAddons: [addon('near'), addon('slow')], ...patch });
+  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50 }]]));
+  const t1 = Date.now();
+  const quick = await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000033', { filename: FILE }), speedConfig({}), 'http://x', 'speed-test');
+  const knownMs = Date.now() - t1;
+  check('a source that usually answers in 0.7 s is waited for about 0.7 s', knownMs >= 600 && knownMs < 1400 && quick.subtitles.length === 1, knownMs);
+  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0.5, searches: 50 }]]));
+  const t2 = Date.now();
+  await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000034', { filename: FILE }), speedConfig({}), 'http://x', 'speed-test');
+  check('a source that often fails is not waited for', Date.now() - t2 < 700, Date.now() - t2);
+  clearSourceSpeeds();
 
   // 4. nothing to judge by (no file name, no hash): no early stop
   const four = await ask('tt0000014', config(), false);

@@ -15,6 +15,8 @@ import { needsReference, fromFileGroup, getReferences, archivePickParams as buil
 import { encodeAlignedToken, encodeFallbackToken, AlignedToken, MAX_ALTERNATIVES, MAX_BACKUPS } from './alignedToken';
 import { prepareAligned } from './alignedPrepare';
 import { keepAlive } from '../utils/background';
+import { sourceSpeeds } from '../utils/sourceSpeed';
+import type { ProviderSpeed } from '../storage/usageStore';
 import { activity, filmLabel, fmtMs } from '../utils/activity';
 import { formatTestUntil, formatTestEntries } from '../proxy/formatTest';
 import { isAllowedDownloadUrl, addonHostsOf, serverCanDownload } from '../proxy/subtitleProxy';
@@ -84,13 +86,20 @@ const DYNAMIC_GRACE_MS = 300;
  */
 const PRIORITY_WAIT_MS = 2000;
 
+function priorityWaitFor(id: string, speeds: Map<string, ProviderSpeed> | null): number {
+  const s = speeds?.get(id);
+  if (!s || s.searches < 10) return PRIORITY_WAIT_MS;
+  if (s.failRate > 0.2) return 0;
+  return Math.min(PRIORITY_WAIT_MS, Math.max(300, s.p75));
+}
+
 /**
  * Dynamic timeout: is what has arrived so far enough? The subtitles are filtered by language and ranked as the final list
  * will be. Enough means: the first one is on the top level (a hash match, or the exact release of the playing file) or
  * scores at least `dynamicTimeoutScore`, AND every source the user ranks higher than the one that gave it has already
  * answered (such a source could still bring a subtitle that goes before it), or `PRIORITY_WAIT_MS` have passed.
  */
-function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: SubtitleQuery, config: UserConfig, elapsedMs: number): boolean {
+function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: SubtitleQuery, config: UserConfig, elapsedMs: number, speeds: Map<string, ProviderSpeed> | null): boolean {
   const whitelist = config.languages && config.languages.length > 0 ? config.languages : DEFAULT_USER_CONFIG.languages;
   const remap = config.language_remapping || config.languageRemap;
   const wanted: RawSubtitleItem[] = [];
@@ -118,8 +127,10 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
     return i < 0 ? 999 : i;
   };
   const bestRank = priority(best.provider);
-  // (a higher-ranked source is waited for only a short time)
-  if (elapsedMs < PRIORITY_WAIT_MS && pendingIds.some(id => priority(id) < bestRank)) return false;
+  // An exact match (or a hash match) does not wait for anybody: a source ranked higher could only add an equal one.
+  // Otherwise a source ranked higher is waited for as long as it usually takes (from T0, the sources run together),
+  // at most PRIORITY_WAIT_MS; a source that often fails is not waited for, and one not known yet gets the maximum.
+  if (!topLevel && pendingIds.some(id => priority(id) < bestRank && elapsedMs < priorityWaitFor(id, speeds))) return false;
   activity('search', filmLabel(query.id, query.extra?.filename), `Good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider} (score ${detail.score}${topLevel ? ', exact match' : ''}); waiting for ${pendingIds.join(', ') || 'nobody'}`);
   Logger.info(`[DYNAMIC] good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider}, score ${detail.score}${topLevel ? ' (top level)' : ''}; waiting for: ${pendingIds.join(', ') || 'nobody'}`);
   return true;
@@ -188,8 +199,9 @@ export async function getAggregatedSubtitles(
         const outcome = { stoppedEarly: false };
         // Dynamic timeout: it needs the playing file's name to tell what is good (a hash match always counts)
         const dynamic = config.dynamicTimeout === true && Boolean(query.extra?.filename || query.extra?.videoHash);
+        const speeds = dynamic ? sourceSpeeds(configId) : null;
         const items = await executeParallelSearch(query, config, report, {
-          ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, recheckAfterMs: PRIORITY_WAIT_MS, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart) } } : {}),
+          ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, recheck: { everyMs: 150, forMs: PRIORITY_WAIT_MS + 150 }, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart, speeds) } } : {}),
           outcome,
           // the sources that were not waited for have answered: the saved list is now the whole one
           onFullResult: full => {

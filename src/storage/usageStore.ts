@@ -229,6 +229,52 @@ export interface ProviderStats {
 
 const STATS_ROWS = 1000;
 
+/** How fast one source usually answers (searches where it really ran) */
+export interface ProviderSpeed {
+  /** 3 of 4 answers were faster than this (ms) */
+  p75: number;
+  /** share of searches where it failed or timed out (0..1) */
+  failRate: number;
+  searches: number;
+}
+
+const SPEED_ROWS = 150;
+
+/** The speed of every source over the latest searches (memory, or the database when there is one) */
+export async function getProviderSpeeds(configKey: string): Promise<Map<string, ProviderSpeed>> {
+  const owner = ownerOf(configKey);
+  let lists: Array<Array<{ id: string; ms: number; ok: boolean; waived?: boolean }>> = (memory.get(owner) || [])
+    .slice(0, SPEED_ROWS).filter(e => e.details).map(e => e.details!.providers || []);
+  if (await ensureTable()) {
+    try {
+      const pool = await configStorage.getPool();
+      const res = await pool!.query(
+        "SELECT details->'providers' AS providers FROM usage_events WHERE owner = $1 AND details IS NOT NULL ORDER BY at DESC LIMIT $2",
+        [owner, SPEED_ROWS]
+      );
+      lists = res.rows.map((r: any) => (Array.isArray(r.providers) ? r.providers : []));
+    } catch (err) {
+      Logger.error('Could not read the source speeds', err);
+    }
+  }
+  const acc = new Map<string, { times: number[]; total: number; failed: number }>();
+  for (const list of lists) {
+    for (const p of list) {
+      if (p.waived) continue;
+      const a = acc.get(p.id) || { times: [], total: 0, failed: 0 };
+      a.total++;
+      if (p.ok) a.times.push(p.ms); else a.failed++;
+      acc.set(p.id, a);
+    }
+  }
+  const out = new Map<string, ProviderSpeed>();
+  for (const [id, a] of acc) {
+    const t = a.times.sort((x, y) => x - y);
+    out.set(id, { p75: t.length ? t[Math.min(t.length - 1, Math.floor(t.length * 0.75))] : 0, failRate: a.failed / a.total, searches: a.total });
+  }
+  return out;
+}
+
 /** The stored rankings of the latest requests (with file name), to measure the scoring rules on them */
 export async function getRuleImpact(configKey: string, priority: string[]): Promise<ReturnType<typeof computeRuleImpact>> {
   const owner = ownerOf(configKey);
