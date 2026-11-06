@@ -23,11 +23,11 @@ export const SUBSRO_API = 'https://api.subs.ro/v1.0';
 export const SUBSRO_PROVIDER_ID = 'subsrodirect';
 const MAX_PACKS = 3;
 /**
- * Packs are opened one after the other, the best first, until this many subtitles were found (each opened pack is a
- * request). Two releases of the episode are enough: the player gets three subtitles in all, from every source, and the
- * timing check settles the rest.
+ * Packs are opened one after the other, the best first, until a subtitle was found (each opened pack is a request): the
+ * next one only when the best has nothing for the episode. The other sources give the alternatives, and the player gets
+ * its few subtitles from all of them together.
  */
-const WANTED_SUBTITLES = 2;
+const WANTED_SUBTITLES = 1;
 const MAX_PACK_BYTES = 60 * 1024 * 1024;
 /** Below this many requests left today the source is not used any more (the quota check itself is free) */
 const QUOTA_RESERVE = 15;

@@ -90,14 +90,14 @@ async function main(): Promise<void> {
 
   const first = await provider.searchWithStatus(series('tt0182576', 4, 20), context);
   const costly = calls.filter(c => !c.endsWith('/quota'));
-  check('a new series: one search and one pack of season 4 (it holds two releases of the episode), none of the other seasons', costly.length === 2 && costly[0].startsWith('/search/') && /\/subtitle\/(2|3)\/download/.test(costly[1]), costly);
+  check('a new series: one search and one pack of season 4 (the best), none of the other seasons', costly.length === 2 && costly[0].startsWith('/search/') && /\/subtitle\/(2|3)\/download/.test(costly[1]), costly);
   check('every file of the episode is a subtitle, named as its release', !first.failed && first.items.length === 2 && first.items.some(i => /PHOENiX/.test(i.release || '')) && first.items.some(i => /VELUN/.test(i.release || '')), first.items.map(i => i.release));
   check('the links are this server\'s own (no key in them)', first.items.every(i => i.url.startsWith('/proxy/download/subsro/') && i.url.endsWith('.srt') && !/test-key/.test(i.url)), first.items[0]?.url);
   check('the provider is Subs.ro, in Romanian', first.items.every(i => i.lang === 'ron' && i.providerName === 'Subs.ro'));
 
   calls.length = 0;
   const again = await provider.searchWithStatus(series('tt0182576', 4, 21), context);
-  check('the next episode costs at most the other pack, not a new search (the search and the first pack are kept)', calls.filter(c => !c.endsWith('/quota')).length === 1 && /\/subtitle\/(2|3)\/download/.test(calls.filter(c => !c.endsWith('/quota'))[0]) && again.items.length === 2 && again.items.every(i => /S04E21/.test(i.release || '')), { calls, n: again.items.length });
+  check('the next episode of the season costs no request (the search and the pack are kept)', calls.filter(c => !c.endsWith('/quota')).length === 0 && again.items.length === 1 && again.items.every(i => /S04E21/.test(i.release || '')), { calls, n: again.items.length });
 
   calls.length = 0;
   const refs = await provider.searchWithStatus({ ...series('tt0182576', 4, 20), allLanguages: true }, context);
@@ -123,7 +123,26 @@ async function main(): Promise<void> {
   };
   const filmOut = await provider.searchWithStatus({ ...movie('tt7777771'), extra: { filename: 'Film.2017.2160p.UHD.BluRay.REMUX.HEVC-OMFUG.mkv' } } as any, context);
   const filmCalls = calls.filter(c => !c.endsWith('/quota'));
-  check('a film costs one search and one pack when the best pack has enough subtitles', filmCalls.length === 2 && /\/subtitle\/22\/download/.test(filmCalls[1]) && filmOut.items.length === 5, { filmCalls, n: filmOut.items.length });
+  check('a film costs one search and one pack (the best), however many subtitles it holds', filmCalls.length === 2 && /\/subtitle\/22\/download/.test(filmCalls[1]) && filmOut.items.length === 5, { filmCalls, n: filmOut.items.length });
+
+  // the best pack has nothing for the episode: the next one is opened
+  const packA = new AdmZip(); packA.addFile('Show.S01E01.WEB-DL-AAA.srt', Buffer.from(SRT('one')));
+  const packB = new AdmZip(); packB.addFile('Show.S01E09.WEB-DL-BBB.srt', Buffer.from(SRT('nine')));
+  calls.length = 0;
+  (axios as any).get = async (url: string) => {
+    calls.push(url.replace('https://api.subs.ro/v1.0', ''));
+    if (url.endsWith('/quota')) return { status: 200, data: { quota: { used: 1, remaining: 299, total: 300 } } };
+    if (url.includes('/search/imdbid/tt7777772')) return { status: 200, data: { items: [
+      { id: 31, title: 'Show - Sezonul 1', description: 'Sezonul 1', language: 'ro', updatedAt: '2024-05-01T00:00:00Z' },
+      { id: 32, title: 'Show - Sezonul 1', description: 'Sezonul 1', language: 'ro', updatedAt: '2024-04-01T00:00:00Z' }
+    ] } };
+    if (url.endsWith('/subtitle/31/download')) return { status: 200, data: new Uint8Array(packA.toBuffer()).buffer };
+    if (url.endsWith('/subtitle/32/download')) return { status: 200, data: new Uint8Array(packB.toBuffer()).buffer };
+    throw new Error('unexpected ' + url);
+  };
+  const second = await provider.searchWithStatus(series('tt7777772', 1, 9), context);
+  const secondCalls = calls.filter(c => !c.endsWith('/quota'));
+  check('when the best pack has nothing for the episode the next one is opened', secondCalls.length === 3 && second.items.length === 1 && /S01E09/.test(second.items[0].release || ''), { secondCalls, n: second.items.length });
 
   // near the daily limit the source is left alone
   (axios as any).get = async (url: string) => {
