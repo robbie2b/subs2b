@@ -9,6 +9,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
 - Proprietarul nu e programator: explică simplu, **în română**.
 
 ## Reguli
+- **Vercel (ramura `vercel`): deploy DIRECT după fiecare set de modificări, fără să mai întreb** (instrucțiunea utilizatorului, 2026-11-06: „direct deploy, nu mai stăm la discuții"). Înainte de push: `npm run build` și `npm test` trec; la fiecare deploy crește a treia cifră; după push verific `/health`. Render și `main` rămân doar la cerere explicită (mai jos).
 - **Deploy pe Render DOAR la cererea explicită a utilizatorului.** Render face deploy automat la push pe `main`,
   deci nu împinge pe `main` fără cerere. Lucrul curent stă pe o ramură (acum: `work/subsync-engine`).
 - **Împinge ramura de lucru pe GitHub la finalul fiecărei etape.** O ramură a fost aproape pierdută o dată
