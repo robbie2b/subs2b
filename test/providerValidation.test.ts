@@ -55,13 +55,13 @@ async function main(): Promise<void> {
   // 1. Registered built-in providers
   section('Test 1: built-in providers');
   const providers = getAllProviders();
-  const expectedIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
+  const expectedIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'subsrodirect', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
   check(providers.length === expectedIds.length, `exactly ${expectedIds.length} built-in providers`, providers.map(p => p.id));
   for (const p of providers) {
     check(expectedIds.includes(p.id), `provider [${p.id}] is expected`);
     check(Boolean(p.name && p.name.trim()), `provider [${p.id}] has a name ("${p.name}")`);
-    // RegieLive works with a shared key; the web sites need none; Wyzie needs a free personal key
-    check(p.requiresApiKey === ['opensubtitles', 'subdl', 'subsource', 'wyzie'].includes(p.id), `provider [${p.id}] key requirement is right`);
+    // RegieLive works with a shared key; the web sites need none; Wyzie and Subs.ro need a free personal key
+    check(p.requiresApiKey === ['opensubtitles', 'subdl', 'subsource', 'wyzie', 'subsrodirect'].includes(p.id), `provider [${p.id}] key requirement is right`);
   }
 
   // 2. Imported Stremio addons
