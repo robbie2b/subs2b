@@ -69,6 +69,18 @@ async function main(): Promise<void> {
   const t2 = Date.now();
   await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000034', { filename: FILE }), speedConfig({}), 'http://x', 'speed-test');
   check('a source that often fails is not waited for', Date.now() - t2 < 700, Date.now() - t2);
+  // below the score wanted, the sources left decide: if they almost never win the list does not wait for them, if one often does it is waited for as long as it usually takes
+  const hopeless = (patch: Partial<UserConfig>) => config({ dynamicTimeoutScore: 200, subsync: false, customAddons: [addon('near'), addon('slow')], ...patch });
+  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50, winRate: 0.01, inTopRate: 0.5, ranked: 50 }]]));
+  const t4 = Date.now();
+  await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000036', { filename: FILE }), hopeless({}), 'http://x', 'speed-test');
+  check('below the score wanted, a pending source that wins 1% of the time is not waited for', Date.now() - t4 < 900, Date.now() - t4);
+  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50, winRate: 0.6, inTopRate: 0.9, ranked: 50 }]]));
+  const t5 = Date.now();
+  await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000037', { filename: FILE }), hopeless({}), 'http://x', 'speed-test');
+  const waitedMs = Date.now() - t5;
+  check('one that wins 60% of the time is waited for as long as it usually takes (twice its usual time), then given up', waitedMs >= 1300 && waitedMs < 2300, waitedMs);
+
   // a source that almost never brings the best subtitle is not waited for either
   setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50, winRate: 0, inTopRate: 0.05, ranked: 50 }]]));
   const t3 = Date.now();

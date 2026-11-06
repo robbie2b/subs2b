@@ -57,6 +57,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.22 — așteptare după riscul de schimbare (2026-11-06, „eficientizăm și mai tare").** Date (413 cereri clasate): Subs.ro (addonul) câștigă 84% din
+  cereri (342/405), RegieLive 4%, PRO 3%, OpenSubtitles 3%, restul <2%. Măsurat pe 21 de liste de azi: lista mediană 1,5 s, 14 din 21 oprite devreme;
+  decizie Subsync gata la mediană 0,7 s (p90 2,8 s; la început 2,5 s / 7,5 s); jucătorul a așteptat mediană 0,6 s. Rămâneau listele de 6 s când cel mai
+  bun scor era sub prag (Enola 37, Avatar TLA 33) sau Subs.ro lent (Seinfeld 5,7 s). Nou în `goodEnough`: riscul = suma ratelor de câștig ale surselor încă
+  așteptate (cele peste „fereastra" lor, 2× p75, max 4 s, nu mai contează; necunoscute 10%); sub 6% lista pleacă chiar dacă scorul e sub prag și fără
+  regula Priority. Fără statistici (instanță nouă) comportamentul rămâne cel vechi. `EarlyStop.recheck` ține 4,2 s. Test în `test/dynamicTimeout.test.ts`.
 - **DECIZIE (2026-11-06, utilizatorul): rămânem la addonul comunității Subs.ro, NU la integrarea directă.** Testul lui: integrarea directă dă mult mai puține
   rezultate decât addonul (addonul listează fiecare fișier din toate arhivele; varianta „descărcare la cerere" listează max 2 pachete după descriere, ca să
   nu consume cereri). Serviciul `subsrodirect` (v1.5.14–1.5.21) rămâne în cod, OPRIT implicit, fără efect cât timp nu e pornit; poate fi șters. Nu mai

@@ -86,6 +86,20 @@ const DYNAMIC_GRACE_MS = 300;
  */
 const PRIORITY_WAIT_MS = 2000;
 
+/** The sources still pending are together this unlikely to change the first subtitle: the list does not wait for them */
+const LOW_RISK = 0.06;
+
+/**
+ * The chance that one pending source brings a subtitle that goes first: its win rate, while it is within the time it
+ * usually takes (twice its 3-in-4 time, at most 4 s); after that it is late and counts no more. 10% when not known.
+ */
+function changeChance(id: string, speeds: Map<string, ProviderSpeed> | null, elapsedMs: number): number {
+  const s = speeds?.get(id);
+  if (!s || s.ranked < 30) return 0.1;
+  if (elapsedMs > Math.min(4000, Math.max(1000, 2 * s.p75))) return 0;
+  return s.winRate;
+}
+
 function priorityWaitFor(id: string, speeds: Map<string, ProviderSpeed> | null): number {
   const s = speeds?.get(id);
   if (!s || s.searches < 10) return PRIORITY_WAIT_MS;
@@ -123,7 +137,11 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
   const detail = ranked.details[0];
   const topLevel = best.hashMatch === true || detail.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r));
   const minScore = typeof config.dynamicTimeoutScore === 'number' ? config.dynamicTimeoutScore : 30;
-  if (!topLevel && detail.score < minScore) return false;
+  // How likely is it that what is still pending changes the first subtitle? The sum of the pending sources' win rates
+  // (over the latest ranked requests); a source later than it usually is counts no more. Unknown sources count 10%.
+  const risk = pendingIds.reduce((sum, id) => sum + changeChance(id, speeds, elapsedMs), 0);
+  const lowRisk = risk < LOW_RISK;
+  if (!topLevel && detail.score < minScore && !lowRisk) return false;
   const priority = (id: string): number => {
     const i = (config.providerPriority || []).findIndex(x => x.toLowerCase() === id.toLowerCase());
     return i < 0 ? 999 : i;
@@ -132,8 +150,8 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
   // An exact match (or a hash match) does not wait for anybody: a source ranked higher could only add an equal one.
   // Otherwise a source ranked higher is waited for as long as it usually takes (from T0, the sources run together),
   // at most PRIORITY_WAIT_MS; a source that often fails is not waited for, and one not known yet gets the maximum.
-  if (!topLevel && pendingIds.some(id => priority(id) < bestRank && elapsedMs < priorityWaitFor(id, speeds))) return false;
-  activity('search', filmLabel(query.id, query.extra?.filename), `Good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider} (score ${detail.score}${topLevel ? ', exact match' : ''}); waiting for ${pendingIds.join(', ') || 'nobody'}`);
+  if (!topLevel && !lowRisk && pendingIds.some(id => priority(id) < bestRank && elapsedMs < priorityWaitFor(id, speeds))) return false;
+  activity('search', filmLabel(query.id, query.extra?.filename), `Good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider} (score ${detail.score}${topLevel ? ', exact match' : lowRisk && detail.score < minScore ? `, below ${minScore} but the sources left rarely win: ${Math.round(risk * 100)}% chance` : ''}); waiting for ${pendingIds.join(', ') || 'nobody'}`);
   Logger.info(`[DYNAMIC] good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider}, score ${detail.score}${topLevel ? ' (top level)' : ''}; waiting for: ${pendingIds.join(', ') || 'nobody'}`);
   return true;
 }
@@ -203,7 +221,7 @@ export async function getAggregatedSubtitles(
         const dynamic = config.dynamicTimeout === true && Boolean(query.extra?.filename || query.extra?.videoHash);
         const speeds = dynamic ? sourceSpeeds(configId) : null;
         const items = await executeParallelSearch(query, config, report, {
-          ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, recheck: { everyMs: 150, forMs: PRIORITY_WAIT_MS + 150 }, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart, speeds) } } : {}),
+          ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, recheck: { everyMs: 150, forMs: 4200 }, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart, speeds) } } : {}),
           outcome,
           // the sources that were not waited for have answered: the saved list is now the whole one
           onFullResult: full => {
