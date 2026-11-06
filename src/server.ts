@@ -23,6 +23,7 @@ import { Logger, getLogLines } from './utils/logger';
 import { getActivity, attachActivitySink } from './utils/activity';
 import { persistActivity, readStoredActivity } from './storage/activityStore';
 import { handleSubsroDownload } from './proxy/subsroDownload';
+import { getSearch, getPack } from './storage/subsroStore';
 import { installRequestCounter, attachRequestCountSink, memoryRequestCounts } from './utils/requestCounter';
 import { saveRequestCounts, readRequestCounts } from './storage/requestCountStore';
 import { configStorage, isUuid } from './storage/configStore';
@@ -604,6 +605,25 @@ export function createServer(): express.Application {
       now: new Date().toISOString(),
       days: [...days.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([day, hosts]) => ({ day, total: hosts.reduce((s, h) => s + h.n, 0), hosts: hosts.sort((a, b) => b.n - a.n) }))
     });
+  });
+
+  // What the Subs.ro search kept for a title (no request to Subs.ro): the packs with their descriptions, and what is inside
+  app.get('/:config/debug/subsro.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const imdb = String(req.query.imdb || '');
+    if (!/^tt\d{5,9}$/.test(imdb)) { res.status(400).json({ error: 'imdb=tt1234567 is needed' }); return; }
+    const items = ((await getSearch(imdb)) || []) as Array<Record<string, unknown>>;
+    const packs = [];
+    for (const i of items) {
+      const pack = await getPack(String(i.id));
+      packs.push({
+        id: i.id, title: i.title, description: i.description, language: i.language, translator: i.translator, updatedAt: i.updatedAt, type: i.type,
+        kept: pack ? { version: pack.version, files: pack.entries.length, mb: Math.round(pack.archive.length / 104857.6) / 10, sample: pack.entries.slice(0, 4) } : null
+      });
+    }
+    res.json({ imdb, cachedSearch: items.length > 0, packs });
   });
 
   // Does reusing connections to the sources save time from here? Three requests in a row to each host with the default
