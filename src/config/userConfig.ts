@@ -47,7 +47,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   },
   providerTimeoutMs: 6000,
   dynamicTimeout: false,
-  dynamicTimeoutScore: 40,
+  dynamicTimeoutScore: 30,
   deduplication: true,
   deduplicationStrategy: 'both',
   maxSubtitles: 0,

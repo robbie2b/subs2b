@@ -236,6 +236,10 @@ export interface ProviderSpeed {
   /** share of searches where it failed or timed out (0..1) */
   failRate: number;
   searches: number;
+  /** over the requests that were ranked: how often its subtitle was first, and how often it had one in the ranked top */
+  winRate: number;
+  inTopRate: number;
+  ranked: number;
 }
 
 const SPEED_ROWS = 150;
@@ -243,34 +247,46 @@ const SPEED_ROWS = 150;
 /** The speed of every source over the latest searches (memory, or the database when there is one) */
 export async function getProviderSpeeds(configKey: string): Promise<Map<string, ProviderSpeed>> {
   const owner = ownerOf(configKey);
-  let lists: Array<Array<{ id: string; ms: number; ok: boolean; waived?: boolean }>> = (memory.get(owner) || [])
-    .slice(0, SPEED_ROWS).filter(e => e.details).map(e => e.details!.providers || []);
+  type Row = { providers: Array<{ id: string; ms: number; ok: boolean; waived?: boolean }>; top: Array<{ provider: string; rejected?: boolean }> };
+  let lists: Row[] = (memory.get(owner) || [])
+    .slice(0, SPEED_ROWS).filter(e => e.details).map(e => ({ providers: e.details!.providers || [], top: (e.details!.top || []) as Row['top'] }));
   if (await ensureTable()) {
     try {
       const pool = await configStorage.getPool();
       const res = await pool!.query(
-        "SELECT details->'providers' AS providers FROM usage_events WHERE owner = $1 AND details IS NOT NULL ORDER BY at DESC LIMIT $2",
+        "SELECT details->'providers' AS providers, details->'top' AS top FROM usage_events WHERE owner = $1 AND details IS NOT NULL ORDER BY at DESC LIMIT $2",
         [owner, SPEED_ROWS]
       );
-      lists = res.rows.map((r: any) => (Array.isArray(r.providers) ? r.providers : []));
+      lists = res.rows.map((r: any) => ({ providers: Array.isArray(r.providers) ? r.providers : [], top: Array.isArray(r.top) ? r.top : [] }));
     } catch (err) {
       Logger.error('Could not read the source speeds', err);
     }
   }
-  const acc = new Map<string, { times: number[]; total: number; failed: number }>();
-  for (const list of lists) {
-    for (const p of list) {
+  const acc = new Map<string, { times: number[]; total: number; failed: number; wins: number; inTop: number }>();
+  let ranked = 0;
+  for (const row of lists) {
+    for (const p of row.providers) {
       if (p.waived) continue;
-      const a = acc.get(p.id) || { times: [], total: 0, failed: 0 };
+      const a = acc.get(p.id) || { times: [], total: 0, failed: 0, wins: 0, inTop: 0 };
       a.total++;
       if (p.ok) a.times.push(p.ms); else a.failed++;
       acc.set(p.id, a);
+    }
+    const accepted = row.top.filter(t => !t.rejected);
+    if (accepted.length) {
+      ranked++;
+      const first = acc.get(accepted[0].provider);
+      if (first) first.wins++;
+      for (const id of new Set(accepted.map(t => t.provider))) { const a = acc.get(id); if (a) a.inTop++; }
     }
   }
   const out = new Map<string, ProviderSpeed>();
   for (const [id, a] of acc) {
     const t = a.times.sort((x, y) => x - y);
-    out.set(id, { p75: t.length ? t[Math.min(t.length - 1, Math.floor(t.length * 0.75))] : 0, failRate: a.failed / a.total, searches: a.total });
+    out.set(id, {
+      p75: t.length ? t[Math.min(t.length - 1, Math.floor(t.length * 0.75))] : 0, failRate: a.failed / a.total, searches: a.total,
+      winRate: ranked ? a.wins / ranked : 0, inTopRate: ranked ? a.inTop / ranked : 0, ranked
+    });
   }
   return out;
 }

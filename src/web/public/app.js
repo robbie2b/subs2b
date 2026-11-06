@@ -82,7 +82,7 @@ const DEFAULT_CONFIG = {
   },
   providerTimeoutMs: 6000,
   dynamicTimeout: false,
-  dynamicTimeoutScore: 40,
+  dynamicTimeoutScore: 30,
   deduplication: true,
   deduplicationStrategy: 'both',
   maxSubtitles: 0,
@@ -1493,7 +1493,7 @@ function renderDynamicTimeout() {
   if (toggle) toggle.checked = state.config.dynamicTimeout === true;
   const score = document.getElementById('dynamic-timeout-score');
   if (score) {
-    score.value = state.config.dynamicTimeoutScore || 40;
+    score.value = state.config.dynamicTimeoutScore || 30;
     score.disabled = state.config.dynamicTimeout !== true;
   }
 }

@@ -90,6 +90,8 @@ function priorityWaitFor(id: string, speeds: Map<string, ProviderSpeed> | null):
   const s = speeds?.get(id);
   if (!s || s.searches < 10) return PRIORITY_WAIT_MS;
   if (s.failRate > 0.2) return 0;
+  // a source that almost never brings the best subtitle (and rarely any in the top) is not worth a wait
+  if (s.ranked >= 30 && s.winRate < 0.03 && s.inTopRate < 0.2) return 0;
   return Math.min(PRIORITY_WAIT_MS, Math.max(300, s.p75));
 }
 
@@ -120,7 +122,7 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
   const best = ranked.items[0];
   const detail = ranked.details[0];
   const topLevel = best.hashMatch === true || detail.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r));
-  const minScore = typeof config.dynamicTimeoutScore === 'number' ? config.dynamicTimeoutScore : 40;
+  const minScore = typeof config.dynamicTimeoutScore === 'number' ? config.dynamicTimeoutScore : 30;
   if (!topLevel && detail.score < minScore) return false;
   const priority = (id: string): number => {
     const i = (config.providerPriority || []).findIndex(x => x.toLowerCase() === id.toLowerCase());

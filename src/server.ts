@@ -567,6 +567,32 @@ export function createServer(): express.Application {
     }
   });
 
+  // Does reusing connections to the sources save time from here? Three requests in a row to each host with the default
+  // agent (what the server uses) and three each with a fresh connection every time, so the two can be compared.
+  app.get('/:config/debug/connect.json', async (req: Request, res: Response): Promise<void> => {
+    const key = await requireStoredConfig(req, res);
+    if (!key) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const https = await import('https');
+    const hosts = ['https://opensubtitles-v3.strem.io/manifest.json', 'https://api.subdl.com/', 'https://api.subsource.net/', 'https://www.regielive.ro/', 'https://subs.ro/'];
+    const once = async (url: string, fresh: boolean): Promise<number> => {
+      const t0 = Date.now();
+      try {
+        await axios.get(url, { timeout: 5000, validateStatus: () => true, responseType: 'arraybuffer', maxContentLength: 2_000_000, ...(fresh ? { httpsAgent: new https.Agent({ keepAlive: false }) } : {}) });
+      } catch { /* the time still counts */ }
+      return Date.now() - t0;
+    };
+    const out: Array<{ url: string; reused: number[]; fresh: number[] }> = [];
+    for (const url of hosts) {
+      const reused: number[] = [];
+      const fresh: number[] = [];
+      for (let i = 0; i < 3; i++) reused.push(await once(url, false));
+      for (let i = 0; i < 3; i++) fresh.push(await once(url, true));
+      out.push({ url, reused, fresh });
+    }
+    res.json({ nodeVersion: process.version, hosts: out });
+  });
+
   // A page of a subtitle site being considered as a new source, fetched from this server (only those sites)
   app.get('/:config/debug/probe.json', async (req: Request, res: Response): Promise<void> => {
     const key = await requireStoredConfig(req, res);

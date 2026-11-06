@@ -51,6 +51,8 @@ export interface SearchOptions {
   onFullResult?: (items: RawSubtitleItem[]) => void;
   /** tells the caller whether the search stopped early (the list is then not complete) */
   outcome?: { stoppedEarly: boolean };
+  /** called with everything that has arrived so far, each time a source answers */
+  onProgress?: (items: RawSubtitleItem[]) => void;
 }
 
 export async function executeParallelSearch(
@@ -204,6 +206,9 @@ export async function executeParallelSearch(
       }
     ).finally(() => {
       pending.delete(idx);
+      if (options.onProgress) {
+        try { options.onProgress(gather()); } catch (err) { Logger.error('Search progress callback failed', err); }
+      }
       check();
     })
   ));

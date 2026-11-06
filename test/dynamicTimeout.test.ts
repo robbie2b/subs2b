@@ -60,15 +60,20 @@ async function main(): Promise<void> {
   check('a higher-ranked source of unknown speed is waited for at most 2 s', noSpeed.ms >= 1900 && noSpeed.ms < 2800 && noSpeed.answer.subtitles.length === 1, { ms: noSpeed.ms, n: noSpeed.answer.subtitles.length });
   // ...as long as it usually takes when it is known, and not at all when it often fails
   const speedConfig = (patch: Partial<UserConfig>) => config({ providerPriority: ['slow', 'near'], dynamicTimeoutScore: 5, subsync: false, customAddons: [addon('near'), addon('slow')], ...patch });
-  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50 }]]));
+  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50, winRate: 0.3, inTopRate: 0.6, ranked: 50 }]]));
   const t1 = Date.now();
   const quick = await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000033', { filename: FILE }), speedConfig({}), 'http://x', 'speed-test');
   const knownMs = Date.now() - t1;
   check('a source that usually answers in 0.7 s is waited for about 0.7 s', knownMs >= 600 && knownMs < 1400 && quick.subtitles.length === 1, knownMs);
-  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0.5, searches: 50 }]]));
+  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0.5, searches: 50, winRate: 0.3, inTopRate: 0.6, ranked: 50 }]]));
   const t2 = Date.now();
   await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000034', { filename: FILE }), speedConfig({}), 'http://x', 'speed-test');
   check('a source that often fails is not waited for', Date.now() - t2 < 700, Date.now() - t2);
+  // a source that almost never brings the best subtitle is not waited for either
+  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50, winRate: 0, inTopRate: 0.05, ranked: 50 }]]));
+  const t3 = Date.now();
+  await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000035', { filename: FILE }), speedConfig({}), 'http://x', 'speed-test');
+  check('a source that almost never wins is not waited for', Date.now() - t3 < 700, Date.now() - t3);
   clearSourceSpeeds();
 
   // 4. nothing to judge by (no file name, no hash): no early stop

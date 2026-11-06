@@ -221,6 +221,8 @@ function absoluteUrl(item: RawSubtitleItem, ctx: ReferenceContext): string {
 
 /** How long the sources get when the references are searched (ms) */
 const REFERENCE_SEARCH_LIMIT_MS = 3000;
+/** Downloads of the references that look best start while the sources are still answering, from this moment on */
+const REFERENCE_PIPELINE_AFTER_MS = 400;
 
 async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
   const started = Date.now();
@@ -234,7 +236,35 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
     customAddons: [],
     providers: { ...ctx.config.providers, regielive: { enabled: false, apiKey: '' } }
   };
-  const raw = await executeParallelSearch({ ...ctx.query, allLanguages: true }, referenceConfig);
+  const load = async (item: RawSubtitleItem): Promise<Reference> => {
+    const text = await fetchText(absoluteUrl(item, ctx), REFERENCE_DOWNLOAD_TIMEOUT_MS);
+    const read = readCues(text);
+    if (read.length < MIN_REFERENCE_CUES) throw new Error('too few cues');
+    const flags = speechFlags(read);
+    const cues: TimedCue[] = read.map((c, i) => ({ start: c.start, end: c.end, speech: flags[i] }));
+    return { label: `[${item.lang}] ${item.release || item.id}`, lang: item.lang, provider: item.provider, cues } as Reference;
+  };
+  // each candidate is downloaded once, whenever it is first wanted
+  const downloads = new Map<string, Promise<Reference>>();
+  const download = (item: RawSubtitleItem): Promise<Reference> => {
+    const key = `${item.provider}|${item.id}|${item.url}`;
+    let d = downloads.get(key);
+    if (!d) { d = load(item); d.catch(() => undefined); downloads.set(key, d); }
+    return d;
+  };
+  const searchStarted = Date.now();
+  // Dynamic: enough candidates (the number of references needed) is enough: the slow sources are not waited for.
+  // And the downloads of the best ones start before the search is over.
+  const raw = await executeParallelSearch({ ...ctx.query, allLanguages: true }, referenceConfig, undefined, {
+    earlyStop: {
+      graceMs: 100,
+      isEnough: got => pickReferenceCandidates(got, ctx.filename, ctx.query.season, ctx.query.episode, MAX_REFERENCES).length >= MAX_REFERENCES
+    },
+    onProgress: got => {
+      if (Date.now() - searchStarted < REFERENCE_PIPELINE_AFTER_MS) return;
+      for (const item of pickReferenceCandidates(got, ctx.filename, ctx.query.season, ctx.query.episode, MAX_REFERENCES)) download(item);
+    }
+  });
   const stats = { skipped: { kind: 0, blocked: 0, quality: 0 } };
   const candidates = pickReferenceCandidates(raw, ctx.filename, ctx.query.season, ctx.query.episode, undefined, stats);
   const skipped = `skipped: ${stats.skipped.kind} of another kind or cut, ${stats.skipped.blocked} from a source refusing this server, ${stats.skipped.quality} forced/machine/low quality`;
@@ -248,15 +278,6 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
     candidates: candidates.map(c => `[${c.provider}] [${c.lang}] ${c.release || c.id}`)
   });
 
-  const load = async (item: RawSubtitleItem): Promise<Reference> => {
-    const text = await fetchText(absoluteUrl(item, ctx), REFERENCE_DOWNLOAD_TIMEOUT_MS);
-    const read = readCues(text);
-    if (read.length < MIN_REFERENCE_CUES) throw new Error('too few cues');
-    const flags = speechFlags(read);
-    const cues: TimedCue[] = read.map((c, i) => ({ start: c.start, end: c.end, speech: flags[i] }));
-    return { label: `[${item.lang}] ${item.release || item.id}`, lang: item.lang, provider: item.provider, cues } as Reference;
-  };
-
   // Only as many downloads as references are needed (in parallel); the next candidates only replace failed ones
   const found: Array<{ at: number; ref: Reference }> = [];
   const failures: string[] = [];
@@ -264,7 +285,7 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
   while (found.length < MAX_REFERENCES && next < candidates.length) {
     const wave = candidates.slice(next, next + MAX_REFERENCES - found.length).map((item, k) => ({ item, at: next + k }));
     next += wave.length;
-    const results = await Promise.allSettled(wave.map(w => load(w.item)));
+    const results = await Promise.allSettled(wave.map(w => download(w.item)));
     results.forEach((r, k) => {
       if (r.status === 'fulfilled') found.push({ at: wave[k].at, ref: r.value });
       else failures.push(`[${wave[k].item.provider}] ${wave[k].item.release || wave[k].item.id}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);

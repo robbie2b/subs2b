@@ -11,7 +11,7 @@ process.env.SUBSYNC_MAX_WAIT_MS = '4000';
 import axios from 'axios';
 import { parseCues } from '../src/utils/timeline';
 import { shiftSubtitle } from '../src/utils/subtitleFormat';
-import { needsReference, fromFileGroup, referenceKey, pickReferenceCandidates, clearReferenceCache, getAlignments, referencesAgree, alignAgainst } from '../src/core/alignment';
+import { needsReference, fromFileGroup, referenceKey, pickReferenceCandidates, clearReferenceCache, getReferences, getAlignments, referencesAgree, alignAgainst } from '../src/core/alignment';
 import { rankSubtitles } from '../src/utils/scorer';
 import { getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
 import { createAlignedHandler, createFallbackHandler, clearAlignmentDecisions } from '../src/proxy/alignedProxy';
@@ -748,6 +748,25 @@ async function main() {
     await configStorage.saveConfigAsync(uuid, 'pw12345', { ...stored, subsync: false });
     await handler({ params: { config: uuid, data: linkFor(baseUrl + '/ro-hd?off=1') }, query: {} } as any, off.res);
     check('switched off: the subtitle passes through unchanged', Math.abs(parseCues(off.out.body)[10].start - parseCues(RO_HD)[10].start) < 0.002);
+  }
+
+  // -- the references search does not wait for the slow sources once there are enough candidates --
+  {
+    clearReferenceCache();
+    providerItems.length = 0;
+    searchDelayMs = 0;
+    providerItems.push(
+      { id: 'q-fin', provider: 'subsource', providerName: 'Subsource', url: '/sub/proxy?url=' + encodeURIComponent('https://dl.subsource.net/fin.zip'), lang: 'fin', release: 'Early.Show.2022.S01E01.NORDiC.2160p.DV.HDR.WEB.HEVC-DRAUGR' },
+      { id: 'q-ara', provider: 'subsource', providerName: 'Subsource', url: '/sub/proxy?url=' + encodeURIComponent('https://dl.subdl.com/ara.zip'), lang: 'ara', release: 'Early.Show.S01.2160p.Max.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-SPAMKINGS' },
+      { id: 'q-fin2', provider: 'subsource', providerName: 'Subsource', url: '/sub/proxy?url=' + encodeURIComponent('https://dl.subsource.net/fin.zip?2'), lang: 'swe', release: 'Early.Show.2022.S01E01.2160p.WEB-DL.DDP5.1.HEVC-FLUX' }
+    );
+    // Subsource answers at once; the other two services take 2.5 s: they are not waited for when three candidates are there
+    (SubsourceProvider.prototype as any).executeSearch = async () => providerItems;
+    (SubDLProvider.prototype as any).executeSearch = async () => { await new Promise(r => setTimeout(r, 2500)); return []; };
+    (OpenSubtitlesProvider.prototype as any).executeSearch = async () => { await new Promise(r => setTimeout(r, 2500)); return []; };
+    const t0 = Date.now();
+    const refs = await getReferences({ query: parseSubtitleQuery('series', 'tt7777777:1:1', { filename: 'Early.Show.S01E01.2160p.WEB-DL.DDP5.1.HEVC-CRU.mkv' }), config: mergeWithDefaults({ languages: ['ron'], providers: { opensubtitles: { enabled: true, apiKey: 'test-key-1234567890' }, subdl: { enabled: true, apiKey: 'test-key-1234567890' }, subsource: { enabled: true, apiKey: 'test-key-1234567890' } } }), baseUrl: 'http://localhost:7011', filename: 'Early.Show.S01E01.2160p.WEB-DL.DDP5.1.HEVC-CRU.mkv' });
+    check('three candidates are enough: the slow sources are not waited for', refs.length >= 2 && Date.now() - t0 < 1800, { ms: Date.now() - t0, n: refs.length });
   }
 
   (axios as any).get = realGet;
