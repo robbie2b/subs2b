@@ -56,7 +56,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
-- **v1.5.12 (ramura `vercel`, 2026-11-06; commit local, NEPUSH, deploy doar la cererea utilizatorului):** (1) căutarea referințelor Subsync
+- **v1.5.12–v1.5.13 (ramura `vercel`, 2026-11-06; deploy la cererea utilizatorului):** (1.5.13 = referințe mai rapide, memoria „fără referințe", prag 30, `connect.json`) (1) căutarea referințelor Subsync
   pornește la T0, în paralel cu lista (`getAggregatedSubtitles` apelează `getReferences`, partajat prin cheie cu `prepareAligned`);
   în date, playerul cere subtitrarea imediat ce primește lista (`askedAfterMs` ≈ 0), deci nu există marjă: timp până la subtitrare =
   listă + așteptare (mediană ~4 s, p90 ~13 s înainte). (2) Referințe salvate care nu se potrivesc deloc („no reference fits well
