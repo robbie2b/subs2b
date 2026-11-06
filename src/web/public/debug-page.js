@@ -650,7 +650,7 @@ function applyActivityEvent(ev) {
   if (step === 'delivered') s.delivered++;
   if (step === 'compute' && meta.state === 'done') { s.computes++; if (!cur) s.verdict = meta.verdict || ''; }
   if (cur && (cur.state === 'done' || cur.state === 'warn')) return;
-  s.steps[step] = { state: meta.state || 'done', ms: meta.ms, at };
+  s.steps[step] = { state: meta.state || 'done', ms: meta.ms, at, direct: Boolean(meta.direct) };
 }
 
 /** running / done / warn (done with a problem) / stopped (never got to the list) */
@@ -658,13 +658,15 @@ function actSessionStatus(s, now) {
   const d = s.steps.delivered;
   if (d) return d.state === 'warn' ? 'warn' : 'done';
   const list = s.steps.list;
-  if (list && !s.steps.references && now - list.at > 4000) return 'done';
+  // (a first subtitle sent as it is never reaches this server again: nothing more is expected from it)
+  if (list && (list.direct || !s.steps.references) && now - list.at > 4000) return 'done';
   if (now - s.last > 30000) return list ? 'done' : 'stopped';
   return 'running';
 }
 
 function actStepLabel(key, s) {
   const st = s.steps[key];
+  if (!st && (key === 'asked' || key === 'delivered') && s.steps.list && s.steps.list.direct) return 'sent as it is';
   if (!st || st.state === 'start') return '';
   if (key === 'request') return '0 ms';
   if (key === 'rank') return `+${fmtMsDebug(st.ms || 0)}`;
@@ -720,6 +722,7 @@ function renderActivityCard(s, now) {
   if (running) note = `Now: <b>${escapeHtmlDebug(s.lastText)}</b>`;
   else {
     const parts = [];
+    if (s.steps.list && s.steps.list.direct && !s.steps.asked) parts.push('the first subtitle is from the file\'s own release group: the player gets it directly, without the check');
     if (s.computes > 1) parts.push(`${s.computes} subtitles synced`);
     if (s.delivered > 1) parts.push(`${s.delivered} sent to the player`);
     for (const w of s.warns.slice(0, 3)) parts.push(`⚠ ${w}`);

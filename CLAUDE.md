@@ -63,7 +63,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   enough" / „disagree" / „single reference") sunt căutate din nou o singură dată (`refreshReferences`, cooldown 1 h pe cheie) și
   subtitrarea se verifică iar; cheia (`referenceKey`) nu conține numele întreg, deci nu vede montaje diferite nemenționate (Avatar:
   salvate 0%, proaspete 88–92%). Test nou în `test/subsync.test.ts` pentru pornirea la T0; calea de reîmprospătare NU e testată
-  (cere Postgres pentru referințe salvate). Idei rămase: prag dynamic 30, pregătirea episodului următor, plafon pentru calcul.
+  (cere Postgres pentru referințe salvate). (3) Dynamic timeout: o sursă pusă mai sus în Priority decât cea cu subtitrarea bună se
+  așteaptă cel mult `PRIORITY_WAIT_MS` = 2 s (Family Guy: potrivire exactă la 0,5 s, ținută 6 s de Subs.ro care a dat timeout);
+  `EarlyStop.recheckAfterMs` reverifică la 2 s fără să mai sosească nimic. (4) Live activity: când prima subtitrare e de la grupul
+  fișierului (link direct, nu trece prin server) lista are `meta.direct`, iar cardul arată „sent as it is" la Player asked/Delivered
+  și se închide după 4 s (înainte părea că „nu s-a întâmplat nimic"). Idei rămase: prag dynamic 30, pregătirea episodului următor, plafon pentru calcul.
 - **v1.5.11 (ramura `vercel`, 2026-11-06; cerut de utilizator):** LIVE ACTIVITY nu mai e consolă de text: un card pe fiecare Play, cu o bară
   de 8 puncte (Request, Search, Rank, List sent, References, Compute, Player asked, Delivered; punctul activ pulsează, bara albastră
   în lucru, VERDE o singură culoare când a reușit, galben dacă s-a terminat cu probleme) și dedesubt câte o bulină pe sursă (verde

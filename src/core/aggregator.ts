@@ -77,14 +77,20 @@ export function parseSubtitleQuery(
 
 /** How long the search goes on after something good has arrived (ms), for sources about to answer */
 const DYNAMIC_GRACE_MS = 300;
+/**
+ * How long a source the user ranks higher than the one with the good subtitle is waited for. After that the good
+ * subtitle is enough: such a source could only add a copy or an equal match (Family Guy: an exact match at 0.5 s was
+ * held for 6 s by Subs.ro, which timed out).
+ */
+const PRIORITY_WAIT_MS = 2000;
 
 /**
  * Dynamic timeout: is what has arrived so far enough? The subtitles are filtered by language and ranked as the final list
  * will be. Enough means: the first one is on the top level (a hash match, or the exact release of the playing file) or
  * scores at least `dynamicTimeoutScore`, AND every source the user ranks higher than the one that gave it has already
- * answered (such a source could still bring a subtitle that goes before it).
+ * answered (such a source could still bring a subtitle that goes before it), or `PRIORITY_WAIT_MS` have passed.
  */
-function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: SubtitleQuery, config: UserConfig): boolean {
+function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: SubtitleQuery, config: UserConfig, elapsedMs: number): boolean {
   const whitelist = config.languages && config.languages.length > 0 ? config.languages : DEFAULT_USER_CONFIG.languages;
   const remap = config.language_remapping || config.languageRemap;
   const wanted: RawSubtitleItem[] = [];
@@ -112,7 +118,8 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
     return i < 0 ? 999 : i;
   };
   const bestRank = priority(best.provider);
-  if (pendingIds.some(id => priority(id) < bestRank)) return false;
+  // (a higher-ranked source is waited for only a short time)
+  if (elapsedMs < PRIORITY_WAIT_MS && pendingIds.some(id => priority(id) < bestRank)) return false;
   activity('search', filmLabel(query.id, query.extra?.filename), `Good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider} (score ${detail.score}${topLevel ? ', exact match' : ''}); waiting for ${pendingIds.join(', ') || 'nobody'}`);
   Logger.info(`[DYNAMIC] good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider}, score ${detail.score}${topLevel ? ' (top level)' : ''}; waiting for: ${pendingIds.join(', ') || 'nobody'}`);
   return true;
@@ -182,7 +189,7 @@ export async function getAggregatedSubtitles(
         // Dynamic timeout: it needs the playing file's name to tell what is good (a hash match always counts)
         const dynamic = config.dynamicTimeout === true && Boolean(query.extra?.filename || query.extra?.videoHash);
         const items = await executeParallelSearch(query, config, report, {
-          ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config) } } : {}),
+          ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, recheckAfterMs: PRIORITY_WAIT_MS, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart) } } : {}),
           outcome,
           // the sources that were not waited for have answered: the saved list is now the whole one
           onFullResult: full => {
@@ -500,7 +507,7 @@ export async function getAggregatedSubtitles(
     Logger.info('[FORMAT TEST] the first subtitle is offered 4 more times at the top of the list');
   }
 
-  activity('list', film, `List ready in ${fmtMs(Date.now() - requestStart)}: ${subtitles.length} subtitle${subtitles.length === 1 ? '' : 's'} sent to the player${incomplete ? ' (kept only briefly: the search was not complete)' : ''}`, { step: 'list', state: 'done', ms: Date.now() - requestStart });
+  activity('list', film, `List ready in ${fmtMs(Date.now() - requestStart)}: ${subtitles.length} subtitle${subtitles.length === 1 ? '' : 's'} sent to the player${incomplete ? ' (kept only briefly: the search was not complete)' : ''}`, { step: 'list', state: 'done', ms: Date.now() - requestStart, direct: subtitles.length > 0 && !subtitles[0].url.includes('/sub/aligned/') });
 
   // the player keeps the list as long as this server does; an empty or incomplete list only briefly (and a test list
   // not at all)

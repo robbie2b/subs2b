@@ -41,6 +41,8 @@ export interface EarlyStop {
   isEnough(items: RawSubtitleItem[], pending: string[]): boolean;
   /** how long to go on after "enough", for sources about to answer */
   graceMs: number;
+  /** ask again this long after the search started, even if no source has answered since (the judgement depends on time) */
+  recheckAfterMs?: number;
 }
 
 export interface SearchOptions {
@@ -187,6 +189,8 @@ export async function executeParallelSearch(
     if (enough) graceTimer = setTimeout(() => stopEarly(), early.graceMs);
   };
 
+  const recheckTimer = early && early.recheckAfterMs ? setTimeout(check, early.recheckAfterMs) : undefined;
+
   const all = Promise.allSettled(activeProviders.map((provider, idx) =>
     runTimed(provider).then(
       outcome => {
@@ -205,6 +209,7 @@ export async function executeParallelSearch(
 
   const winner = early ? await Promise.race([all.then(() => 'all' as const), earlyPromise]) : (await all, 'all' as const);
   if (graceTimer) clearTimeout(graceTimer);
+  if (recheckTimer) clearTimeout(recheckTimer);
 
   if (winner === 'early') {
     const waived = [...pending].map(i => activeProviders[i]);

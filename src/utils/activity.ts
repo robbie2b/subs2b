@@ -23,6 +23,8 @@ export interface ActivityMeta {
   waived?: string[];
   /** one source answered (late = after the list was sent) */
   src?: { name: string; state: 'ok' | 'fail' | 'late'; ms: number; count?: number; error?: string };
+  /** list: the first subtitle goes to the player as it is (no link through this server), so there is no "player asked" */
+  direct?: boolean;
   /** compute done: what Subsync decided, short */
   verdict?: string;
 }

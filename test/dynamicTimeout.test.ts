@@ -52,7 +52,7 @@ async function main(): Promise<void> {
 
   // 3. a source ranked higher by the user than the one with the good subtitle is waited for
   const three = await ask('tt0000013', config({ providerPriority: ['slow', 'fast'] }));
-  check('a higher-ranked source that has not answered is waited for', three.ms >= 2800 && three.answer.subtitles.length === 2, { ms: three.ms, n: three.answer.subtitles.length });
+  check('a higher-ranked source that has not answered is waited for only a short time (2 s), not until it times out', three.ms >= 1900 && three.ms < 2800 && three.answer.subtitles.length === 1, { ms: three.ms, n: three.answer.subtitles.length });
 
   // 4. nothing to judge by (no file name, no hash): no early stop
   const four = await ask('tt0000014', config(), false);
