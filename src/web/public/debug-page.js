@@ -622,6 +622,14 @@ function applyActivityEvent(ev) {
   let s = null;
   if (ev.kind !== 'request') {
     for (let i = list.length - 1; i >= 0; i--) if (list[i].film === ev.film) { s = list[i]; break; }
+  } else {
+    // (with several server instances the steps of one play can arrive before its request: the card they made is the
+    // same play, not another one)
+    const at = Date.parse(ev.at);
+    for (let i = list.length - 1; i >= 0; i--) {
+      const c = list[i];
+      if (c.film === ev.film && !c.steps.request && c.start >= at - 1000 && c.start - at < 60000) { s = c; s.start = Math.min(s.start, at); break; }
+    }
   }
   if (!s) {
     s = { film: ev.film, start: Date.parse(ev.at), last: Date.parse(ev.at), steps: {}, chips: [], warns: [], lastText: '', verdict: '', computes: 0, delivered: 0, rendered: '' };
