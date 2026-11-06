@@ -89,7 +89,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   `storage/requestCountStore.ts`, tabela `request_counts`, ruta `/debug/requests.json`, card „REQUESTS TO THE SOURCES" în Debug) ca să
   comparăm cu panoul Subs.ro; verificat pe Postgres 16 (NEDEPLOYAT). Planuri discutate: descărcări și liste salvate în DB (partajate între
   instanțe), oprire de siguranță la ~270/zi, integrare directă api.subs.ro (`/v1.0/search/imdbid/{id}`, antet `X-Subs-Api-Key`; cere
-  domeniile `api.subs.ro` și `subs.ro` permise în mediu și cheia prin `request_credential`). (4) Live activity: când prima subtitrare e de la grupul
+  domeniile `api.subs.ro` și `subs.ro` permise în mediu și cheia prin `request_credential`).
+  **Măsurătoare Subs.ro (2026-11-06, `/quota` e gratuit și nu consumă; filmul Weapons, cu `?nocache=1`):** prima listă a unui titlu nou +4 cereri
+  (căutare + pregătirea primei subtitrări prin addonul comunității); cele 3 linkuri aliniate cerute apoi +0 (addonul păstrează pachetul);
+  a doua listă a aceluiași film +0. Deci un titlu NOU costă ~4 cereri la Subs.ro (nu 5–9 per Play), iar realegerile lui Nuvio nu costă;
+  la 300/zi încap ~75 de titluri noi pe zi, mai mult decât uzul normal (~15–20). Integrarea directă (căutare 1 + pachet 1 = ~2 per titlu) ar tăia
+  la jumătate, dar am renunțat deocamdată (pierdem numele de release din addon, sau descărcăm pachetul de 16 MB la fiecare căutare). Cheia
+  Subs.ro a utilizatorului e în mediul cloud ca secret de rețea pentru `api.subs.ro` (injectat de proxy, nu se vede); `api.subs.ro` e în lista
+  permisă. Cererile mele de test au consumat 6 din cotă (105 → 111). (4) Live activity: când prima subtitrare e de la grupul
   fișierului (link direct, nu trece prin server) lista are `meta.direct`, iar cardul arată „sent as it is" la Player asked/Delivered
   și se închide după 4 s (înainte părea că „nu s-a întâmplat nimic"). Idei rămase: prag dynamic 30, pregătirea episodului următor, plafon pentru calcul.
 - **v1.5.11 (ramura `vercel`, 2026-11-06; cerut de utilizator):** LIVE ACTIVITY nu mai e consolă de text: un card pe fiecare Play, cu o bară
