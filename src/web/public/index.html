@@ -1360,16 +1360,10 @@
             <div class="dbg-head">
               <div>
                 <div class="section-badge-header">LIVE ACTIVITY</div>
-                <p class="section-desc-subtle">What the server is doing right now, step by step: searching the sources, ranking, syncing and sending subtitles. Refreshed every 2 seconds while this page is open (kept in memory, reset on restart).</p>
+                <p class="section-desc-subtle">One card for every Play: a bar with a checkpoint for each step (request, search, ranking, list, timing references, computation, the player asking, delivery) and a dot for every source showing how it answered (green fast, amber slow, red failed, dashed not waited for). Refreshed every 2 seconds while this page is open (kept in memory, reset on restart).</p>
               </div>
               <div class="dbg-actions">
                 <span class="dbg-live" id="dbg-act-live"><i></i>Live</span>
-                <label class="dbg-switch" title="Show the answer of every source, one line each">
-                  <input type="checkbox" id="dbg-act-sources"><span class="dbg-switch-track"></span>Sources
-                </label>
-                <label class="dbg-switch" title="Keep the newest step in view">
-                  <input type="checkbox" id="dbg-act-autoscroll" checked><span class="dbg-switch-track"></span>Auto-scroll
-                </label>
                 <button class="dbg-btn" id="dbg-act-pause" type="button">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" id="dbg-act-pause-icon"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
                   <span id="dbg-act-pause-label">Pause</span>
@@ -1380,7 +1374,7 @@
                 </button>
               </div>
             </div>
-            <div id="dbg-activity" class="dbg-activity hide-sources" role="log" aria-live="off"><div class="dbg-empty">Nothing yet. Play something and its steps appear here.</div></div>
+            <div id="dbg-activity" class="dbg-activity" role="log" aria-live="off"><div class="dbg-empty">Nothing yet. Play something and its steps appear here.</div></div>
           </div>
           <div class="dbg-card">
             <div class="dbg-head">
@@ -1414,6 +1408,16 @@
                 <div class="section-badge-header">SERVICES &amp; ADDONS</div>
                 <p class="section-desc-subtle" id="dbg-prov-summary">Loading...</p>
               </div>
+              <div class="dbg-actions">
+                <label class="dbg-perpage">Per page
+                  <select id="dbg-prov-page-size" class="dbg-select">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <div class="dbg-table-scroll">
               <table class="dbg-prov-table">
@@ -1433,6 +1437,13 @@
                 </thead>
                 <tbody id="dbg-prov-body"><tr><td colspan="10" class="dbg-empty">Loading...</td></tr></tbody>
               </table>
+            </div>
+            <div class="dbg-pager" id="dbg-prov-pager">
+              <span id="dbg-prov-page-info" class="dbg-muted"></span>
+              <div class="dbg-actions">
+                <button class="dbg-btn" id="dbg-prov-prev" type="button">‹ Prev</button>
+                <button class="dbg-btn" id="dbg-prov-next" type="button">Next ›</button>
+              </div>
             </div>
             <p class="section-desc-subtle" style="margin-bottom:0">
               Measured over the latest requests that really asked the services (answers served from the cache are not counted).

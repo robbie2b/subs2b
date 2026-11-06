@@ -145,7 +145,7 @@ export async function getAggregatedSubtitles(
 ): Promise<StremioSubtitlesResponse> {
   const requestStart = Date.now();
   const film = filmLabel(query.id, query.extra?.filename);
-  activity('request', film, `Subtitle request: ${query.type} ${query.id}${query.extra?.filename ? '' : ' (the player sent no file name)'}`);
+  activity('request', film, `Subtitle request: ${query.type} ${query.id}${query.extra?.filename ? '' : ' (the player sent no file name)'}`, { step: 'request', state: 'done', ms: 0 });
   // The file hash changes which OpenSubtitles results are flagged as exact matches, so it is part of the key
   const cacheKey = searchCacheKey(query, config);
 
@@ -207,7 +207,7 @@ export async function getAggregatedSubtitles(
     }
   } else {
     Logger.info(`Serving subtitles from cache for ${query.id} (${rawSubtitles.length} items)`);
-    activity('search', film, `Saved list found (${rawSubtitles.length} subtitles): no search needed`);
+    activity('search', film, `Saved list found (${rawSubtitles.length} subtitles): no search needed`, { step: 'search', state: 'done', ms: 0 });
   }
 
   const searchMs = fromCache ? 0 : Date.now() - searchStart;
@@ -296,9 +296,9 @@ export async function getAggregatedSubtitles(
     scoringMs = Date.now() - scoringStart;
     if (ranked.items.length) {
       const best = ranked.details[0];
-      activity('rank', film, `Ranked ${ranked.items.length} subtitle${ranked.items.length === 1 ? '' : 's'} in ${fmtMs(scoringMs)}; best: "${(ranked.items[0].release || '').slice(0, 70)}" from ${ranked.items[0].provider} (score ${best.score}${best.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r)) ? ', exact match' : ''})`);
+      activity('rank', film, `Ranked ${ranked.items.length} subtitle${ranked.items.length === 1 ? '' : 's'} in ${fmtMs(scoringMs)}; best: "${(ranked.items[0].release || '').slice(0, 70)}" from ${ranked.items[0].provider} (score ${best.score}${best.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r)) ? ', exact match' : ''})`, { step: 'rank', state: 'done', ms: scoringMs });
     } else {
-      activity('rank', film, 'Nothing to rank');
+      activity('rank', film, 'Nothing to rank', { step: 'rank', state: 'done', ms: scoringMs });
     }
     Logger.info(
       `Scoring: ${orderedItems.length} -> ${ranked.items.length} subtitles (filename: ${ranked.usedFilename ? 'yes' : 'no'}${ranked.fallback ? ', fallback' : ''})`
@@ -493,7 +493,7 @@ export async function getAggregatedSubtitles(
     Logger.info('[FORMAT TEST] the first subtitle is offered 4 more times at the top of the list');
   }
 
-  activity('list', film, `List ready in ${fmtMs(Date.now() - requestStart)}: ${subtitles.length} subtitle${subtitles.length === 1 ? '' : 's'} sent to the player${incomplete ? ' (kept only briefly: the search was not complete)' : ''}`);
+  activity('list', film, `List ready in ${fmtMs(Date.now() - requestStart)}: ${subtitles.length} subtitle${subtitles.length === 1 ? '' : 's'} sent to the player${incomplete ? ' (kept only briefly: the search was not complete)' : ''}`, { step: 'list', state: 'done', ms: Date.now() - requestStart });
 
   // the player keeps the list as long as this server does; an empty or incomplete list only briefly (and a test list
   // not at all)

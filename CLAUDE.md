@@ -56,6 +56,13 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.11 (ramura `vercel`, 2026-11-06; cerut de utilizator):** LIVE ACTIVITY nu mai e consolă de text: un card pe fiecare Play, cu o bară
+  de 8 puncte (Request, Search, Rank, List sent, References, Compute, Player asked, Delivered; punctul activ pulsează, bara albastră
+  în lucru, VERDE o singură culoare când a reușit, galben dacă s-a terminat cu probleme) și dedesubt câte o bulină pe sursă (verde
+  rapid, galben ≥1 s, roșu eșuat, albastru în așteptare, punctat „not waited for"). Evenimentele din `activity.ts` au acum `meta`
+  (`step`, `state`, `ms`, `sources`, `waived`, `src`, `verdict`); cardurile se construiesc în `debug-page.js`
+  (`applyActivityEvent`, `renderActivity`); un card nou la fiecare „request"; fără Subsync, cardul se închide după 4 s de la listă.
+  SERVICES & ADDONS are paginare (5 implicit, 10/20/50, Prev/Next, ținută minte în browser). Test: `test/activity.test.ts`.
 - **Pagina Debug reorganizată (ramura `vercel`, 2026-11-05; cerut de utilizator):** ordinea: LIVE LOG, **LIVE ACTIVITY** (nou),
   WHAT WAS ACCESSED, SERVICES & ADDONS, SUBSYNC DECISIONS, TV FORMAT TEST, SCORING RULES, DOWNLOAD FAILURES, WHEN IS THE ADDON USED
   (jos de tot). LIVE ACTIVITY arată pașii serverului în engleză (REQUEST, SEARCH, SOURCE, RANK, LIST, SYNC, SEND, DONE, WARN),

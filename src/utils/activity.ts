@@ -8,6 +8,25 @@ import { INSTANCE_ID } from './logger';
 
 export type ActivityKind = 'request' | 'search' | 'source' | 'rank' | 'list' | 'sync' | 'send' | 'done' | 'warn';
 
+/** The steps of one play, in order: what the Live activity panel draws as the checkpoints of a progress bar */
+export type ActivityStep = 'request' | 'search' | 'rank' | 'list' | 'references' | 'compute' | 'asked' | 'delivered';
+
+/** The same event in a form the panel can draw (the text stays for people and tests) */
+export interface ActivityMeta {
+  step?: ActivityStep;
+  state?: 'start' | 'done' | 'warn';
+  /** how long the step took (list: since the request; references: since the preparation started...) */
+  ms?: number;
+  /** search start: the sources being asked */
+  sources?: string[];
+  /** search done: the sources not waited for (dynamic timeout) */
+  waived?: string[];
+  /** one source answered (late = after the list was sent) */
+  src?: { name: string; state: 'ok' | 'fail' | 'late'; ms: number; count?: number; error?: string };
+  /** compute done: what Subsync decided, short */
+  verdict?: string;
+}
+
 export interface ActivityEvent {
   seq: number;
   at: string;
@@ -15,6 +34,7 @@ export interface ActivityEvent {
   /** what is being played: the file name when the player sent it, else the content id */
   film: string;
   text: string;
+  meta?: ActivityMeta;
 }
 
 const MAX_EVENTS = 600;
@@ -32,8 +52,8 @@ export function fmtMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)} s` : `${Math.round(ms)} ms`;
 }
 
-export function activity(kind: ActivityKind, film: string, text: string): void {
-  buffer.push({ seq: nextSeq++, at: new Date().toISOString(), kind, film, text });
+export function activity(kind: ActivityKind, film: string, text: string, meta?: ActivityMeta): void {
+  buffer.push({ seq: nextSeq++, at: new Date().toISOString(), kind, film, text, ...(meta ? { meta } : {}) });
   if (buffer.length > MAX_EVENTS) buffer.shift();
 }
 

@@ -3367,30 +3367,51 @@ button:active {
 /* Debug: a source that failed or timed out, in the list of source timings */
 .dbg-chip.dbg-bad { background: rgba(239, 68, 68, 0.16); color: #f87171; }
 
-/* Debug: live activity (what the server is doing, step by step) */
-.dbg-activity { background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 10px; height: 340px; overflow: auto; font-size: 12px; line-height: 1.55; margin-top: 10px; }
-.dbg-act-film { margin: 12px 0 4px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); font-size: 11px; font-weight: 600; color: var(--text-muted); overflow-wrap: anywhere; }
-.dbg-act-film:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
-.dbg-act-row { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; }
-.dbg-act-time { flex: none; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.dbg-act-tag { flex: none; width: 64px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; border-radius: 3px; padding: 1px 0; background: rgba(161, 161, 170, 0.14); color: var(--text-secondary); }
-.dbg-act-text { min-width: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
-.act-request .dbg-act-tag { background: rgba(244, 244, 245, 0.14); color: #f4f4f5; }
-.act-request .dbg-act-text { color: #f4f4f5; font-weight: 600; }
-.act-search .dbg-act-tag { background: rgba(96, 165, 250, 0.16); color: #60a5fa; }
-.act-source .dbg-act-tag { background: rgba(161, 161, 170, 0.14); color: var(--text-muted); }
-.act-source .dbg-act-text { color: var(--text-muted); }
-.act-rank .dbg-act-tag { background: rgba(192, 132, 252, 0.16); color: #c084fc; }
-.act-list .dbg-act-tag { background: rgba(52, 211, 153, 0.16); color: #34d399; }
-.act-list .dbg-act-text { color: #34d399; font-weight: 600; }
-.act-sync .dbg-act-tag { background: rgba(251, 191, 36, 0.16); color: #fbbf24; }
-.act-send .dbg-act-tag { background: rgba(34, 211, 238, 0.16); color: #22d3ee; }
-.act-done .dbg-act-tag { background: rgba(52, 211, 153, 0.22); color: #34d399; }
-.act-done .dbg-act-text { color: #34d399; }
-.act-warn .dbg-act-tag { background: rgba(248, 113, 113, 0.18); color: #f87171; }
-.act-warn .dbg-act-text { color: #f87171; }
-.dbg-activity.hide-sources .act-source { display: none; }
+/* Debug: live activity (one card per play: a bar with a checkpoint per step, and a dot per source) */
+.dbg-activity { margin-top: 10px; max-height: 620px; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.act-card { background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px 14px; }
+.act-card.running { border-color: rgba(96, 165, 250, 0.45); }
+.act-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.act-film { min-width: 0; font-size: 13px; font-weight: 600; color: var(--text-primary, #f4f4f5); overflow-wrap: anywhere; }
+.act-state { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.act-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 4px; }
+.act-card.running .act-badge { background: rgba(96, 165, 250, 0.16); color: #60a5fa; }
+.act-card.done .act-badge { background: rgba(52, 211, 153, 0.16); color: #34d399; }
+.act-card.warn .act-badge { background: rgba(251, 191, 36, 0.16); color: #fbbf24; }
+.act-card.stopped .act-badge { background: rgba(161, 161, 170, 0.16); color: var(--text-muted); }
+.act-steps { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); margin-top: 14px; }
+.act-track { position: absolute; left: 6.25%; right: 6.25%; top: 10px; height: 4px; border-radius: 2px; background: rgba(161, 161, 170, 0.18); }
+.act-fill { height: 100%; border-radius: 2px; background: #34d399; transition: width 0.4s ease; }
+.act-card.running .act-fill { background: linear-gradient(90deg, #3b82f6, #60a5fa, #3b82f6); background-size: 200% 100%; animation: act-shimmer 1.4s linear infinite; }
+.act-card.warn .act-fill { background: #fbbf24; }
+.act-card.stopped .act-fill { background: #71717a; }
+.act-step { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+.act-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #052e1b; background: #27272a; border: 2px solid #3f3f46; box-sizing: border-box; }
+.act-step.done .act-dot { background: #34d399; border-color: #34d399; }
+.act-step.warn .act-dot { background: #fbbf24; border-color: #fbbf24; color: #3b2a00; }
+.act-step.active .act-dot { background: var(--bg-input); border-color: #60a5fa; animation: act-pulse 1.2s ease-out infinite; }
+.act-step.skipped .act-dot { opacity: 0.5; border-style: dashed; }
+.act-step-name { margin-top: 6px; font-size: 11px; color: var(--text-secondary); }
+.act-step.pending .act-step-name, .act-step.skipped .act-step-name { color: var(--text-muted); }
+.act-step-time { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; min-height: 15px; }
+.act-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.act-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.act-chip em { font-style: normal; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.act-chip i { width: 8px; height: 8px; border-radius: 50%; background: #71717a; flex: none; }
+.act-chip.ok i { background: #34d399; }
+.act-chip.slow i { background: #fbbf24; }
+.act-chip.fail i { background: #f87171; }
+.act-chip.wait i { background: transparent; border: 2px solid #60a5fa; box-sizing: border-box; animation: act-pulse 1.2s ease-out infinite; }
+.act-chip.waived { border-style: dashed; color: var(--text-muted); }
+.act-note { margin-top: 10px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.act-note b { color: var(--text-secondary); font-weight: 600; }
+@keyframes act-shimmer { from { background-position: 200% 0; } to { background-position: 0 0; } }
+@keyframes act-pulse { 0% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.55); } 100% { box-shadow: 0 0 0 9px rgba(96, 165, 250, 0); } }
+@media (prefers-reduced-motion: reduce) { .act-card.running .act-fill, .act-step.active .act-dot, .act-chip.wait i { animation: none; } }
 @media (max-width: 640px) {
-  .dbg-act-row { flex-wrap: wrap; row-gap: 0; }
-  .dbg-act-text { flex-basis: 100%; }
+  .act-step-name { font-size: 8px; letter-spacing: -0.2px; }
+  .act-step-time { font-size: 9px; }
+  .act-dot { width: 20px; height: 20px; font-size: 10px; }
+  .act-track { top: 8px; }
+}
 }

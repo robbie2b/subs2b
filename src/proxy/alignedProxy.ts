@@ -66,7 +66,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
     const prep = prepareAligned(token, query, config, baseUrl);
     const film = filmLabel(token.id, token.f);
     const release = (token.r || 'subtitle').slice(0, 70);
-    activity('send', film, `Player asked for "${release}" (${earlyPrepared ? `prepared ${fmtMs(Date.now() - prep.startedAt)} ago` : 'preparing it now'})`);
+    activity('send', film, `Player asked for "${release}" (${earlyPrepared ? `prepared ${fmtMs(Date.now() - prep.startedAt)} ago` : 'preparing it now'})`, { step: 'asked', state: 'done' });
 
     let text: string;
     try {
@@ -82,7 +82,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       const what = outcome === 'shifted' && result
         ? `aligned: shifted ${result.decision.offset > 0 ? '+' : ''}${result.decision.offset} s${result.decision.ratio !== 1 ? ` ×${result.decision.ratio}` : ''}`
         : outcome === 'unchanged' ? 'unchanged' : outcome === 'timeout' ? 'unchanged: Subsync took too long' : 'unchanged: Subsync failed';
-      activity(outcome === 'timeout' || outcome === 'error' ? 'warn' : 'done', film, `Sent "${replacedBy ? String(replacedBy).slice(0, 60) : release}" to the player (${what}); it waited ${fmtMs(waited)}`);
+      activity(outcome === 'timeout' || outcome === 'error' ? 'warn' : 'done', film, `Sent "${replacedBy ? String(replacedBy).slice(0, 60) : release}" to the player (${what}); it waited ${fmtMs(waited)}`, { step: 'delivered', state: outcome === 'timeout' || outcome === 'error' ? 'warn' : 'done', ms: waited });
       recordAlignment(configKey, {
         ...(t ? {
           timing: {
@@ -126,7 +126,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       // and is logged once; the repeats are only a short line
       if (prep.reported) {
         Logger.info(`[SUBSYNC] served again from memory (decided earlier, nothing computed)`, { id: token.id, subtitle: replacedBy || token.r });
-        activity('done', film, `Sent "${release}" again from memory (nothing computed); it waited ${fmtMs(Date.now() - started)}`);
+        activity('done', film, `Sent "${release}" again from memory (nothing computed); it waited ${fmtMs(Date.now() - started)}`, { step: 'delivered', state: 'done', ms: Date.now() - started });
         const again = served.text ?? text;
         sendSubtitleResponse(res, result.decision.apply ? applyAlignment(again, result.decision.result!) : again, 'srt', 'subtitle.srt', 'public, max-age=3600');
         return;

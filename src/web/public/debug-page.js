@@ -1,6 +1,6 @@
 // Debug page: live server log + when/what the addon was used for.
 // Loaded after app.js; app.js calls startDebugPage()/stopDebugPage() when the page is shown/left.
-const debugState = { names: {}, logTimer: null, usageTimer: null, lastSeq: 0, instance: '', seenLines: null, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5, dlEntries: [], dlPage: 1, dlPageSize: 5, openDl: new Set(), actTimer: null, actSeq: 0, actInstance: '', actSeen: null, actPaused: false, actLastFilm: '' };
+const debugState = { names: {}, logTimer: null, usageTimer: null, lastSeq: 0, instance: '', seenLines: null, paused: false, wired: false, open: new Set(), lastUsage: null, page: 1, pageSize: 5, kinds: {}, subsyncEntries: [], subsyncPage: 1, subsyncPageSize: 5, dlEntries: [], dlPage: 1, dlPageSize: 5, openDl: new Set(), actTimer: null, actSeq: 0, actInstance: '', actSeen: null, actPaused: false, actSessions: [], provData: null, provPage: 1, provPageSize: 5 };
 const PLAY_ICON = 'M8,5.14V19.14L19,12.14L8,5.14Z';
 const PAUSE_ICON = 'M14,19H18V5H14M6,19H10V5H6V19Z';
 
@@ -57,6 +57,22 @@ function startDebugPage() {
         renderSubsync();
       });
     }
+    try {
+      const savedProv = parseInt(localStorage.getItem('subs2b_dbg_prov_pagesize') || '', 10);
+      if ([5, 10, 20, 50].includes(savedProv)) debugState.provPageSize = savedProv;
+    } catch (err) { /* storage may be blocked */ }
+    const provSelect = document.getElementById('dbg-prov-page-size');
+    if (provSelect) {
+      provSelect.value = String(debugState.provPageSize);
+      provSelect.addEventListener('change', () => {
+        debugState.provPageSize = parseInt(provSelect.value, 10) || 5;
+        debugState.provPage = 1;
+        try { localStorage.setItem('subs2b_dbg_prov_pagesize', String(debugState.provPageSize)); } catch (err) { /* ignore */ }
+        renderProviderTable();
+      });
+    }
+    document.getElementById('dbg-prov-prev')?.addEventListener('click', () => { debugState.provPage--; renderProviderTable(); });
+    document.getElementById('dbg-prov-next')?.addEventListener('click', () => { debugState.provPage++; renderProviderTable(); });
     // download failures: the same paging as the other lists, and a click opens one
     try {
       const savedDl = parseInt(localStorage.getItem('subs2b_dbg_dl_pagesize') || '', 10);
@@ -83,10 +99,6 @@ function startDebugPage() {
       if (open) debugState.openDl.add(key); else debugState.openDl.delete(key);
     });
     // live activity: the answer of every source is hidden until asked for; pause and clear like the log
-    const actBox = document.getElementById('dbg-activity');
-    document.getElementById('dbg-act-sources')?.addEventListener('change', event => {
-      actBox?.classList.toggle('hide-sources', !event.target.checked);
-    });
     document.getElementById('dbg-act-pause')?.addEventListener('click', () => {
       debugState.actPaused = !debugState.actPaused;
       document.getElementById('dbg-act-pause-label').textContent = debugState.actPaused ? 'Resume' : 'Pause';
@@ -94,8 +106,8 @@ function startDebugPage() {
       document.getElementById('dbg-act-live')?.classList.toggle('paused', debugState.actPaused);
     });
     document.getElementById('dbg-act-clear')?.addEventListener('click', () => {
-      if (actBox) actBox.textContent = '';
-      debugState.actLastFilm = '';
+      debugState.actSessions = [];
+      renderActivity();
     });
     document.getElementById('dbg-subsync-prev')?.addEventListener('click', () => { debugState.subsyncPage--; renderSubsync(); });
     document.getElementById('dbg-subsync-next')?.addEventListener('click', () => { debugState.subsyncPage++; renderSubsync(); });
@@ -180,12 +192,14 @@ function startDebugPage() {
   refreshActivity();
   debugState.logTimer = setInterval(refreshLogs, 2000);
   debugState.actTimer = setInterval(refreshActivity, 2000);
+  debugState.actTick = setInterval(tickActivity, 1000);
   debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); refreshDownloads(); }, 30000);
 }
 
 function stopDebugPage() {
   clearInterval(debugState.logTimer);
   clearInterval(debugState.actTimer);
+  clearInterval(debugState.actTick);
   clearInterval(debugState.usageTimer);
   debugState.logTimer = null;
   debugState.actTimer = null;
@@ -379,7 +393,14 @@ function renderProviders(data) {
   debugState.kinds = {};
   for (const p of data.providers || []) { debugState.kinds[p.id] = p.kind; debugState.names[p.id] = p.name; }
   renderRecent();
+  debugState.provData = data;
+  renderProviderTable();
+}
 
+/** The services table, a page at a time like the other lists */
+function renderProviderTable() {
+  const data = debugState.provData;
+  if (!data) return;
   const body = document.getElementById('dbg-prov-body');
   const summary = document.getElementById('dbg-prov-summary');
   if (!body || !summary) return;
@@ -397,13 +418,26 @@ function renderProviders(data) {
     : 'No data yet. Press Play on something in Stremio.';
   if (!data.providers.length) {
     body.innerHTML = '<tr><td colspan="10" class="dbg-empty">No service has answered yet.</td></tr>';
+    const none = document.getElementById('dbg-prov-page-info');
+    if (none) none.textContent = '';
     return;
   }
+  const total = data.providers.length;
+  const pages = Math.max(1, Math.ceil(total / debugState.provPageSize));
+  debugState.provPage = Math.min(Math.max(1, debugState.provPage), pages);
+  const from = (debugState.provPage - 1) * debugState.provPageSize;
+  const slice = data.providers.slice(from, from + debugState.provPageSize);
+  const info = document.getElementById('dbg-prov-page-info');
+  if (info) info.textContent = `${from + 1}-${from + slice.length} of ${total} · page ${debugState.provPage}/${pages}`;
+  const prevBtn = document.getElementById('dbg-prov-prev');
+  const nextBtn = document.getElementById('dbg-prov-next');
+  if (prevBtn) prevBtn.disabled = debugState.provPage <= 1;
+  if (nextBtn) nextBtn.disabled = debugState.provPage >= pages;
 
   const pct = n => `${Math.round(n * 100)}%`;
   const ms = n => (n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${n} ms`);
   const ranked = data.withRanking || 0;
-  body.innerHTML = data.providers.map(p => {
+  body.innerHTML = slice.map(p => {
     let status;
     if (p.lastOk === null) status = '<span class="dbg-status idle">no search yet</span>';
     else if (p.lastOk) status = '<span class="dbg-status ok">OK</span>';
@@ -578,32 +612,157 @@ function renderDownloads() {
   if (next) next.disabled = debugState.dlPage >= pages;
 }
 
-const ACTIVITY_TAGS = { request: 'REQUEST', search: 'SEARCH', source: 'SOURCE', rank: 'RANK', list: 'LIST', sync: 'SYNC', send: 'SEND', done: 'DONE', warn: 'WARN' };
+const ACT_STEPS = [['request', 'Request'], ['search', 'Search'], ['rank', 'Rank'], ['list', 'List sent'], ['references', 'References'], ['compute', 'Compute'], ['asked', 'Player asked'], ['delivered', 'Delivered']];
+const ACT_MAX_SESSIONS = 15;
 
-/** Adds the steps to the Live activity panel (a heading when the film changes) */
-function appendActivity(events) {
-  const box = document.getElementById('dbg-activity');
-  if (!box || !events.length) return;
-  if (box.querySelector('.dbg-empty')) box.textContent = '';
-  const fragment = document.createDocumentFragment();
-  for (const ev of events) {
-    if (ev.film !== debugState.actLastFilm) {
-      const heading = document.createElement('div');
-      heading.className = 'dbg-act-film';
-      heading.textContent = ev.film;
-      fragment.appendChild(heading);
-      debugState.actLastFilm = ev.film;
-    }
-    const d = new Date(ev.at);
-    const time = `${d.toLocaleTimeString('en-GB', { timeZone: 'Europe/Bucharest', hour12: false })}.${String(d.getMilliseconds()).padStart(3, '0')}`;
-    const row = document.createElement('div');
-    row.className = `dbg-act-row act-${ev.kind}`;
-    row.innerHTML = `<span class="dbg-act-time">${time}</span><span class="dbg-act-tag">${ACTIVITY_TAGS[ev.kind] || ''}</span><span class="dbg-act-text">${escapeHtmlDebug(ev.text)}</span>`;
-    fragment.appendChild(row);
+/** Puts one step of the server into the card of its play (a new card at every "request") */
+function applyActivityEvent(ev) {
+  const list = debugState.actSessions || (debugState.actSessions = []);
+  const meta = ev.meta || {};
+  let s = null;
+  if (ev.kind !== 'request') {
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].film === ev.film) { s = list[i]; break; }
   }
-  box.appendChild(fragment);
-  while (box.childElementCount > 900) box.removeChild(box.firstElementChild);
-  if (document.getElementById('dbg-act-autoscroll')?.checked) box.scrollTop = box.scrollHeight;
+  if (!s) {
+    s = { film: ev.film, start: Date.parse(ev.at), last: Date.parse(ev.at), steps: {}, chips: [], warns: [], lastText: '', verdict: '', computes: 0, delivered: 0, rendered: '' };
+    list.push(s);
+    while (list.length > ACT_MAX_SESSIONS) list.shift();
+  }
+  const at = Date.parse(ev.at);
+  s.last = Math.max(s.last, at);
+  if (ev.kind === 'warn') s.warns.push(ev.text);
+  if (meta.src) {
+    const name = meta.src.name;
+    const chip = s.chips.find(c => c.name === name) || (s.chips.push({ name }), s.chips[s.chips.length - 1]);
+    Object.assign(chip, { state: meta.src.state, ms: meta.src.ms, error: meta.src.error || '' });
+    return;
+  }
+  s.lastText = ev.text;
+  if (meta.sources) {
+    for (const name of meta.sources) if (!s.chips.some(c => c.name === name)) s.chips.push({ name, state: 'wait' });
+  }
+  if (meta.waived) {
+    for (const c of s.chips) if (meta.waived.includes(c.name) && c.state === 'wait') c.state = 'waived';
+  }
+  const step = meta.step;
+  if (!step) return;
+  const cur = s.steps[step];
+  if (step === 'delivered') s.delivered++;
+  if (step === 'compute' && meta.state === 'done') { s.computes++; if (!cur) s.verdict = meta.verdict || ''; }
+  if (cur && (cur.state === 'done' || cur.state === 'warn')) return;
+  s.steps[step] = { state: meta.state || 'done', ms: meta.ms, at };
+}
+
+/** running / done / warn (done with a problem) / stopped (never got to the list) */
+function actSessionStatus(s, now) {
+  const d = s.steps.delivered;
+  if (d) return d.state === 'warn' ? 'warn' : 'done';
+  const list = s.steps.list;
+  if (list && !s.steps.references && now - list.at > 4000) return 'done';
+  if (now - s.last > 30000) return list ? 'done' : 'stopped';
+  return 'running';
+}
+
+function actStepLabel(key, s) {
+  const st = s.steps[key];
+  if (!st || st.state === 'start') return '';
+  if (key === 'request') return '0 ms';
+  if (key === 'rank') return `+${fmtMsDebug(st.ms || 0)}`;
+  if (key === 'asked') return s.steps.list ? `+${fmtMsDebug(Math.max(0, st.at - s.steps.list.at))}` : '';
+  if (key === 'delivered') return st.ms === undefined ? '' : `waited ${fmtMsDebug(st.ms)}`;
+  return st.ms === undefined ? '' : fmtMsDebug(st.ms);
+}
+
+function actChipHtml(c) {
+  let cls = 'wait', text = 'waiting…';
+  if (c.state === 'ok' || c.state === 'late') {
+    cls = c.ms >= 1000 ? 'slow' : 'ok';
+    text = fmtMsDebug(c.ms) + (c.state === 'late' ? ' (late)' : '');
+  } else if (c.state === 'fail') {
+    cls = 'fail';
+    const code = /\b([45]\d\d)\b/.exec(c.error || '');
+    text = /timed out/i.test(c.error || '') ? 'timeout' : (code ? code[1] : 'failed');
+  } else if (c.state === 'waived') { cls = 'waived'; text = 'not waited for'; }
+  return `<span class="act-chip ${cls}" title="${escapeHtmlDebug(c.error || '')}"><i></i>${escapeHtmlDebug(c.name)} <em>${escapeHtmlDebug(text)}</em></span>`;
+}
+
+function actChipOrder(c) {
+  if (c.state === 'ok' || c.state === 'late' || c.state === 'fail') return c.ms;
+  return c.state === 'waived' ? 1e9 : 1e8;
+}
+
+function renderActivityCard(s, now) {
+  const status = actSessionStatus(s, now);
+  const running = status === 'running';
+  const n = ACT_STEPS.length;
+  const timeoutHit = s.chips.some(c => c.state === 'fail' && /timed out/i.test(c.error || ''));
+  let leadDone = 0;
+  while (leadDone < n && s.steps[ACT_STEPS[leadDone][0]] && ['done', 'warn'].includes(s.steps[ACT_STEPS[leadDone][0]].state)) leadDone++;
+  let lastDone = -1;
+  ACT_STEPS.forEach(([k], i) => { const st = s.steps[k]; if (st && ['done', 'warn'].includes(st.state)) lastDone = i; });
+  const fill = running ? Math.max(0, (leadDone - 0.5) / (n - 1)) : Math.max(0, lastDone) / (n - 1);
+  const dots = ACT_STEPS.map(([k, label], i) => {
+    const st = s.steps[k];
+    let cls = 'pending', mark = '';
+    if (st && st.state === 'done') { cls = 'done'; mark = '✓'; }
+    else if (st && st.state === 'warn') { cls = 'warn'; mark = '!'; }
+    else if (running && i === leadDone) cls = 'active';
+    else if (!running) cls = 'skipped';
+    if (k === 'search' && cls === 'done' && timeoutHit) { cls = 'warn'; mark = '!'; }
+    return `<div class="act-step ${cls}"><span class="act-dot">${mark}</span><span class="act-step-name">${label}</span><span class="act-step-time">${escapeHtmlDebug(actStepLabel(k, s))}</span></div>`;
+  }).join('');
+  const total = fmtMsDebug((running ? now : s.last) - s.start);
+  const badge = { running: 'RUNNING', done: 'DONE', warn: 'DONE · WITH WARNINGS', stopped: 'STOPPED' }[status === 'done' && s.warns.length ? 'warn' : status];
+  const cardStatus = status === 'done' && s.warns.length ? 'warn' : status;
+  const verdict = !running && s.verdict ? ` · ${escapeHtmlDebug(s.verdict)}` : '';
+  const chips = s.chips.slice().sort((a, b) => actChipOrder(a) - actChipOrder(b)).map(actChipHtml).join('');
+  let note;
+  if (running) note = `Now: <b>${escapeHtmlDebug(s.lastText)}</b>`;
+  else {
+    const parts = [];
+    if (s.computes > 1) parts.push(`${s.computes} subtitles synced`);
+    if (s.delivered > 1) parts.push(`${s.delivered} sent to the player`);
+    for (const w of s.warns.slice(0, 3)) parts.push(`⚠ ${w}`);
+    note = parts.map(escapeHtmlDebug).join(' · ');
+  }
+  const trackFill = `<div class="act-track"><div class="act-fill" style="width:${(fill * 100).toFixed(1)}%"></div></div>`;
+  return `<div class="act-card ${cardStatus}" data-status="${status}">`
+    + `<div class="act-head"><div class="act-film">${escapeHtmlDebug(s.film)}</div><div class="act-state"><span class="act-badge">${badge}</span><span class="act-elapsed">${total}</span><span class="act-verdict">${verdict}</span></div></div>`
+    + `<div class="act-steps">${trackFill}${dots}</div>`
+    + (chips ? `<div class="act-chips">${chips}</div>` : '')
+    + (note ? `<div class="act-note">${note}</div>` : '')
+    + `</div>`;
+}
+
+function renderActivity() {
+  const box = document.getElementById('dbg-activity');
+  if (!box) return;
+  const list = debugState.actSessions || [];
+  if (!list.length) { box.innerHTML = '<div class="dbg-empty">Nothing yet. Play something and its steps appear here.</div>'; return; }
+  const now = Date.now();
+  box.innerHTML = list.slice().reverse().map(s => renderActivityCard(s, now)).join('');
+}
+
+/** Once a second: the running times tick, and a card whose state changed with the clock (finished) is redrawn */
+function tickActivity() {
+  const box = document.getElementById('dbg-activity');
+  const list = debugState.actSessions;
+  if (!box || !list || !list.length || debugState.actPaused) return;
+  const now = Date.now();
+  const cards = box.querySelectorAll('.act-card');
+  const ordered = list.slice().reverse();
+  let redraw = cards.length !== ordered.length;
+  ordered.forEach((s, i) => {
+    const card = cards[i];
+    if (!card) return;
+    const status = actSessionStatus(s, now);
+    if (card.dataset.status !== status) redraw = true;
+    else if (status === 'running') {
+      const el = card.querySelector('.act-elapsed');
+      if (el) el.textContent = fmtMsDebug(now - s.start);
+    }
+  });
+  if (redraw) renderActivity();
 }
 
 async function refreshActivity() {
@@ -624,7 +783,10 @@ async function refreshActivity() {
     for (const e of fresh) seen.add(`${instance}:${e.seq}`);
     while (seen.size > 6000) seen.delete(seen.values().next().value);
     fresh.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-    appendActivity(fresh);
+    if (fresh.length) {
+      for (const e of fresh) applyActivityEvent(e);
+      renderActivity();
+    }
   } catch (err) {
     // the server may be waking up; try again on the next tick
   }

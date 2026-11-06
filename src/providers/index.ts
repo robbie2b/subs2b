@@ -104,7 +104,7 @@ export async function executeParallelSearch(
   // (the searches for timing references are not shown as such: Subsync reports them in its own words)
   const film = filmLabel(query.id, query.extra?.filename);
   const shown = !query.allLanguages;
-  if (shown) activity('search', film, `Searching ${activeProviders.length} sources: ${activeProviders.map(p => p.name).join(', ')}`);
+  if (shown) activity('search', film, `Searching ${activeProviders.length} sources: ${activeProviders.map(p => p.name).join(', ')}`, { step: 'search', state: 'start', sources: activeProviders.map(p => p.name) });
 
   const runProvider = (provider: SubtitleProvider): Promise<SearchOutcome> => {
     // One limit for everything, the Connector timeout (Filters → Results): the native services and the imported addons
@@ -133,7 +133,8 @@ export async function executeParallelSearch(
     if (shown) {
       activity('source', film, entry.ok
         ? `${entry.name}: ${entry.count} subtitle${entry.count === 1 ? '' : 's'} in ${fmtMs(entry.ms)}${waived ? ' (answered after the list was sent)' : ''}`
-        : `${entry.name} failed after ${fmtMs(entry.ms)}${entry.error ? ` (${entry.error.replace(/^Error: /, '').slice(0, 80)})` : ''}`);
+        : `${entry.name} failed after ${fmtMs(entry.ms)}${entry.error ? ` (${entry.error.replace(/^Error: /, '').slice(0, 80)})` : ''}`,
+      { src: { name: entry.name, state: entry.ok ? (waived ? 'late' : 'ok') : 'fail', ms: entry.ms, count: entry.count, error: entry.ok ? undefined : (entry.error || 'failed').replace(/^Error: /, '').slice(0, 80) } });
     }
   };
   const runTimed = async (provider: SubtitleProvider): Promise<SearchOutcome> => {
@@ -217,7 +218,7 @@ export async function executeParallelSearch(
     }
     if (options.outcome) options.outcome.stoppedEarly = true;
     Logger.info(`[DYNAMIC] stopped waiting after ${Date.now() - searchStarted} ms; still running in the background: ${waived.map(p => p.name).join(', ')}`);
-    if (shown) activity('search', film, `Stopped waiting after ${fmtMs(Date.now() - searchStarted)}: not waiting for ${waived.map(p => p.name).join(', ')} (they go on in the background)`);
+    if (shown) activity('search', film, `Stopped waiting after ${fmtMs(Date.now() - searchStarted)}: not waiting for ${waived.map(p => p.name).join(', ')} (they go on in the background)`, { step: 'search', state: 'done', ms: Date.now() - searchStarted, waived: waived.map(p => p.name) });
     const items = gather();
     // the sources left running finish in the background (kept alive on Vercel) and complete the saved list
     keepAlive(all.then(() => options.onFullResult?.(gather())));
@@ -225,7 +226,7 @@ export async function executeParallelSearch(
   }
 
   const aggregatedSubtitles: RawSubtitleItem[] = gather();
-  if (shown) activity('search', film, `All ${activeProviders.length} sources answered after ${fmtMs(Date.now() - searchStarted)}: ${aggregatedSubtitles.length} subtitles found`);
+  if (shown) activity('search', film, `All ${activeProviders.length} sources answered after ${fmtMs(Date.now() - searchStarted)}: ${aggregatedSubtitles.length} subtitles found`, { step: 'search', state: 'done', ms: Date.now() - searchStarted });
 
   if (fallbackProviders.length > 0) {
     if (directFailed) {

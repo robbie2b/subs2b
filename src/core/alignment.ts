@@ -240,7 +240,7 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
   const skipped = `skipped: ${stats.skipped.kind} of another kind or cut, ${stats.skipped.blocked} from a source refusing this server, ${stats.skipped.quality} forced/machine/low quality`;
   if (candidates.length === 0) {
     Logger.info(`[SUBSYNC] no reference candidates for ${ctx.query.id} (${raw.length} subtitles searched; ${skipped})`);
-    activity('warn', filmLabel(ctx.query.id, ctx.filename), `No usable timing reference among ${raw.length} subtitles searched (${skipped})`);
+    activity('warn', filmLabel(ctx.query.id, ctx.filename), `No usable timing reference among ${raw.length} subtitles searched (${skipped})`, { step: 'references', state: 'warn' });
     return [];
   }
   activity('sync', filmLabel(ctx.query.id, ctx.filename), `${candidates.length} timing reference candidate${candidates.length === 1 ? '' : 's'} found among ${raw.length} subtitles: downloading the best ones`);

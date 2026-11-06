@@ -50,6 +50,11 @@ async function main(): Promise<void> {
   check('a source that answered is reported with its count and time', /fast: 1 subtitle in \d+ ms/.test(text), text);
   check('a source that failed is reported as failed', /broken failed after/.test(text), text);
   check('the steps are about the file being played', steps.every(e => e.film === FILE));
+  const metaSteps = steps.filter(e => e.meta && e.meta.step).map(e => e.meta!.step);
+  check('the steps carry what the panel draws: request, search, rank, list', ['request', 'search', 'rank', 'list'].every(k => metaSteps.includes(k as any)), metaSteps);
+  const sources = steps.filter(e => e.meta && e.meta.src).map(e => e.meta!.src!);
+  check('each source answer carries its state and time', sources.some(s => s.name === 'fast' && s.state === 'ok') && sources.some(s => s.name === 'broken' && s.state === 'fail' && /500/.test(s.error || '')), sources);
+  check('the search start lists the sources asked', (steps.find(e => e.meta && e.meta.sources)?.meta?.sources || []).length === 3);
   check('the list step says how long it took and what was sent', /List ready in [\d.]+ (ms|s): 2 subtitles sent to the player/.test(text), text);
   check('the best subtitle is named', /best: "Movie.2001.1080p.BluRay.x264-GRP"/.test(text), text);
 
