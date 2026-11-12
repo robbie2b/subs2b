@@ -27,6 +27,9 @@ export interface AuthConfigResult {
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** How old a cached configuration may get before it is read again from the database (ms) */
+const CONFIG_RECHECK_MS = 30000;
+
 const SELECT_CONFIG_SQL =
   'SELECT uuid, password_hash, config_data, created_at, updated_at FROM configurations WHERE LOWER(uuid) = $1';
 
@@ -62,6 +65,8 @@ function rowToRecord(row: any, uuid: string = String(row.uuid).toLowerCase()): S
  */
 class ConfigStorage {
   private cache: Map<string, StoredConfigRecord> = new Map();
+  /** when each cached record was last checked against the database (another instance may have saved a newer one) */
+  private checkedAt: Map<string, number> = new Map();
   private pool: Pool | null = null;
   private useDatabase = false;
   private initialized = false;
@@ -252,7 +257,26 @@ class ConfigStorage {
   /** Finds a record in the memory cache, then in the database (and caches it) */
   private async findRecord(cleanUuid: string): Promise<StoredConfigRecord | undefined> {
     const cached = this.cache.get(cleanUuid);
-    if (cached) return cached;
+    if (cached) {
+      // Several server instances (Vercel) each keep their own copy: a save reaches the others only through the database.
+      // A copy older than 30 s is read again (a short wait at most: the answer is about 25 ms away).
+      const last = this.checkedAt.get(cleanUuid);
+      if (last === undefined) this.checkedAt.set(cleanUuid, Date.now());
+      else if (this.useDatabase && this.pool && Date.now() - last > CONFIG_RECHECK_MS) {
+        this.checkedAt.set(cleanUuid, Date.now());
+        const pool = this.pool;
+        const reread = (async () => {
+          try {
+            const res = await pool.query(SELECT_CONFIG_SQL, [cleanUuid]);
+            if (res.rows.length > 0) this.cache.set(cleanUuid, rowToRecord(res.rows[0], cleanUuid));
+          } catch (err: any) {
+            Logger.error('Failed to refresh a configuration from the database', err);
+          }
+        })();
+        await Promise.race([reread, new Promise<void>(r => setTimeout(r, 250))]);
+      }
+      return this.cache.get(cleanUuid) ?? cached;
+    }
 
     if (this.useDatabase && this.pool) {
       try {

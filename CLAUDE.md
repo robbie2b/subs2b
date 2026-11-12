@@ -57,6 +57,18 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.25 — din analiza a doi subagenți (2026-11-12).** Cercetător (Bazarr, subliminal, ffsubsync, alass, StremioSubMaker, SCS, stremio-subs-ro, USS) + analist
+  (traseul real pas cu pas, cu date din Debug). Făcut acum: (1) grația după „destul de bun" nu mai e 300 fix: 0 la potrivire exactă sau risc <3%, 100 ms altfel
+  (`goodEnough` întoarce `false | grație`); (2) o sursă care eșuează dar câștigă <3% nu mai face lista „incompletă" (`sourceMatters`): înainte fiecare listă avea
+  vreo sursă picată (RegieLive, Subs.ro 520, Titrari, Addic7ed, PRO) și era ținută doar 2 min; (3) cache-ul configurației se reciteşte din DB la 30 s
+  (`CONFIG_RECHECK_MS`; BUG: după salvare celelalte instanțe Vercel serveau config vechi până la reciclare); (4) `s-maxage` pe liste (max 300 s) și pe
+  subtitrările decise (3600 s dacă decizia e sigură, 300 s altfel; timeout/eroare rămân `no-store`) ca repetările să nu mai ruleze funcția; (5) referințele:
+  oprire la 2 candidate (sau 1 după 1,2 s) și O SINGURĂ interogare pentru „referințe salvate sau marca fără referințe" (`loadStoredOrNone`); (6) pregătire din timp
+  și a 2-a/3-a subtitrare din aceeași limbă, la 300 ms după prima, fără sursele cu cotă pe cheie (OpenSubtitles API, Wyzie).
+  Rămase din analiză, pe rând: (A) rezultatul aliniat salvat în DB (decizia + textul original, TTL), citit cu plafon 150 ms înainte de pregătire (repetările sunt 41% din
+  Play-uri, 3 din 8 subtitrări s-au pregătit de două ori pe instanțe diferite); (B) cache-ul listei brute în DB (acum doar memoria instanței; cheia are hash-ul);
+  (C) legătura hash↔nume de fișier; (D) apelurile către propriul domeniu la `.vtt`→`/sub/convert` (30–60 ms); (E) DDL la pornire la rece; (F) circuit breaker pentru surse moarte
+  (Titrari a dat 500 la 89 din 95 de căutări între 5 și 9 nov.); (G) măsurare pornire la rece (nu există date).
 - **v1.5.24 — cozile lente (2026-11-12, „eficientizăm și mai tare").** Date după 1.5.13 (90 de decizii, 54 de liste): lista mediană 1,6 s (p90 3,7 s), subtitrare gata
   după listă mediană 0,75 s (p90 2,8 s), jucătorul a așteptat mediană 0,6 s; 8 din 90 au așteptat >3 s. Cozile: referințe p95 3,4 s / max 7,6 s (Zodiac: 6,6–7,6 s),
   calcul max 7,9 s (Odyssey telesync), descărcarea subtitrării max 4 s. Schimbări: (1) referințele: descărcarea cu timeout 4 s (era 8), lista se închide când sunt 2

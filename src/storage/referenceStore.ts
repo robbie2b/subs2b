@@ -88,6 +88,29 @@ export async function loadStoredReferences(key: string): Promise<Reference[] | n
 /** "Nothing found" is remembered only this long: new subtitles may appear */
 const NO_REFERENCES_MINUTES = 15;
 
+/**
+ * The stored references, or the mark that a search lately found none, in ONE query (two reads in a row were on the
+ * critical path of every new title). Never throws.
+ */
+export async function loadStoredOrNone(key: string): Promise<{ refs: Reference[] | null; none: boolean }> {
+  try {
+    if (!(await ensureTable())) return { refs: null, none: false };
+    const pool = await configStorage.getPool();
+    const res = await pool!.query(
+      `SELECT ref_key, data FROM subsync_references
+       WHERE (ref_key = $1 AND created_at > NOW() - INTERVAL '${RETENTION_DAYS} days')
+          OR (ref_key = $2 AND created_at > NOW() - INTERVAL '${NO_REFERENCES_MINUTES} minutes')`,
+      [key, 'none|' + key]
+    );
+    const row = res.rows.find((x: any) => x.ref_key === key);
+    if (row) return { refs: unpackReferences(row.data as Buffer), none: false };
+    return { refs: null, none: res.rows.some((x: any) => x.ref_key === 'none|' + key) };
+  } catch (err) {
+    Logger.error('Could not read stored Subsync references', err);
+    return { refs: null, none: false };
+  }
+}
+
 /** Was a search for these references made lately (by any instance) and found nothing? Never throws. */
 export async function noReferencesKnown(key: string): Promise<boolean> {
   try {

@@ -17,6 +17,7 @@ const FILE = 'Movie.2001.1080p.BluRay.x264-GRP.mkv';
 async function main(): Promise<void> {
   // "fast" answers at once with the exact release of the playing file; "slow" answers after 3 s with another subtitle
   const server = http.createServer((req, res) => {
+    if ((req.url || '').startsWith('/broken/')) { res.statusCode = 500; res.end('no'); return; }
     const slow = (req.url || '').startsWith('/slow/');
     const near = (req.url || '').startsWith('/near/');
     // "near": the same kind of release as the playing file (1080p BluRay), but by another group: good, not exact
@@ -80,6 +81,15 @@ async function main(): Promise<void> {
   await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000037', { filename: FILE }), hopeless({}), 'http://x', 'speed-test');
   const waitedMs = Date.now() - t5;
   check('one that wins 60% of the time is waited for as long as it usually takes (twice its usual time), then given up', waitedMs >= 1300 && waitedMs < 2300, waitedMs);
+
+  // a failed source that almost never wins does not make the list incomplete (so it is kept the whole time); one that often wins does
+  const failing = (patch: Partial<UserConfig>) => config({ subsync: false, customAddons: [addon('fast'), addon('broken')], ...patch });
+  setSourceSpeeds('speed-test', new Map([['broken', { p75: 100, failRate: 1, searches: 50, winRate: 0, inTopRate: 0, ranked: 50 }]]));
+  const calm = await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000041', { filename: FILE }), failing({}), 'http://x', 'speed-test');
+  check('a failure of a source that never wins leaves the list complete (kept the full time)', calm.cacheMaxAge === Math.round(DEFAULT_USER_CONFIG.cacheTtlMinutes * 60), calm.cacheMaxAge);
+  setSourceSpeeds('speed-test', new Map([['broken', { p75: 100, failRate: 0.3, searches: 50, winRate: 0.4, inTopRate: 0.8, ranked: 50 }]]));
+  const worried = await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000042', { filename: FILE }), failing({}), 'http://x', 'speed-test');
+  check('a failure of a source that often wins keeps the list for 2 minutes only', worried.cacheMaxAge === 120, worried.cacheMaxAge);
 
   // a source that almost never brings the best subtitle is not waited for either
   setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50, winRate: 0, inTopRate: 0.05, ranked: 50 }]]));

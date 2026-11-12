@@ -43,6 +43,14 @@ const MAX_REJECTED_IN_DEBUG = 60;
 
 /** How many languages get their first subtitle aligned in advance */
 const MAX_PREPARED_LANGUAGES = 2;
+/**
+ * Besides the first subtitle of a language, this many of the next ones are prepared too, a moment later: Nuvio asks for
+ * several at once (it did for 5 of 10 plays) and 10 of 14 asks found nothing prepared. Not for sources whose downloads
+ * are counted against a daily key (OpenSubtitles API, Wyzie).
+ */
+const EXTRA_PREPARED_PER_LANGUAGE = 2;
+const EXTRA_PREPARE_DELAY_MS = 300;
+const KEY_LIMITED_PROVIDERS = new Set(['opensubtitles', 'wyzie']);
 
 function toNumberOrNull(value: string | undefined): number | null {
   const n = parseInt(value ?? '', 10);
@@ -77,8 +85,12 @@ export function parseSubtitleQuery(
   return { type, id, imdbId, season, episode, kitsuId, extra };
 }
 
-/** How long the search goes on after something good has arrived (ms), for sources about to answer */
-const DYNAMIC_GRACE_MS = 300;
+/**
+ * How long the search goes on after something good has arrived (ms), for sources about to answer: none when an exact
+ * match is there or what is pending almost never wins, a moment otherwise (it was a flat 300 ms: in 8 of 8 timelines the
+ * gap between "good enough" and "stopped waiting" was exactly that)
+ */
+const DYNAMIC_GRACE_MS = 100;
 /**
  * How long a source the user ranks higher than the one with the good subtitle is waited for. After that the good
  * subtitle is enough: such a source could only add a copy or an equal match (Family Guy: an exact match at 0.5 s was
@@ -88,6 +100,8 @@ const PRIORITY_WAIT_MS = 2000;
 
 /** The sources still pending are together this unlikely to change the first subtitle: the list does not wait for them */
 const LOW_RISK = 0.06;
+/** Under this the list leaves at once, with no moment of grace */
+const VERY_LOW_RISK = 0.03;
 
 /**
  * The chance that one pending source brings a subtitle that goes first: its win rate, while it is within the time it
@@ -115,7 +129,7 @@ function priorityWaitFor(id: string, speeds: Map<string, ProviderSpeed> | null):
  * scores at least `dynamicTimeoutScore`, AND every source the user ranks higher than the one that gave it has already
  * answered (such a source could still bring a subtitle that goes before it), or `PRIORITY_WAIT_MS` have passed.
  */
-function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: SubtitleQuery, config: UserConfig, elapsedMs: number, speeds: Map<string, ProviderSpeed> | null): boolean {
+function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: SubtitleQuery, config: UserConfig, elapsedMs: number, speeds: Map<string, ProviderSpeed> | null): false | number {
   const whitelist = config.languages && config.languages.length > 0 ? config.languages : DEFAULT_USER_CONFIG.languages;
   const remap = config.language_remapping || config.languageRemap;
   const wanted: RawSubtitleItem[] = [];
@@ -153,7 +167,16 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
   if (!topLevel && !lowRisk && pendingIds.some(id => priority(id) < bestRank && elapsedMs < priorityWaitFor(id, speeds))) return false;
   activity('search', filmLabel(query.id, query.extra?.filename), `Good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider} (score ${detail.score}${topLevel ? ', exact match' : lowRisk && detail.score < minScore ? `, below ${minScore} but the sources left rarely win: ${Math.round(risk * 100)}% chance` : ''}); waiting for ${pendingIds.join(', ') || 'nobody'}`);
   Logger.info(`[DYNAMIC] good enough: "${(best.release || '').slice(0, 60)}" from ${best.provider}, score ${detail.score}${topLevel ? ' (top level)' : ''}; waiting for: ${pendingIds.join(', ') || 'nobody'}`);
-  return true;
+  return topLevel || risk < VERY_LOW_RISK ? 0 : DYNAMIC_GRACE_MS;
+}
+
+/**
+ * Does a failure of this source make the list incomplete? Not when it almost never brings the best subtitle (Titrari,
+ * Addic7ed, RegieLive, PRO): every play of the last days had one of them fail, so no list was ever kept the full time.
+ */
+function sourceMatters(id: string, speeds: Map<string, ProviderSpeed> | null): boolean {
+  const s = speeds?.get(id);
+  return !s || s.ranked < 30 || s.winRate >= 0.03;
 }
 
 /**
@@ -221,18 +244,18 @@ export async function getAggregatedSubtitles(
         const dynamic = config.dynamicTimeout === true && Boolean(query.extra?.filename || query.extra?.videoHash);
         const speeds = dynamic ? await awaitSourceSpeeds(configId) : null;
         const items = await executeParallelSearch(query, config, report, {
-          ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, recheck: { everyMs: 150, forMs: 4200 }, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart, speeds) } } : {}),
+          ...(dynamic ? { earlyStop: { recheck: { everyMs: 150, forMs: 4200 }, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart, speeds) } } : {}),
           outcome,
           // the sources that were not waited for have answered: the saved list is now the whole one
           onFullResult: full => {
-            const failed = report.filter(r => !r.ok);
+            const failed = report.filter(r => !r.ok && sourceMatters(r.id, speeds));
             globalSubtitleCache.set(cacheKey, full, failed.length ? SHORT_CACHE_MINUTES : config.cacheTtlMinutes, failed.length > 0);
             Logger.info(`[DYNAMIC] the sources left running have answered: ${full.length} subtitles saved for ${query.id}`);
           }
         });
         // a search where a provider failed or timed out, or that stopped early, is kept only briefly: asked again soon,
         // the answer may be better (an empty answer is not a failure)
-        const failedProviders = report.filter(r => !r.ok);
+        const failedProviders = report.filter(r => !r.ok && sourceMatters(r.id, speeds));
         const isIncomplete = failedProviders.length > 0 || outcome.stoppedEarly;
         globalSubtitleCache.set(cacheKey, items, isIncomplete ? SHORT_CACHE_MINUTES : config.cacheTtlMinutes, isIncomplete);
         if (isIncomplete) {
@@ -497,6 +520,7 @@ export async function getAggregatedSubtitles(
     const filename = query.extra.filename;
     const alignable = directUrls.map(fetchable);
     const firstOfLanguage = new Map<string, AlignedToken>();
+    const nextOfLanguage = new Map<string, AlignedToken[]>();
     subtitles.forEach((sub, idx) => {
       // a subtitle from the file's own release group is trusted and served directly
       if (!alignable[idx] || fromFileGroup(filename, orderedItems[idx].release)) return;
@@ -512,6 +536,10 @@ export async function getAggregatedSubtitles(
         ...(alternatives.length ? { a: alternatives } : {})
       };
       if (!firstOfLanguage.has(orderedItems[idx].lang)) firstOfLanguage.set(orderedItems[idx].lang, token);
+      else if (!KEY_LIMITED_PROVIDERS.has(orderedItems[idx].provider)) {
+        const more = nextOfLanguage.get(orderedItems[idx].lang) || [];
+        if (more.length < EXTRA_PREPARED_PER_LANGUAGE) { more.push(token); nextOfLanguage.set(orderedItems[idx].lang, more); }
+      }
       sub.url = `${baseUrl}/${configId}/sub/aligned/${encodeAlignedToken(token)}.srt`;
       viaServer.add(idx);
     });
@@ -519,8 +547,14 @@ export async function getAggregatedSubtitles(
     // The player usually picks the first subtitle of the language: its alignment starts now, while the video is
     // still opening (several seconds), so the subtitle is ready, or nearly, when the player asks for it
     const prepQuery = parseSubtitleQuery(query.type, query.id, { filename });
-    for (const token of [...firstOfLanguage.values()].slice(0, MAX_PREPARED_LANGUAGES)) {
+    for (const [lang, token] of [...firstOfLanguage.entries()].slice(0, MAX_PREPARED_LANGUAGES)) {
       keepAlive(prepareAligned(token, prepQuery, config, baseUrl).served);
+      // the next ones of the language follow a moment later, so the first one has the processor to itself first
+      for (const extra of nextOfLanguage.get(lang) || []) {
+        keepAlive(new Promise<void>(resolve => setTimeout(resolve, EXTRA_PREPARE_DELAY_MS))
+          .then(() => prepareAligned(extra, prepQuery, config, baseUrl).served)
+          .catch(() => undefined));
+      }
     }
   }
 

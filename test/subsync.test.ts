@@ -563,7 +563,7 @@ async function main() {
     await handler({ params: { config: uuid, data: linkFor(baseUrl + '/ro-hd?slow=1') }, query: {} } as any, r.res);
     const took = Date.now() - t0;
     check('slow search: the first answer is already aligned (the player waits)', took >= 2400 && Math.abs(parseCues(r.out.body)[10].start - (parseCues(RO_HD)[10].start - 5)) < 0.15, { took, start: parseCues(r.out.body)[10]?.start });
-    check('and the aligned answer may be kept by the player', r.out.headers['Cache-Control'] === 'public, max-age=3600', r.out.headers);
+    check('and the aligned answer may be kept by the player', /^public, max-age=3600, s-maxage=(3600|300)$/.test(String(r.out.headers['Cache-Control'])), r.out.headers);
 
     // stuck search (past the safety limit, 4 s in this test): the original, then the next request gets the result
     clearReferenceCache();

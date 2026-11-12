@@ -477,7 +477,9 @@ export function createServer(): express.Application {
       const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
       const response = await getAggregatedSubtitles(query, userConfig, getBaseUrl(req), debugKey);
 
-      res.setHeader('Cache-Control', `max-age=${response.cacheMaxAge ?? 1800}, public`);
+      // (the edge keeps a copy too, for at most 5 min: the same list is asked for again by the phone and the TV, and by Nuvio)
+      const listMaxAge = response.cacheMaxAge ?? 1800;
+      res.setHeader('Cache-Control', listMaxAge > 0 ? `max-age=${listMaxAge}, s-maxage=${Math.min(listMaxAge, 300)}, public` : 'no-store');
       res.json(response);
     } catch (err: unknown) {
       Logger.error('Failed to handle subtitles request', err);

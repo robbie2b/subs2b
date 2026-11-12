@@ -16,6 +16,16 @@ import { activity, filmLabel, fmtMs } from '../utils/activity';
 // (on Vercel the function is cut at 60 s: the wait ends before that, so the player still gets the original subtitle)
 // Nuvio (phone and TV) gives up on a subtitle download after 15 s and then has nothing to show from the check; on Vercel the
 // original goes out after 12 s at the latest (the computation takes under 3 s nine times in ten). SUBSYNC_MAX_WAIT_MS overrides.
+/**
+ * How the edge and the player may keep a decided subtitle. A decision made on references (shifted, or confirmed as already
+ * aligned) is final for the hour; "unchanged, no reference" may change when references turn up, so the edge keeps it
+ * only 5 min. (A timeout or an error is never kept: `no-store`.)
+ */
+function finalCache(result: AlignmentResult): string {
+  const sure = result.decision.apply || result.decision.reason === 'already aligned';
+  return `public, max-age=3600, s-maxage=${sure ? 3600 : 300}`;
+}
+
 const maxWaitMs = (): number => parseInt(process.env.SUBSYNC_MAX_WAIT_MS || '', 10) || (process.env.VERCEL ? 12000 : 60000);
 
 const sleep = (ms: number) => new Promise<void>(resolve => { const t = setTimeout(resolve, ms); t.unref?.(); });
@@ -130,7 +140,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
         Logger.info(`[SUBSYNC] served again from memory (decided earlier, nothing computed)`, { id: token.id, subtitle: replacedBy || token.r });
         activity('done', film, `Sent "${release}" again from memory (nothing computed); it waited ${fmtMs(Date.now() - started)}`, { step: 'delivered', state: 'done', ms: Date.now() - started });
         const again = served.text ?? text;
-        sendSubtitleResponse(res, result.decision.apply ? applyAlignment(again, result.decision.result!) : again, 'srt', 'subtitle.srt', 'public, max-age=3600');
+        sendSubtitleResponse(res, result.decision.apply ? applyAlignment(again, result.decision.result!) : again, 'srt', 'subtitle.srt', finalCache(result));
         return;
       }
       prep.reported = true;
@@ -144,10 +154,10 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
         const shifted = applyAlignment(body, result.decision.result!);
         Logger.info(`[SUBSYNC] shifted ${result.decision.offset} s${result.decision.ratio !== 1 ? ` x${result.decision.ratio}` : ''}${result.decision.segments > 1 ? ` in ${result.decision.segments} parts` : ''} (${result.decision.reason})`, { id: token.id, subtitle: replacedBy || token.r });
         log('shifted', result, undefined, replacedBy, served);
-        sendSubtitleResponse(res, shifted, 'srt', 'subtitle.srt', 'public, max-age=3600');
+        sendSubtitleResponse(res, shifted, 'srt', 'subtitle.srt', finalCache(result));
       } else {
         log('unchanged', result, undefined, replacedBy, served);
-        sendSubtitleResponse(res, body, 'srt', 'subtitle.srt', 'public, max-age=3600');
+        sendSubtitleResponse(res, body, 'srt', 'subtitle.srt', finalCache(result));
       }
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -180,7 +190,7 @@ export function createFallbackHandler(getBaseUrl: (req: Request) => string) {
     }
     try {
       const { text } = await loadFirst(linksOf(token), hosts, baseUrl, token.r);
-      sendSubtitleResponse(res, text, 'srt', 'subtitle.srt', 'public, max-age=3600');
+      sendSubtitleResponse(res, text, 'srt', 'subtitle.srt', 'public, max-age=3600, s-maxage=3600');
     } catch {
       // every source failed here: the player may still reach the first one itself
       if (own) res.status(502).type('text/plain').send('Could not load the subtitle from any source.');

@@ -39,10 +39,8 @@ export function getAllProviders(): SubtitleProvider[] {
 
 /** The dynamic timeout: when is what has arrived enough, so the sources still running need not be waited for */
 export interface EarlyStop {
-  /** `pending` = the ids of the sources that have not answered yet */
-  isEnough(items: RawSubtitleItem[], pending: string[]): boolean;
-  /** how long to go on after "enough", for sources about to answer */
-  graceMs: number;
+  /** `pending` = the ids of the sources that have not answered yet. False = not enough; a number = enough, go on this long (ms) for sources about to answer */
+  isEnough(items: RawSubtitleItem[], pending: string[]): false | number;
   /** ask again every `everyMs` for the first `forMs` of the search, even if no source has answered since (the judgement depends on time) */
   recheck?: { everyMs: number; forMs: number };
 }
@@ -184,13 +182,13 @@ export async function executeParallelSearch(
 
   const check = (): void => {
     if (!early || graceTimer || pending.size === 0) return;
-    let enough = false;
+    let enough: false | number = false;
     try {
       enough = early.isEnough(gather(), [...pending].map(i => activeProviders[i].id));
     } catch (err) {
       Logger.error('Dynamic timeout check failed', err);
     }
-    if (enough) graceTimer = setTimeout(() => stopEarly(), early.graceMs);
+    if (enough !== false) graceTimer = setTimeout(() => stopEarly(), enough);
   };
 
   const recheckTimer = early && early.recheck ? setInterval(check, early.recheck.everyMs) : undefined;

@@ -8,7 +8,7 @@ import { speechFlags, TimedCue } from '../utils/subsync';
 import { MIN_REFERENCE_CUES, Reference } from './alignDecision';
 import { executeParallelSearch } from '../providers';
 import { activity, filmLabel } from '../utils/activity';
-import { loadStoredReferences, storeReferences, noReferencesKnown, storeNoReferences } from '../storage/referenceStore';
+import { loadStoredOrNone, storeReferences, storeNoReferences } from '../storage/referenceStore';
 import { serverCanDownload } from '../proxy/subtitleProxy';
 import { Logger } from '../utils/logger';
 import { USER_AGENT } from '../config/version';
@@ -260,8 +260,12 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
   // And the downloads of the best ones start before the search is over.
   const raw = await executeParallelSearch({ ...ctx.query, allLanguages: true }, referenceConfig, undefined, {
     earlyStop: {
-      graceMs: 100,
-      isEnough: got => pickReferenceCandidates(got, ctx.filename, ctx.query.season, ctx.query.episode, MAX_REFERENCES).length >= MAX_REFERENCES
+      // two candidates are enough to decide with (the engine decides with two); one is enough after a while, when only slow sources are left
+      isEnough: got => {
+        const n = pickReferenceCandidates(got, ctx.filename, ctx.query.season, ctx.query.episode, MAX_REFERENCES).length;
+        return n >= MIN_REFERENCES || (n >= 1 && Date.now() - searchStarted > 1200) ? 100 : false;
+      },
+      recheck: { everyMs: 200, forMs: REFERENCE_SEARCH_LIMIT_MS }
     },
     onProgress: got => {
       if (Date.now() - searchStarted < REFERENCE_PIPELINE_AFTER_MS) return;
@@ -366,7 +370,7 @@ export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
   const key = referenceKey(ctx.query.id, ctx.filename);
   let pending = referenceCache.get(key);
   if (!pending) {
-    pending = loadStoredReferences(key).then(stored => {
+    pending = loadStoredOrNone(key).then(({ refs: stored, none }) => {
       if (stored && stored.length) {
         Logger.info(`[SUBSYNC] ${stored.length} stored reference(s) for ${ctx.query.id} (nothing downloaded)`, { references: stored.map(r => r.label) });
         activity('sync', filmLabel(ctx.query.id, ctx.filename), `${stored.length} stored timing reference${stored.length === 1 ? '' : 's'} found: nothing to download`);
@@ -374,13 +378,11 @@ export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
         return stored;
       }
       // another instance searched lately and found nothing: no new search (it would only make the player wait)
-      return noReferencesKnown(key).then(none => {
-        if (none) {
-          activity('warn', filmLabel(ctx.query.id, ctx.filename), 'No timing references: a search a moment ago found none (not searching again for 15 min)', { step: 'references', state: 'warn' });
-          return [] as Reference[];
-        }
-        return buildReferences(ctx).then(refs => { if (refs.length) storeReferences(key, refs); else storeNoReferences(key); return refs; });
-      });
+      if (none) {
+        activity('warn', filmLabel(ctx.query.id, ctx.filename), 'No timing references: a search a moment ago found none (not searching again for 15 min)', { step: 'references', state: 'warn' });
+        return [] as Reference[];
+      }
+      return buildReferences(ctx).then(refs => { if (refs.length) storeReferences(key, refs); else storeNoReferences(key); return refs; });
     }).then(refs => {
       // "nothing found" is remembered for a shorter time, so a later try can succeed
       if (refs.length === 0) referenceCache.set(key, pending!, { ttl: 15 * 60 * 1000 });
