@@ -15,7 +15,7 @@ import { needsReference, fromFileGroup, getReferences, archivePickParams as buil
 import { encodeAlignedToken, encodeFallbackToken, AlignedToken, MAX_ALTERNATIVES, MAX_BACKUPS } from './alignedToken';
 import { prepareAligned } from './alignedPrepare';
 import { keepAlive } from '../utils/background';
-import { sourceSpeeds } from '../utils/sourceSpeed';
+import { awaitSourceSpeeds } from '../utils/sourceSpeed';
 import type { ProviderSpeed } from '../storage/usageStore';
 import { activity, filmLabel, fmtMs } from '../utils/activity';
 import { formatTestUntil, formatTestEntries } from '../proxy/formatTest';
@@ -219,7 +219,7 @@ export async function getAggregatedSubtitles(
         const outcome = { stoppedEarly: false };
         // Dynamic timeout: it needs the playing file's name to tell what is good (a hash match always counts)
         const dynamic = config.dynamicTimeout === true && Boolean(query.extra?.filename || query.extra?.videoHash);
-        const speeds = dynamic ? sourceSpeeds(configId) : null;
+        const speeds = dynamic ? await awaitSourceSpeeds(configId) : null;
         const items = await executeParallelSearch(query, config, report, {
           ...(dynamic ? { earlyStop: { graceMs: DYNAMIC_GRACE_MS, recheck: { everyMs: 150, forMs: 4200 }, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart, speeds) } } : {}),
           outcome,

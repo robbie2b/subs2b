@@ -26,6 +26,18 @@ export function sourceSpeeds(configKey: string | undefined): Map<string, Provide
   return entry ? entry.speeds : null;
 }
 
+/**
+ * The speeds, waiting a moment for them when this instance has none yet (a new instance read them only after its first
+ * request, so that request ran without them): a database read takes about 25 ms. Never waits longer than `maxWaitMs`.
+ */
+export async function awaitSourceSpeeds(configKey: string | undefined, maxWaitMs = 250): Promise<Map<string, ProviderSpeed> | null> {
+  const now = sourceSpeeds(configKey);
+  if (now || !configKey) return now;
+  const started = Date.now();
+  while (Date.now() - started < maxWaitMs && loading.has(configKey)) await new Promise(r => setTimeout(r, 10));
+  return known.get(configKey)?.speeds ?? null;
+}
+
 /** For tests */
 export function setSourceSpeeds(configKey: string, speeds: Map<string, ProviderSpeed>): void {
   known.set(configKey, { at: Date.now(), speeds });

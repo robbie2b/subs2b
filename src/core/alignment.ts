@@ -128,7 +128,10 @@ export function archivePickParams(query: SubtitleQuery): string {
 export type { Reference } from './alignDecision';
 
 const MAX_REFERENCES = 3;
-const REFERENCE_DOWNLOAD_TIMEOUT_MS = 8000;
+const REFERENCE_DOWNLOAD_TIMEOUT_MS = 4000;
+/** Two references are enough to decide; the third is waited for only this long once two are there */
+const MIN_REFERENCES = 2;
+const REFERENCE_GRACE_MS = 400;
 
 const referenceCache = new LRUCache<string, Promise<Reference[]>>({ max: 300, ttl: 6 * 60 * 60 * 1000 });
 
@@ -278,19 +281,42 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
     candidates: candidates.map(c => `[${c.provider}] [${c.lang}] ${c.release || c.id}`)
   });
 
-  // Only as many downloads as references are needed (in parallel); the next candidates only replace failed ones
+  // The best candidates are downloaded together; a failed one is replaced by the next. The list is closed as soon as two
+  // references are there (and a third that comes within a moment): one slow download does not hold the subtitle back.
   const found: Array<{ at: number; ref: Reference }> = [];
   const failures: string[] = [];
-  let next = 0;
-  while (found.length < MAX_REFERENCES && next < candidates.length) {
-    const wave = candidates.slice(next, next + MAX_REFERENCES - found.length).map((item, k) => ({ item, at: next + k }));
-    next += wave.length;
-    const results = await Promise.allSettled(wave.map(w => download(w.item)));
-    results.forEach((r, k) => {
-      if (r.status === 'fulfilled') found.push({ at: wave[k].at, ref: r.value });
-      else failures.push(`[${wave[k].item.provider}] ${wave[k].item.release || wave[k].item.id}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);
-    });
-  }
+  await new Promise<void>(resolve => {
+    let nextIndex = 0;
+    let pending = 0;
+    let finished = false;
+    let grace: ReturnType<typeof setTimeout> | undefined;
+    const finish = (): void => {
+      if (finished) return;
+      finished = true;
+      if (grace) clearTimeout(grace);
+      resolve();
+    };
+    const launch = (): void => {
+      while (!finished && pending + found.length < MAX_REFERENCES && nextIndex < candidates.length) {
+        const at = nextIndex++;
+        const item = candidates[at];
+        pending++;
+        download(item).then(
+          ref => { if (!finished) found.push({ at, ref }); },
+          err => { failures.push(`[${item.provider}] ${item.release || item.id}: ${err instanceof Error ? err.message : String(err)}`); }
+        ).finally(() => {
+          pending--;
+          if (finished) return;
+          if (found.length >= MAX_REFERENCES) { finish(); return; }
+          if (found.length >= MIN_REFERENCES && !grace) grace = setTimeout(finish, REFERENCE_GRACE_MS);
+          launch();
+          if (pending === 0) finish();
+        });
+      }
+    };
+    launch();
+    if (pending === 0) finish();
+  });
   if (failures.length) Logger.info(`[SUBSYNC] ${failures.length} reference download(s) failed for ${ctx.query.id}`, { failures });
   const references = found.sort((a, b) => a.at - b.at).map(f => f.ref);
   Logger.info(`[SUBSYNC] ${references.length} reference(s) for ${ctx.query.id} in ${Date.now() - started} ms`, {

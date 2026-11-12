@@ -324,6 +324,7 @@ async function main() {
   (axios as any).get = async (url: string) => {
     fetched.push(url);
     const body = (text: string) => ({ status: 200, data: new Uint8Array(Buffer.from(text)).buffer, headers: {} });
+    if (url.includes('slow')) await new Promise(r => setTimeout(r, 2500));
     if (url.includes('fin.zip')) return body(REF_FIN);
     if (url.includes('ara.zip')) return body(REF_ARA);
     if (url.includes('/ro-hd')) return body(RO_HD);
@@ -767,6 +768,34 @@ async function main() {
     const t0 = Date.now();
     const refs = await getReferences({ query: parseSubtitleQuery('series', 'tt7777777:1:1', { filename: 'Early.Show.S01E01.2160p.WEB-DL.DDP5.1.HEVC-CRU.mkv' }), config: mergeWithDefaults({ languages: ['ron'], providers: { opensubtitles: { enabled: true, apiKey: 'test-key-1234567890' }, subdl: { enabled: true, apiKey: 'test-key-1234567890' }, subsource: { enabled: true, apiKey: 'test-key-1234567890' } } }), baseUrl: 'http://localhost:7011', filename: 'Early.Show.S01E01.2160p.WEB-DL.DDP5.1.HEVC-CRU.mkv' });
     check('three candidates are enough: the slow sources are not waited for', refs.length >= 2 && Date.now() - t0 < 1800, { ms: Date.now() - t0, n: refs.length });
+  }
+
+  // -- the references do not wait for a slow third download once two are there --
+  {
+    clearReferenceCache();
+    providerItems.length = 0;
+    providerItems.push(
+      { id: 's-fin', provider: 'subsource', providerName: 'Subsource', url: '/sub/proxy?url=' + encodeURIComponent('https://dl.subsource.net/fin.zip'), lang: 'fin', release: 'Slow.Show.2022.S01E01.NORDiC.2160p.DV.HDR.WEB.HEVC-DRAUGR' },
+      { id: 's-ara', provider: 'subsource', providerName: 'Subsource', url: '/sub/proxy?url=' + encodeURIComponent('https://dl.subdl.com/ara.zip'), lang: 'ara', release: 'Slow.Show.S01.2160p.Max.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-SPAMKINGS' },
+      { id: 's-slow', provider: 'subsource', providerName: 'Subsource', url: '/sub/proxy?url=' + encodeURIComponent('https://dl.subsource.net/fin.zip?slow'), lang: 'swe', release: 'Slow.Show.2022.S01E01.2160p.WEB-DL.DDP5.1.HEVC-FLUX' }
+    );
+    (SubsourceProvider.prototype as any).executeSearch = async () => providerItems;
+    (SubDLProvider.prototype as any).executeSearch = async () => [];
+    (OpenSubtitlesProvider.prototype as any).executeSearch = async () => [];
+    const FILE2 = 'Slow.Show.S01E01.2160p.WEB-DL.DDP5.1.HEVC-CRU.mkv';
+    const t1 = Date.now();
+    const two = await getReferences({ query: parseSubtitleQuery('series', 'tt7777778:1:1', { filename: FILE2 }), config: mergeWithDefaults({ languages: ['ron'], providers: { opensubtitles: { enabled: true, apiKey: 'test-key-1234567890' }, subdl: { enabled: true, apiKey: 'test-key-1234567890' }, subsource: { enabled: true, apiKey: 'test-key-1234567890' } } }), baseUrl: 'http://localhost:7011', filename: FILE2 });
+    check('two references are enough: a slow third download is not waited for', two.length === 2 && Date.now() - t1 < 1500, { ms: Date.now() - t1, n: two.length });
+  }
+
+  // -- a decision that runs out of time stands on the references looked at so far --
+  {
+    const mk = (cues: typeof BASE, label: string) => ({ label, lang: 'eng', provider: 'x', cues: cues.map(c => ({ start: c.start, end: c.end, speech: true })) });
+    const sameTimes = BASE.map(c => ({ start: c.start + 0.05, end: c.end + 0.05 }));
+    const slow = alignAgainst(toSrt(BASE, 3, 'ro'), [mk(BASE, 'ref-a [GRP-A]'), mk(sameTimes, 'ref-b [GRP-B]')], undefined, undefined, -1);
+    check('past its time budget a decision looks at one reference only', slow.references.length === 1, slow.references.length);
+    const normal = alignAgainst(toSrt(BASE, 3, 'ro'), [mk(BASE, 'ref-a [GRP-A]'), mk(sameTimes, 'ref-b [GRP-B]')]);
+    check('within its budget it uses what it needs, as before', normal.references.length >= 1 && normal.decision.apply, normal.decision);
   }
 
   (axios as any).get = realGet;

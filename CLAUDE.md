@@ -57,6 +57,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.24 — cozile lente (2026-11-12, „eficientizăm și mai tare").** Date după 1.5.13 (90 de decizii, 54 de liste): lista mediană 1,6 s (p90 3,7 s), subtitrare gata
+  după listă mediană 0,75 s (p90 2,8 s), jucătorul a așteptat mediană 0,6 s; 8 din 90 au așteptat >3 s. Cozile: referințe p95 3,4 s / max 7,6 s (Zodiac: 6,6–7,6 s),
+  calcul max 7,9 s (Odyssey telesync), descărcarea subtitrării max 4 s. Schimbări: (1) referințele: descărcarea cu timeout 4 s (era 8), lista se închide când sunt 2
+  referințe + 400 ms de așteptare pentru a treia (era `allSettled` pe 3), cele eșuate sunt înlocuite de următoarele candidate; (2) buget de calcul `ALIGN_BUDGET_MS` = 3,5 s în
+  `alignAgainst`: peste el nu se mai încearcă alte referințe și nu pornește căutarea cu decalaj variabil; (3) `awaitSourceSpeeds`: o instanță nouă așteaptă (max 250 ms) statisticile
+  surselor la prima cerere, ca regulile dinamice (risc, p75) să funcționeze și la ea (înainte prima cerere pe instanță nouă mergea fără ele; liste după >30 min de pauză: mediană 1,9 s față de 1,6 s).
 - **DECIZIE (2026-11-12, utilizatorul): NU curățăm textul subtitrărilor** (reclame, credite, etichete de zgomot, versuri), ca la Ultimate Smart Subs (uss.ezerche.com,
   addon găzduit de altcineva: surse multiple, traducere AI cu cheia utilizatorului, text curățat, a doua limbă sub rând). Creditele traducătorilor rămân în subtitrare.
   Comparația cu USS: ce avem noi mai bun = Subsync pe referințe din alte limbi, viteză măsurată, Debug, control; ce are el = traducere AI când lipsește limba, curățare de text,

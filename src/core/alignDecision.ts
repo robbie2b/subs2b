@@ -75,7 +75,16 @@ const FILE_REFERENCE_MIN_OVERLAP = 0.7;
  * first, alone, and when the subtitle lines up with it the other references are not needed (Gone Baby Gone: an
  * EPSiLON reference said -7.9 s for an EPSiLON file, another release said -2.3 s, and nothing was done).
  */
-export function alignAgainst(candidateText: string, allReferences: Reference[], candidateRelease?: string, fileName?: string): AlignmentResult {
+/**
+ * The most a decision may take (ms): once past it no more references are tried and the expensive search for shifts that
+ * change along the subtitle is not started (the best found so far stands). The usual decision takes well under a second;
+ * a few take many seconds on a small processor (a telesync with a long, uneven subtitle: 7.9 s).
+ */
+export const ALIGN_BUDGET_MS = 3500;
+
+export function alignAgainst(candidateText: string, allReferences: Reference[], candidateRelease?: string, fileName?: string, budgetMs = ALIGN_BUDGET_MS): AlignmentResult {
+  const startedAt = Date.now();
+  const overBudget = (fraction = 1): boolean => Date.now() - startedAt > budgetMs * fraction;
   // A reference made for the subtitle's own release only repeats the subtitle's timing: it says nothing about the
   // playing file (Downton Abbey: a SHORTBREHD subtitle "confirmed" by SHORTBREHD references on a FraMeSToR REMUX)
   const own = groupsOf(candidateRelease);
@@ -111,6 +120,8 @@ export function alignAgainst(candidateText: string, allReferences: Reference[], 
       d = decide(cues, list, opts);
       // (two references of one release agreeing prove less: then the next one is looked at too)
       if (list.length >= 2 && d.agreeing >= 2 && d.confidence >= 0.9 && distinctReleases(list) >= 2) break;
+      // out of time: what the references looked at so far say is the decision
+      if (list.length >= 1 && overBudget()) break;
     }
     return { list, decision: d };
   };
@@ -120,7 +131,7 @@ export function alignAgainst(candidateText: string, allReferences: Reference[], 
     const first = collect(refs, false, 1, opts);
     let best = first;
     // (when one shift already worked, the ratio is known: the split search tries only that one, which is much cheaper)
-    if (!fits(first.decision) || (first.decision.apply && first.decision.confidence < 0.95)) {
+    if ((!fits(first.decision) || (first.decision.apply && first.decision.confidence < 0.95)) && !overBudget(0.6)) {
       const second = collect(refs, true, first.decision.apply ? 1 : 2, opts);
       if (second.decision.apply && (!first.decision.apply || second.decision.confidence >= first.decision.confidence)) best = second;
     }
