@@ -57,6 +57,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **DE REVENIT OBLIGATORIU (decizia utilizatorului, 2026-11-12): pornirea la rece (E+G), analizată cu CIFRE EXACTE.** Utilizatorul n-a simțit niciodată că addonul „doarme",
+  deci nu e urgent, dar vrea măsurătoare reală înainte să decidem ceva (nu ghiciri): `cold` și `initMs` în evenimentul „request" (Debug), apoi cât durează prima cerere după pauză
+  față de una caldă (listă, DDL, conexiune la DB). Tot atunci: (1) refăcut măsurătoarea listelor lente pe 1.5.25 (după 2–3 zile de date; dacă listele >3,5 s mai apar, discutăm un
+  circuit breaker mic doar pentru RegieLive și PRO; Titrari pică 93% dar în ~94 ms, deci NU costă timp, nu se construiește nimic pentru el); (2) verificat `aligned_cache` pe Supabase
+  (câte intrări, MB, câte „decided earlier"). B (lista brută în DB) SĂRITĂ: edge cache-ul dă HIT (verificat 2026-11-12), repetările de liste ~7% și deja rapide (~400 ms).
 - **v1.5.26 — rezultatul Subsync în baza de date, cache cu limită de SPAȚIU (2026-11-12, punctul A din analiză; cerut de utilizator: „data limit, nu time limited”).**
   `storage/alignedStore.ts`, tabela `aligned_cache` (cheie = `preparedKey`, gzip: textul original + decizia, `last_used`, `bytes`, RLS pornit). `prepareAligned`
   întreabă întâi DB (plafon 150 ms, `loadAligned`); la potrivire nu descarcă, nu caută referințe, nu calculează (Debug: „decided earlier (stored result)”).
