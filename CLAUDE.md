@@ -57,6 +57,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **DECIZIE (2026-11-12, utilizatorul): NU curățăm textul subtitrărilor** (reclame, credite, etichete de zgomot, versuri), ca la Ultimate Smart Subs (uss.ezerche.com,
+  addon găzduit de altcineva: surse multiple, traducere AI cu cheia utilizatorului, text curățat, a doua limbă sub rând). Creditele traducătorilor rămân în subtitrare.
+  Comparația cu USS: ce avem noi mai bun = Subsync pe referințe din alte limbi, viteză măsurată, Debug, control; ce are el = traducere AI când lipsește limba, curățare de text,
+  mai multe surse. Nu reluăm fără motiv nou. (Dacă se vrea vreodată: doar la capete, replici întregi de credit, oprită implicit, cu lista scoaselor în Debug.)
 - **v1.5.23 — plafon de 12 s pentru așteptarea Subsync pe Vercel (era 45 s).** Din codul Nuvio (TV și telefon, citit): descărcarea unei subtitrări pentru
   auto-sync are timeout 15 s; peste asta Nuvio n-are ce arăta din verificare. Telefonul (NuvioMobile 0.6.8-beta): la start alege subtitrarea preferată și, cât timp
   indexează pista din fișier, descarcă în paralel până la 6 alternative din aceeași limbă (de aici 1–3 cereri pe Play) și le compară cu pista; la alegerea manuală
