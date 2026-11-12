@@ -10,7 +10,8 @@ process.env.DATABASE_URL = '';
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'subs2b-vtt-'));
 
 import { vttToSrt } from '../src/utils/subtitleFormat';
-import { validateAndFormatSubtitle } from '../src/proxy/subtitleProxy';
+import { validateAndFormatSubtitle, convertTargetOf, addonHostsOf } from '../src/proxy/subtitleProxy';
+import { loadFirst } from '../src/core/alignedPrepare';
 import { createServer } from '../src/server';
 import { configStorage } from '../src/storage/configStore';
 import { DEFAULT_USER_CONFIG, mergeWithDefaults } from '../src/config/userConfig';
@@ -181,6 +182,26 @@ async function integrationTests(): Promise<void> {
   check(DEFAULT_USER_CONFIG.convertVttToSrt === true, 'the conversion is on by default');
   check(mergeWithDefaults({ convertVttToSrt: false }).convertVttToSrt === false, 'the setting can be turned off');
   check(mergeWithDefaults({}).convertVttToSrt === true, 'and defaults to on for older configurations');
+
+  // Subsync prepares a converted subtitle directly: no request to this server's own conversion link. The base address
+  // here does not exist, so a call to it would fail.
+  console.log('\n--- Subsync: converted links are fetched directly ---');
+  const ownBase = 'https://addon.invalid';
+  const hosts = addonHostsOf(config);
+  const linkOf = (u: string) => `${ownBase}/${uuid}/sub/convert/${Buffer.from(u).toString('base64url')}.srt`;
+  check(convertTargetOf(linkOf(`${upstreamBase}/sub.vtt`), ownBase) === `${upstreamBase}/sub.vtt`, 'the address is read out of the conversion link');
+  check(convertTargetOf(`${ownBase}/${uuid}/sub/convert.srt?url=${encodeURIComponent(`${upstreamBase}/sub.vtt`)}`, ownBase) === `${upstreamBase}/sub.vtt`, 'and out of the older ?url= form');
+  check(convertTargetOf(`${ownBase}/${uuid}/sub/aligned/abc.srt`, ownBase) === null && convertTargetOf(linkOf('http://x/y.vtt'), 'https://other.invalid') === null, 'other links are not conversion links');
+  const direct = await loadFirst([linkOf(`${upstreamBase}/sub.vtt`)], hosts, ownBase);
+  check(direct.text.includes('00:00:01,000 --> 00:00:02,000') && direct.text.includes('Hello') && !direct.text.includes('WEBVTT'), 'a converted link is downloaded and converted in the same process', direct.text);
+  let refused = '';
+  try { await loadFirst([linkOf('http://example.com/sub.vtt')], hosts, ownBase); } catch (err: unknown) { refused = err instanceof Error ? err.message : String(err); }
+  check(refused.includes('no allowed link'), 'an address that is not allowed is refused, as the route does', refused);
+  let broken = '';
+  try { await loadFirst([linkOf(`${upstreamBase}/missing.vtt`)], hosts, ownBase); } catch (err: unknown) { broken = err instanceof Error ? err.message : String(err); }
+  check(broken.includes('every source failed') && broken.includes('127.0.0.1'), 'a failure names the real source, not this server', broken);
+  const backup = await loadFirst([linkOf(`${upstreamBase}/missing.vtt`), linkOf(`${upstreamBase}/sub.vtt`)], hosts, ownBase);
+  check(backup.url === linkOf(`${upstreamBase}/sub.vtt`), 'the next link is tried when one fails');
 
   upstream.close();
 }

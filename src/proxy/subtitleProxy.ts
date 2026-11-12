@@ -648,6 +648,52 @@ export async function handleOpenSubtitlesRestDownload(req: Request, res: Respons
 const convertedSubtitles = new LRUCache<string, string>({ max: 200, ttl: 4 * 60 * 60 * 1000 });
 
 /**
+ * Downloads a subtitle (normally a .vtt of an imported addon) and returns it as clean SRT text. Kept for 4 hours.
+ * Used by the conversion route and by Subsync, which prepares converted subtitles directly instead of calling this
+ * server's own route over HTTP. The caller checks that the address may be downloaded.
+ */
+export async function convertSubtitleFromUrl(original: string, hosts: string[]): Promise<string> {
+  let srt = convertedSubtitles.get(original);
+  if (srt === undefined) {
+    const upstream = await axios.get<ArrayBuffer>(original, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      maxContentLength: MAX_SUBTITLE_BYTES,
+      maxRedirects: 3,
+      // a redirect must not lead outside the allowed hosts
+      beforeRedirect: (options: { hostname?: string }) => {
+        if (!options.hostname || !isAllowedHost(options.hostname, hosts)) {
+          throw new Error('Redirect to a host that is not allowed');
+        }
+      },
+      headers: { 'User-Agent': USER_AGENT, 'Accept': '*/*' }
+    });
+    const { buffer } = decompressBuffer(Buffer.from(upstream.data));
+    const validation = validateAndFormatSubtitle(toCleanUtf8(buffer), 'srt');
+    if (!validation.valid) {
+      throw new Error(validation.reason);
+    }
+    srt = validation.content;
+    convertedSubtitles.set(original, srt);
+  }
+  return srt;
+}
+
+/**
+ * If `link` is one of this server's own conversion links (`<base>/<config>/sub/convert/<base64url address>.srt`, or the
+ * older `…/sub/convert.srt?url=` form), the address it stands for; otherwise null.
+ */
+export function convertTargetOf(link: string, baseUrl: string): string | null {
+  if (!link.startsWith(baseUrl + '/')) return null;
+  let url: URL;
+  try { url = new URL(link); } catch { return null; }
+  const m = /^\/[^/]+\/sub\/convert(?:\/([A-Za-z0-9_-]+))?\.srt$/.exec(url.pathname);
+  if (!m) return null;
+  const target = m[1] ? Buffer.from(m[1], 'base64url').toString('utf8') : (url.searchParams.get('url') || '');
+  return /^https?:\/\//i.test(target) ? target : null;
+}
+
+/**
  * GET /:config/sub/convert/<base64url of the address>.srt  (or the older ?url= form)  Downloads a subtitle (normally a .vtt served by an imported addon) and
  * returns it as plain SRT, so the player applies its own size/position settings. The URL must belong to a subtitle
  * site or to an addon imported in that configuration. If anything fails the player is sent to the original link.
@@ -664,29 +710,7 @@ export async function handleVttConvert(req: Request, res: Response): Promise<voi
   }
 
   try {
-    let srt = convertedSubtitles.get(original);
-    if (srt === undefined) {
-      const upstream = await axios.get<ArrayBuffer>(original, {
-        responseType: 'arraybuffer',
-        timeout: 15000,
-        maxContentLength: MAX_SUBTITLE_BYTES,
-        maxRedirects: 3,
-        // a redirect must not lead outside the allowed hosts
-        beforeRedirect: (options: { hostname?: string }) => {
-          if (!options.hostname || !isAllowedHost(options.hostname, hosts)) {
-            throw new Error('Redirect to a host that is not allowed');
-          }
-        },
-        headers: { 'User-Agent': USER_AGENT, 'Accept': '*/*' }
-      });
-      const { buffer } = decompressBuffer(Buffer.from(upstream.data));
-      const validation = validateAndFormatSubtitle(toCleanUtf8(buffer), 'srt');
-      if (!validation.valid) {
-        throw new Error(validation.reason);
-      }
-      srt = validation.content;
-      convertedSubtitles.set(original, srt);
-    }
+    const srt = await convertSubtitleFromUrl(original, hosts);
     sendSubtitleResponse(res, srt, 'srt', 'subtitle.srt');
   } catch (err: unknown) {
     Logger.warn('VTT -> SRT conversion failed, sending the player to the original link', { reason: err instanceof Error ? err.message : String(err) });

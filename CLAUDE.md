@@ -57,6 +57,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.27 — punctul D: linkurile de conversie `.vtt` nu se mai apelează prin HTTP de la noi la noi (2026-11-12, cerut de utilizator; episodul următor NU s-a făcut, doar discutat).**
+  `convertSubtitleFromUrl` (corpul vechi al rutei `/sub/convert`, cache 4 h) și `convertTargetOf` în `proxy/subtitleProxy.ts`; `loadFirst` (alignedPrepare) decodează linkul
+  `/<config>/sub/convert/<base64>.srt` (sau `?url=`) și descarcă + convertește direct, cu aceleași verificări (gazdă permisă, 10 MB, redirect doar pe gazde permise); eșecurile
+  se notează pe sursa reală, nu pe propriul domeniu; fișierele stricate se țin minte după adresa reală. Câștig așteptat 30–60 ms la subtitrările `.vtt` din Subsync. Test în `test/vttConvert.test.ts`.
+  **PLAN pentru episodul următor (discutat, NEFĂCUT):** doar referințele Subsync ale lui `ep+1` (cheia nu conține numele întreg, deci se poate deduce din fișierul curent; lista și
+  subtitrarea aliniată NU se pot pregăti: cheile au hash / nume exact); pornește ~2 s după decizia episodului curent, o dată pe serial pe oră, nu pentru `ep>30`, nu atinge Subs.ro;
+  măsurare: `referencesMs` pe Play-urile „episod următor” (9 din 72 de Play-uri de seriale; referințe: mediană 229 ms, p90 3,1 s, max 8,2 s). Decizii de luat: declanșare la fiecare
+  episod (recomandat) și plafon 1/oră.
 - **DE REVENIT OBLIGATORIU (decizia utilizatorului, 2026-11-12): pornirea la rece (E+G), analizată cu CIFRE EXACTE.** Utilizatorul n-a simțit niciodată că addonul „doarme",
   deci nu e urgent, dar vrea măsurătoare reală înainte să decidem ceva (nu ghiciri): `cold` și `initMs` în evenimentul „request" (Debug), apoi cât durează prima cerere după pauză
   față de una caldă (listă, DDL, conexiune la DB). Tot atunci: (1) refăcut măsurătoarea listelor lente pe 1.5.25 (după 2–3 zile de date; dacă listele >3,5 s mai apar, discutăm un

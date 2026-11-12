@@ -13,7 +13,7 @@ import { alignInWorker, referencesAgreeInWorker } from './alignPool';
 import { activity, filmLabel, fmtMs } from '../utils/activity';
 import { loadAligned, storeAligned } from '../storage/alignedStore';
 import {
-  addonHostsOf, isAllowedDownloadUrl, decompressBuffer, toCleanUtf8, validateAndFormatSubtitle
+  addonHostsOf, isAllowedDownloadUrl, decompressBuffer, toCleanUtf8, validateAndFormatSubtitle, convertSubtitleFromUrl, convertTargetOf
 } from '../proxy/subtitleProxy';
 
 /**
@@ -84,16 +84,31 @@ const describe = (err: unknown): string => {
 export async function loadFirst(urls: string[], allowedHosts: string[], baseUrl: string, release?: string): Promise<{ text: string; url: string }> {
   const failures: string[] = [];
   for (const url of urls) {
-    const own = url.startsWith(baseUrl + '/');
-    if (!own && !isAllowedDownloadUrl(url, allowedHosts)) continue;
-    const host = new URL(url).hostname;
-    const label = `${host}${new URL(url).pathname.split('/').slice(0, 4).join('/')}`;
+    // A conversion link of this server (a .vtt of an addon) is not requested from ourselves over HTTP: the subtitle is
+    // downloaded and converted right here, and the source that answers is the real one
+    const converted = convertTargetOf(url, baseUrl);
+    const fetchUrl = converted || url;
+    const own = !converted && url.startsWith(baseUrl + '/');
+    if (!own && !isAllowedDownloadUrl(fetchUrl, allowedHosts)) continue;
+    const host = new URL(fetchUrl).hostname;
+    const label = `${host}${new URL(fetchUrl).pathname.split('/').slice(0, 4).join('/')}`;
     if (!own && isBlocked(host)) {
       failures.push(`${label}: skipped (refusing this server for now)`);
       continue;
     }
     try {
-      const text = await loadOriginal(url, allowedHosts);
+      let text: string;
+      if (converted) {
+        try {
+          text = await convertSubtitleFromUrl(converted, allowedHosts);
+        } catch (err: unknown) {
+          const reason = err instanceof Error ? err.message : String(err);
+          if (isBrokenFileReason(reason)) noteBrokenFile(converted, reason);
+          throw err;
+        }
+      } else {
+        text = await loadOriginal(url, allowedHosts);
+      }
       if (failures.length) {
         Logger.info(`[DOWNLOAD] served from a backup source (${host}) after: ${failures.join('; ')}`);
         noteDownloadFailure({ host: failures[0].split(':')[0].split('/')[0], place: 'backups', reason: `${failures.join('; ')} -> served by ${host}`, recovered: true, release });
