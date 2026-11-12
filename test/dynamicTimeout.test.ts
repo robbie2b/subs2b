@@ -16,6 +16,8 @@ const FILE = 'Movie.2001.1080p.BluRay.x264-GRP.mkv';
 
 async function main(): Promise<void> {
   // "fast" answers at once with the exact release of the playing file; "slow" answers after 3 s with another subtitle
+  // (for the tests of failing sources, "fast" waits a little, so the failure is in before the list is closed)
+  let fastDelayMs = 0;
   const server = http.createServer((req, res) => {
     if ((req.url || '').startsWith('/broken/')) { res.statusCode = 500; res.end('no'); return; }
     const slow = (req.url || '').startsWith('/slow/');
@@ -23,7 +25,7 @@ async function main(): Promise<void> {
     // "near": the same kind of release as the playing file (1080p BluRay), but by another group: good, not exact
     const title = slow ? 'Movie.2001.720p.WEB-DL.x264-OTHER' : near ? 'Movie.2001.1080p.BluRay.x264-OTHER' : 'Movie.2001.1080p.BluRay.x264-GRP';
     const answer = () => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ subtitles: [{ url: `https://dl.example/${slow ? 's' : 'f'}.srt`, lang: 'ron', title }] })); };
-    if (slow) setTimeout(answer, 3000); else answer();
+    if (slow) setTimeout(answer, 3000); else if (!near && fastDelayMs) setTimeout(answer, fastDelayMs); else answer();
   });
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -84,6 +86,7 @@ async function main(): Promise<void> {
 
   // a failed source that almost never wins does not make the list incomplete (so it is kept the whole time); one that often wins does
   const failing = (patch: Partial<UserConfig>) => config({ subsync: false, customAddons: [addon('fast'), addon('broken')], ...patch });
+  fastDelayMs = 150;
   setSourceSpeeds('speed-test', new Map([['broken', { p75: 100, failRate: 1, searches: 50, winRate: 0, inTopRate: 0, ranked: 50 }]]));
   const calm = await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000041', { filename: FILE }), failing({}), 'http://x', 'speed-test');
   check('a failure of a source that never wins leaves the list complete (kept the full time)', calm.cacheMaxAge === Math.round(DEFAULT_USER_CONFIG.cacheTtlMinutes * 60), calm.cacheMaxAge);

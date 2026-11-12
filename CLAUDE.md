@@ -57,6 +57,14 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.26 — rezultatul Subsync în baza de date, cache cu limită de SPAȚIU (2026-11-12, punctul A din analiză; cerut de utilizator: „data limit, nu time limited”).**
+  `storage/alignedStore.ts`, tabela `aligned_cache` (cheie = `preparedKey`, gzip: textul original + decizia, `last_used`, `bytes`, RLS pornit). `prepareAligned`
+  întreabă întâi DB (plafon 150 ms, `loadAligned`); la potrivire nu descarcă, nu caută referințe, nu calculează (Debug: „decided earlier (stored result)”).
+  Se salvează doar decizii sigure (`fitsReferences`: mutată sau „already aligned"), în `keepAlive`. Buget `ALIGNED_CACHE_MB` (implicit 150): la fiecare 10 scrieri se
+  verifică totalul și se șterg cele mai puțin recent folosite până la 85% (`trimAligned`); citirea reîmprospătează `last_used` (max o dată/oră). Singura limită de
+  timp: 45 de zile (`STALE_DAYS`). Ocupare măsurată înainte: ~5,7 MB din baza noastră (referințe 3,3 MB); cei ~277 MB din panoul Supabase sunt ai lor.
+  Test: `test/alignedStore.test.ts` (partea cu DB rulează doar cu `TEST_DATABASE_URL`, ex. Postgres local 16, user pgtest). Test `dynamicTimeout` făcut stabil
+  (cursă în test: „fast” răspundea înaintea eșecului lui „broken”) + `setSourceSpeeds` nu mai e suprascris de o citire pornită înainte. Rămân: B (lista brută în DB), C–G.
 - **v1.5.25 — din analiza a doi subagenți (2026-11-12).** Cercetător (Bazarr, subliminal, ffsubsync, alass, StremioSubMaker, SCS, stremio-subs-ro, USS) + analist
   (traseul real pas cu pas, cu date din Debug). Făcut acum: (1) grația după „destul de bun" nu mai e 300 fix: 0 la potrivire exactă sau risc <3%, 100 ms altfel
   (`goodEnough` întoarce `false | grație`); (2) o sursă care eșuează dar câștigă <3% nu mai face lista „incompletă" (`sourceMatters`): înainte fiecare listă avea

@@ -11,6 +11,7 @@ import { AlignedToken, linksOf } from './alignedToken';
 import { getReferences, refreshReferences, referencesCameFromStore, fitsReferences, AlignmentResult, Reference } from './alignment';
 import { alignInWorker, referencesAgreeInWorker } from './alignPool';
 import { activity, filmLabel, fmtMs } from '../utils/activity';
+import { loadAligned, storeAligned } from '../storage/alignedStore';
 import {
   addonHostsOf, isAllowedDownloadUrl, decompressBuffer, toCleanUtf8, validateAndFormatSubtitle
 } from '../proxy/subtitleProxy';
@@ -215,6 +216,30 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
 
   const hosts = addonHostsOf(config);
   const started = Date.now();
+  // A result stored by any instance (same link, same file) is used as it is: nothing to download or compute. The
+  // lookup is capped at 150 ms, so a slow database never holds the subtitle back.
+  const work = loadAligned(key).then(hit => {
+    if (hit) {
+      const ms = Date.now() - started;
+      const served = hit.served as Served;
+      served.result.note = ['decided earlier (stored result)', served.result.note].filter(Boolean).join('; ');
+      served.timing = { original: 0, references: 0, compute: 0, ready: ms };
+      activity('sync', filmLabel(token.id, token.f), `"${(token.r || 'subtitle').slice(0, 70)}": decided earlier, read from storage in ${fmtMs(ms)} (nothing downloaded or computed)`, { step: 'compute', state: 'done', ms, verdict: 'stored' });
+      return { original: Promise.resolve(hit.original), served: Promise.resolve(served) };
+    }
+    return compute();
+  });
+  const entry: Prepared = { original: work.then(w => w.original), served: work.then(w => w.served), startedAt: started };
+  prepared.set(key, entry);
+  // a failure is not kept: the next request tries again (and a preparation nobody waits for never throws)
+  entry.original.catch(() => undefined);
+  entry.served.catch((err: unknown) => {
+    activity('warn', filmLabel(token.id, token.f), `Subsync failed for "${(token.r || 'subtitle').slice(0, 70)}": ${(err instanceof Error ? err.message : String(err)).slice(0, 100)}`, { step: 'compute', state: 'warn' });
+    if (prepared.get(key) === entry) prepared.delete(key);
+  });
+  return entry;
+
+  function compute(): { original: Promise<string>; served: Promise<Served> } {
   const timing = { original: 0, references: 0, compute: 0, ready: 0 };
   const film = filmLabel(token.id, token.f);
   const name = (token.r || 'subtitle').slice(0, 70);
@@ -257,17 +282,17 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
     timing.ready = Date.now() - started;
     const d = s.result.decision;
     activity('sync', film, `Decision for "${name}": ${d.apply ? `shifted ${d.offset > 0 ? '+' : ''}${d.offset} s${d.ratio !== 1 ? ` ×${d.ratio}` : ''}${d.segments > 1 ? ` in ${d.segments} parts` : ''}` : (d.reason === 'already aligned' ? 'unchanged (already aligned)' : `unchanged (${d.reason})`)} · confidence ${Math.round(d.confidence * 100)}% · computed in ${fmtMs(timing.compute)}`, { step: 'compute', state: 'done', ms: timing.compute, verdict: d.apply ? `shifted ${d.offset > 0 ? '+' : ''}${d.offset} s${d.ratio !== 1 ? ` ×${d.ratio}` : ''}` : `unchanged (${Math.round(d.confidence * 100)}%)` });
-    return { ...s, timing };
+    const out = { ...s, timing };
+    // a decision that is sure (shifted, or already aligned) is kept for the other instances and the next times;
+    // "no reference" and "disagree" are not (they may change)
+    if (fitsReferences(s.result)) {
+      const { timing: _t, ...forStore } = out;
+      storeAligned(key, { original: loaded.text, served: forStore });
+    }
+    return out;
   });
-  const entry: Prepared = { original, served, startedAt: started };
-  prepared.set(key, entry);
-  // a failure is not kept: the next request tries again (and a preparation nobody waits for never throws)
-  original.catch(() => undefined);
-  served.catch((err: unknown) => {
-    activity('warn', film, `Subsync failed for "${name}": ${(err instanceof Error ? err.message : String(err)).slice(0, 100)}`, { step: 'compute', state: 'warn' });
-    if (prepared.get(key) === entry) prepared.delete(key);
-  });
-  return entry;
+  return { original, served };
+  }
 }
 
 export function clearPrepared(): void {

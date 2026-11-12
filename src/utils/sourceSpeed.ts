@@ -11,6 +11,8 @@ import { Logger } from './logger';
 const REFRESH_MS = 10 * 60 * 1000;
 const known = new Map<string, { at: number; speeds: Map<string, ProviderSpeed> }>();
 const loading = new Set<string>();
+/** counts the speeds set from outside, so a read that was under way while they were set does not overwrite them */
+const versions = new Map<string, number>();
 
 /** What is known now (maybe nothing), and a refresh in the background when it is old */
 export function sourceSpeeds(configKey: string | undefined): Map<string, ProviderSpeed> | null {
@@ -18,8 +20,10 @@ export function sourceSpeeds(configKey: string | undefined): Map<string, Provide
   const entry = known.get(configKey);
   if ((!entry || Date.now() - entry.at > REFRESH_MS) && !loading.has(configKey)) {
     loading.add(configKey);
+    const versionAtStart = versions.get(configKey) ?? 0;
     keepAlive(getProviderSpeeds(configKey)
-      .then(speeds => { known.set(configKey, { at: Date.now(), speeds }); })
+      // (what was set while the read was under way is newer than the read: it is not overwritten)
+      .then(speeds => { if ((versions.get(configKey) ?? 0) === versionAtStart) known.set(configKey, { at: Date.now(), speeds }); })
       .catch(err => Logger.warn('Source speeds could not be read', { reason: err instanceof Error ? err.message : String(err) }))
       .finally(() => { loading.delete(configKey); }));
   }
@@ -40,6 +44,7 @@ export async function awaitSourceSpeeds(configKey: string | undefined, maxWaitMs
 
 /** For tests */
 export function setSourceSpeeds(configKey: string, speeds: Map<string, ProviderSpeed>): void {
+  versions.set(configKey, (versions.get(configKey) ?? 0) + 1);
   known.set(configKey, { at: Date.now(), speeds });
 }
 
