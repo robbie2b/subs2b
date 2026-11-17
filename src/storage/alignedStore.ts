@@ -12,12 +12,23 @@ import { keepAlive } from '../utils/background';
  * Limited by SIZE, not by time: the table may grow up to a budget (MB); when it passes the budget, the entries used
  * least recently are deleted until it is back under ~85% of it. Every read marks the entry as used (at most once
  * an hour per entry, to spare writes), so what people keep playing stays and what nobody opens any more goes first.
- * A far-out age limit (STALE_DAYS) only guards against a decision made with references that were replaced long ago.
+ * A far-out age limit (STALE_DAYS) only guards against a decision made with references that were replaced long ago;
+ * the version of the alignment logic (ALIGN_ENGINE_VERSION) makes a change of the logic retire the old decisions.
  */
 
 const budgetBytes = (): number => Math.max(5, parseFloat(process.env.ALIGNED_CACHE_MB || '') || 150) * 1048576;
 const TRIM_TO = 0.85;
-const STALE_DAYS = 45;
+const STALE_DAYS = 30;
+
+/**
+ * Version of the alignment logic. A stored decision was made by the logic of its time: when the logic changes (the
+ * engine, the choice of references, what counts as a fit), raise this number and every earlier decision stops being
+ * used (the entries are just never found again; the budget clears them away, the oldest first).
+ */
+export const ALIGN_ENGINE_VERSION = 1;
+
+/** The key a result is kept under: the link's key plus the version of the logic that decided it */
+export const versionedKey = (key: string, version: number = ALIGN_ENGINE_VERSION): string => `e${version}|${key}`;
 const TOUCH_EVERY_MS = 60 * 60 * 1000;
 /** the lookup waits at most this long: a slow database must not slow the subtitle down */
 export const READ_CAP_MS = 150;
@@ -83,13 +94,13 @@ export function loadAligned(key: string, capMs: number = READ_CAP_MS): Promise<S
     const pool = await configStorage.getPool();
     const res = await pool!.query(
       `SELECT data, last_used FROM aligned_cache WHERE cache_key = $1 AND created_at > NOW() - INTERVAL '${STALE_DAYS} days'`,
-      [key]
+      [versionedKey(key)]
     );
     if (res.rows.length === 0) return null;
     const stored = unpackAligned(res.rows[0].data as Buffer);
     // used again: moved up in the "recently used" order (not on every read)
     if (Date.now() - new Date(res.rows[0].last_used as string).getTime() > TOUCH_EVERY_MS) {
-      keepAlive(pool!.query('UPDATE aligned_cache SET last_used = NOW() WHERE cache_key = $1', [key]).catch(() => undefined));
+      keepAlive(pool!.query('UPDATE aligned_cache SET last_used = NOW() WHERE cache_key = $1', [versionedKey(key)]).catch(() => undefined));
     }
     return stored;
   })(), capMs);
@@ -128,7 +139,7 @@ export function storeAligned(key: string, value: StoredAligned): void {
       await pool!.query(
         `INSERT INTO aligned_cache (cache_key, bytes, data) VALUES ($1, $2, $3)
          ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, bytes = EXCLUDED.bytes, created_at = NOW(), last_used = NOW()`,
-        [key, data.length, data]
+        [versionedKey(key), data.length, data]
       );
       if (++writesSinceCheck >= CHECK_EVERY_WRITES) {
         writesSinceCheck = 0;
@@ -146,7 +157,7 @@ export function forgetAligned(key: string): void {
     try {
       if (!(await ensureTable())) return;
       const pool = await configStorage.getPool();
-      await pool!.query('DELETE FROM aligned_cache WHERE cache_key = $1', [key]);
+      await pool!.query('DELETE FROM aligned_cache WHERE cache_key = $1', [versionedKey(key)]);
     } catch {
       // not important
     }

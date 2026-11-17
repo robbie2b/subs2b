@@ -57,6 +57,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.29 — `aligned_cache`: versiunea motorului în cheie, 30 de zile (2026-11-17, cerut de utilizator).** Cheia salvată e `e<ALIGN_ENGINE_VERSION>|<cheia linkului>` (`versionedKey` în
+  `storage/alignedStore.ts`). **REGULĂ: când schimb logica de aliniere (motorul din `utils/subsync.ts`, alegerea referințelor, ce înseamnă „se potrivește", `alignDecision.ts`), urc
+  `ALIGN_ENGINE_VERSION`**: deciziile vechi nu se mai găsesc și pleacă singure când se umple bugetul (cele mai vechi folosite întâi). Limita de timp coboară de la 45 la 30 de zile.
+  Nu se șterg intrările la reîmprospătarea referințelor (chei diferite: subtitrare+fișier față de episod+tip fișier; caz rar). Intrările v1.5.26–1.5.28 (fără prefix) nu se mai citesc.
 - **v1.5.28 — profilele (UUID-uri) sunt SEPARATE în Debug (2026-11-17, cerut de utilizator: „TOT să fie separat, să nu știe un uuid de celălalt").**
   Înainte: LIVE LOG, LIVE ACTIVITY, DOWNLOAD FAILURES și REQUESTS TO THE SOURCES erau globale (se vedeau Play-urile și numele fișierelor celuilalt profil); usage, providers,
   alignments, recent, rules erau deja pe proprietar. Acum: `utils/requestContext.ts` (AsyncLocalStorage + `ownerOf` = sha256 scurt, mutat din usageStore) și un middleware în
