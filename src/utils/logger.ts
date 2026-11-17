@@ -1,12 +1,13 @@
 import { ProviderLogEntry } from '../types/provider';
+import { currentOwner, visibleTo } from './requestContext';
 
 // The latest log lines are also kept in memory so the Debug page can show them live (reset on restart)
 const MAX_BUFFER_LINES = 500;
-const buffer: Array<{ seq: number; text: string }> = [];
+const buffer: Array<{ seq: number; text: string; owner?: string }> = [];
 let nextSeq = 1;
 
 function remember(text: string): void {
-  buffer.push({ seq: nextSeq++, text });
+  buffer.push({ seq: nextSeq++, text, owner: currentOwner() });
   if (buffer.length > MAX_BUFFER_LINES) buffer.shift();
 }
 
@@ -20,9 +21,10 @@ export const INSTANCE_ID = Math.random().toString(36).slice(2, 8);
  * Log lines newer than `afterSeq` (0 = everything still in the buffer). `afterSeq` only counts when `instance` is
  * this process: a number from another instance means nothing here, so the whole buffer is sent.
  */
-export function getLogLines(afterSeq: number = 0, instance?: string): { lines: Array<{ seq: number; text: string }>; last: number; instance: string } {
+export function getLogLines(afterSeq: number = 0, instance?: string, viewer?: string): { lines: Array<{ seq: number; text: string }>; last: number; instance: string } {
   const after = instance === undefined || instance === INSTANCE_ID ? afterSeq : 0;
-  return { lines: buffer.filter(l => l.seq > after), last: nextSeq - 1, instance: INSTANCE_ID };
+  // only the viewer's own lines (and the server's own, which belong to no profile)
+  return { lines: buffer.filter(l => l.seq > after && visibleTo(l.owner, viewer)).map(l => ({ seq: l.seq, text: l.text })), last: nextSeq - 1, instance: INSTANCE_ID };
 }
 
 function stamp(level: string, message: string, context?: Record<string, unknown>): string {

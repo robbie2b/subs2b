@@ -3,6 +3,7 @@ import { computeRuleImpact, StoredRequest } from '../utils/ruleImpact';
 import { configStorage } from './configStore';
 import { enableRlsSql } from './dbTools';
 import { Logger } from '../utils/logger';
+import { ownerOf } from '../utils/requestContext';
 import { providerKind, ProviderKind } from '../providers/kind';
 
 /**
@@ -56,8 +57,7 @@ const RECENT_LIMIT = 150;
 const memory = new Map<string, UsageEvent[]>();
 let tableReady: Promise<boolean> | null = null;
 
-export const ownerOf = (configKey: string): string =>
-  crypto.createHash('sha256').update(configKey.toLowerCase()).digest('hex').slice(0, 16);
+export { ownerOf };
 
 async function ensureTable(): Promise<boolean> {
   if (!tableReady) {

@@ -1,5 +1,5 @@
 import { configStorage } from './configStore';
-import { ensureTableSafely } from './dbTools';
+import { ensureTableSafely, addColumnSafely } from './dbTools';
 import { Logger, INSTANCE_ID } from '../utils/logger';
 import { keepAlive } from '../utils/background';
 import type { ActivityEvent } from '../utils/activity';
@@ -29,9 +29,13 @@ function ensureTable(): Promise<boolean> {
           kind TEXT NOT NULL,
           film TEXT NOT NULL,
           text TEXT NOT NULL,
-          meta JSONB
+          meta JSONB,
+          owner TEXT
         );
         CREATE INDEX IF NOT EXISTS activity_events_at ON activity_events (at)`);
+      // tables made before the profiles were kept apart: the owner column is added, and what was saved without one (it
+      // mixed every profile) is dropped: it lasts 24 hours anyway
+      await addColumnSafely(pool, 'activity_events', 'owner', ['ALTER TABLE activity_events ADD COLUMN owner TEXT', 'DELETE FROM activity_events']);
       return true;
     })().catch(err => {
       Logger.error('Could not prepare the activity table, trying again in 30 s', err);
@@ -54,11 +58,11 @@ async function flush(): Promise<void> {
     const pool = await configStorage.getPool();
     const values: unknown[] = [];
     const rows = batch.map((e, i) => {
-      const o = i * 6;
-      values.push(e.at, INSTANCE_ID, e.kind, e.film.slice(0, 200), e.text.slice(0, 400), e.meta ? JSON.stringify(e.meta) : null);
-      return `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6})`;
+      const o = i * 7;
+      values.push(e.at, INSTANCE_ID, e.kind, e.film.slice(0, 200), e.text.slice(0, 400), e.meta ? JSON.stringify(e.meta) : null, e.owner || null);
+      return `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7})`;
     });
-    await pool!.query(`INSERT INTO activity_events (at, instance, kind, film, text, meta) VALUES ${rows.join(', ')}`, values);
+    await pool!.query(`INSERT INTO activity_events (at, instance, kind, film, text, meta, owner) VALUES ${rows.join(', ')}`, values);
     if (Math.random() < 0.02) await pool!.query(`DELETE FROM activity_events WHERE at < NOW() - INTERVAL '${KEEP_HOURS} hours'`);
   } catch (err) {
     Logger.error('Could not save the live activity', err);
@@ -79,13 +83,13 @@ export function persistActivity(event: ActivityEvent): void {
  * The saved steps newer than `afterId` (0 = the latest ones), from every instance; null when there is no database or it
  * cannot be read (the caller then answers from memory).
  */
-export async function readStoredActivity(afterId: number): Promise<{ events: Array<ActivityEvent & { seq: number }>; last: number; instance: string } | null> {
+export async function readStoredActivity(afterId: number, viewer?: string): Promise<{ events: Array<ActivityEvent & { seq: number }>; last: number; instance: string } | null> {
   try {
     if (!(await ensureTable())) return null;
     const pool = await configStorage.getPool();
     const res = afterId > 0
-      ? await pool!.query('SELECT id, at, kind, film, text, meta FROM activity_events WHERE id > $1 ORDER BY id LIMIT $2', [afterId, READ_ROWS])
-      : await pool!.query('SELECT id, at, kind, film, text, meta FROM (SELECT * FROM activity_events ORDER BY id DESC LIMIT $1) t ORDER BY id', [READ_ROWS]);
+      ? await pool!.query('SELECT id, at, kind, film, text, meta FROM activity_events WHERE id > $1 AND (owner IS NULL OR owner = $3) ORDER BY id LIMIT $2', [afterId, READ_ROWS, viewer ?? null])
+      : await pool!.query('SELECT id, at, kind, film, text, meta FROM (SELECT * FROM activity_events WHERE owner IS NULL OR owner = $2 ORDER BY id DESC LIMIT $1) t ORDER BY id', [READ_ROWS, viewer ?? null]);
     const events = res.rows.map((r: any) => ({
       seq: Number(r.id), at: new Date(r.at).toISOString(), kind: r.kind, film: r.film, text: r.text, ...(r.meta ? { meta: r.meta } : {})
     }));

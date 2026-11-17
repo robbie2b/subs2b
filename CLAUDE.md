@@ -57,6 +57,16 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.5.28 — profilele (UUID-uri) sunt SEPARATE în Debug (2026-11-17, cerut de utilizator: „TOT să fie separat, să nu știe un uuid de celălalt").**
+  Înainte: LIVE LOG, LIVE ACTIVITY, DOWNLOAD FAILURES și REQUESTS TO THE SOURCES erau globale (se vedeau Play-urile și numele fișierelor celuilalt profil); usage, providers,
+  alignments, recent, rules erau deja pe proprietar. Acum: `utils/requestContext.ts` (AsyncLocalStorage + `ownerOf` = sha256 scurt, mutat din usageStore) și un middleware în
+  `createServer` care rulează orice cerere `/<uuid>/...` ca acel proprietar; contextul urmează promisiunile (keepAlive, pregătiri). `Logger`, `activity()`, `noteDownloadFailure`,
+  contorul de cereri etichetează cu proprietarul; rutele `logs.json`, `activity.json`, `downloads.json`, `requests.json` filtrează (`visibleTo`: înregistrările fără proprietar =
+  ale serverului, vizibile tuturor: pornire, erori de DB; `request_counts` cu proprietar gol nu se arată nimănui). DB: coloană `owner` adăugată (`addColumnSafely` în dbTools) la
+  `activity_events`, `download_failures`, `request_counts` (PK nou `(day, host, owner)`); la migrare se ȘTERG rândurile vechi (amestecau profilele; activitatea ținea oricum 24 h).
+  `Prepared.reported` e acum per proprietar (două profile care joacă aceeași subtitrare își văd fiecare decizia în Debug). RĂMÂNE comun, fără identitate: cache-ul listelor,
+  referințele Subsync, `aligned_cache`, pachetele Subs.ro (conținut, nu date de profil); cota Subs.ro e a cheii, deci contorul per profil nu mai egalează totalul din panoul lor.
+  Test: `test/profileSeparation.test.ts` (unitar + HTTP cu 2 profile; partea cu DB și migrarea tabelelor vechi cu `TEST_DATABASE_URL`).
 - **v1.5.27 — punctul D: linkurile de conversie `.vtt` nu se mai apelează prin HTTP de la noi la noi (2026-11-12, cerut de utilizator; episodul următor NU s-a făcut, doar discutat).**
   `convertSubtitleFromUrl` (corpul vechi al rutei `/sub/convert`, cache 4 h) și `convertTargetOf` în `proxy/subtitleProxy.ts`; `loadFirst` (alignedPrepare) decodează linkul
   `/<config>/sub/convert/<base64>.srt` (sau `?url=`) și descarcă + convertește direct, cu aceleași verificări (gazdă permisă, 10 MB, redirect doar pe gazde permise); eșecurile

@@ -1,3 +1,5 @@
+import { currentOwner, visibleTo } from './requestContext';
+
 /**
  * The downloads that failed (a source refusing this server, a broken archive, a site down...), newest first. Kept in
  * memory and, through the store attached at start (storage/downloadFailureStore), in PostgreSQL, so Debug shows them
@@ -14,6 +16,8 @@ export interface DownloadFailure {
   /** a backup source was downloaded instead */
   recovered: boolean;
   release?: string;
+  /** whose request it was (never sent to the page); failures of no profile are the server's own */
+  owner?: string;
 }
 
 const MAX_KEPT = 300;
@@ -27,7 +31,8 @@ export function noteDownloadFailure(f: Omit<DownloadFailure, 'at'> & { at?: stri
     place: f.place,
     reason: f.reason.slice(0, 500),
     recovered: f.recovered,
-    ...(f.release ? { release: f.release.slice(0, 300) } : {})
+    ...(f.release ? { release: f.release.slice(0, 300) } : {}),
+    ...((f.owner || currentOwner()) ? { owner: f.owner || currentOwner() } : {})
   };
   recent.unshift(entry);
   if (recent.length > MAX_KEPT) recent.length = MAX_KEPT;
@@ -47,17 +52,18 @@ export function attachDownloadFailureStore(save: (f: DownloadFailure) => void): 
 }
 
 /** The failures, newest first, and how many per host over the last 7 days */
-export function downloadFailures(): { entries: DownloadFailure[]; lastWeek: Array<{ host: string; failed: number; recovered: number }> } {
+export function downloadFailures(viewer?: string): { entries: DownloadFailure[]; lastWeek: Array<{ host: string; failed: number; recovered: number }> } {
+  const mine = recent.filter(f => visibleTo(f.owner, viewer));
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const byHost = new Map<string, { failed: number; recovered: number }>();
-  for (const f of recent) {
+  for (const f of mine) {
     if (f.at < since) continue;
     const h = byHost.get(f.host) || { failed: 0, recovered: 0 };
     if (f.recovered) h.recovered++; else h.failed++;
     byHost.set(f.host, h);
   }
   return {
-    entries: recent.slice(),
+    entries: mine.map(({ owner: _o, ...f }) => f),
     lastWeek: [...byHost.entries()].map(([host, n]) => ({ host, ...n })).sort((a, b) => b.failed + b.recovered - a.failed - a.recovered)
   };
 }

@@ -5,6 +5,7 @@ import { applyAlignment } from '../utils/subsync';
 import { parseSubtitleQuery } from '../core/aggregator';
 import { decodeAlignedToken, decodeFallbackToken, linksOf } from '../core/alignedToken';
 import { recordAlignment, AlignmentResult } from '../core/alignment';
+import { currentOwner } from '../utils/requestContext';
 import { prepareAligned, prepareAlignedPeek, loadFirst, loadWithAlternatives, clearPrepared, Served } from '../core/alignedPrepare';
 import { addonHostsOf, isAllowedDownloadUrl, sendSubtitleResponse } from './subtitleProxy';
 import { activity, filmLabel, fmtMs } from '../utils/activity';
@@ -136,14 +137,16 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
       const { result, replacedBy } = served;
       // the player asks for the same subtitle again and again (seeking, switching tracks): the decision was made once
       // and is logged once; the repeats are only a short line
-      if (prep.reported) {
+      // (once per profile: two profiles playing the same subtitle each get their own decision in their own Debug page)
+      const viewer = currentOwner() ?? '';
+      if (prep.reported?.has(viewer)) {
         Logger.info(`[SUBSYNC] served again from memory (decided earlier, nothing computed)`, { id: token.id, subtitle: replacedBy || token.r });
         activity('done', film, `Sent "${release}" again from memory (nothing computed); it waited ${fmtMs(Date.now() - started)}`, { step: 'delivered', state: 'done', ms: Date.now() - started });
         const again = served.text ?? text;
         sendSubtitleResponse(res, result.decision.apply ? applyAlignment(again, result.decision.result!) : again, 'srt', 'subtitle.srt', finalCache(result));
         return;
       }
-      prep.reported = true;
+      (prep.reported ||= new Set()).add(viewer);
       if (served.timing) {
         const t = served.timing;
         Logger.info(`[SUBSYNC] timing for ${token.id}: subtitle ${t.original} ms, references ${t.references} ms (both from the start, in parallel), computation ${t.compute} ms; the player waited ${Date.now() - started} ms`);

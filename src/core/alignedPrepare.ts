@@ -38,7 +38,7 @@ export interface Prepared {
   served: Promise<Served>;
   startedAt: number;
   /** the decision was already logged (the player asks for the same subtitle several times; it is computed once) */
-  reported?: boolean;
+  reported?: Set<string>;
 }
 
 const prepared = new LRUCache<string, Prepared>({ max: 200, ttl: 6 * 60 * 60 * 1000 });

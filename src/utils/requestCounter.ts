@@ -1,4 +1,5 @@
 import type { AxiosStatic, InternalAxiosRequestConfig } from 'axios';
+import { currentOwner } from './requestContext';
 
 /**
  * How many requests this server makes to each host, per day (UTC): the sources have daily limits (Subs.ro: 300 a day),
@@ -10,12 +11,14 @@ const today = (): string => new Date().toISOString().slice(0, 10);
 
 const memory = new Map<string, number>();
 let pending = new Map<string, number>();
-let sink: ((batch: Array<{ day: string; host: string; n: number }>) => void) | null = null;
+let sink: ((batch: CountRow[]) => void) | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 const FLUSH_MS = 3000;
 
+export type CountRow = { day: string; host: string; n: number; owner: string };
+
 /** Called by the store: gets the counts not yet saved, every few seconds of activity */
-export function attachRequestCountSink(save: (batch: Array<{ day: string; host: string; n: number }>) => void): void {
+export function attachRequestCountSink(save: (batch: CountRow[]) => void): void {
   sink = save;
 }
 
@@ -23,14 +26,15 @@ export function noteRequest(url: string | undefined): void {
   let host: string;
   try { host = new URL(url || '').hostname.toLowerCase(); } catch { return; }
   if (!host) return;
-  const key = `${today()}|${host}`;
+  // counted for the profile whose request caused it ('' = the server itself: counted, but shown to no profile)
+  const key = `${today()}|${host}|${currentOwner() || ''}`;
   memory.set(key, (memory.get(key) || 0) + 1);
   if (!sink) return;
   pending.set(key, (pending.get(key) || 0) + 1);
   if (!timer) {
     timer = setTimeout(() => {
       timer = null;
-      const batch = [...pending.entries()].map(([k, n]) => { const [day, host] = k.split('|'); return { day, host, n }; });
+      const batch = [...pending.entries()].map(([k, n]) => { const [day, host, owner] = k.split('|'); return { day, host, n, owner }; });
       pending = new Map();
       try { sink?.(batch); } catch { /* counting must never break a request */ }
     }, FLUSH_MS);
@@ -53,6 +57,7 @@ export function installRequestCounter(axios: AxiosStatic): void {
 }
 
 /** What this instance counted (the page uses the stored counts of all instances when there is a database) */
-export function memoryRequestCounts(): Array<{ day: string; host: string; n: number }> {
-  return [...memory.entries()].map(([k, n]) => { const [day, host] = k.split('|'); return { day, host, n }; });
+export function memoryRequestCounts(viewer?: string): Array<{ day: string; host: string; n: number }> {
+  return [...memory.entries()].map(([k, n]) => { const [day, host, owner] = k.split('|'); return { day, host, n, owner }; })
+    .filter(r => r.owner !== '' && r.owner === viewer).map(({ owner: _o, ...r }) => r);
 }

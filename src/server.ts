@@ -31,6 +31,7 @@ import { parseSubtitleQuery, getAggregatedSubtitles, searchCacheKey } from './co
 import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { getDebug } from './utils/debugLog';
 import { getUsage, getProviderStats, getRuleImpact } from './storage/usageStore';
+import { ownerOf, runAsOwner } from './utils/requestContext';
 import { createAlignedHandler, createFallbackHandler } from './proxy/alignedProxy';
 import { databaseActivity } from './storage/dbTools';
 import { probeSite, probeAllowed, PROBE_HOSTS } from './proxy/siteProbe';
@@ -162,6 +163,13 @@ export function createServer(): express.Application {
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  // Everything under /<uuid>/... runs as that profile: what the server records on the way (log lines, live activity,
+  // failed downloads, request counts) is tagged with it, so the Debug page of one profile never shows another's
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    const first = req.path.split('/')[1] || '';
+    if (isUuid(first)) runAsOwner(first, next);
+    else next();
+  });
 
   const subtitlesLimiter = rateLimit({
     windowMs: ENV.RATE_LIMIT_WINDOW_MS,
@@ -556,7 +564,7 @@ export function createServer(): express.Application {
     const key = await requireStoredConfig(req, res);
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
-    res.json(downloadFailures());
+    res.json(downloadFailures(ownerOf(key)));
   });
 
   // What the automatic re-timing decided lately
@@ -597,7 +605,7 @@ export function createServer(): express.Application {
     const key = await requireStoredConfig(req, res);
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
-    const rows = (await readRequestCounts(2)) || memoryRequestCounts();
+    const rows = (await readRequestCounts(2, ownerOf(key))) || memoryRequestCounts(ownerOf(key));
     const days = new Map<string, Array<{ host: string; n: number }>>();
     for (const r of rows) {
       if (!days.has(r.day)) days.set(r.day, []);
@@ -679,7 +687,7 @@ export function createServer(): express.Application {
     const key = await requireStoredConfig(req, res);
     if (!key) return;
     res.setHeader('Cache-Control', 'no-store');
-    res.json(getLogLines(parseInt(String(req.query.after || '0'), 10) || 0, typeof req.query.instance === 'string' ? req.query.instance : undefined));
+    res.json(getLogLines(parseInt(String(req.query.after || '0'), 10) || 0, typeof req.query.instance === 'string' ? req.query.instance : undefined, ownerOf(key)));
   });
 
   // What the server is doing step by step (poll with ?after=<last seq received>&instance=<instance name received>)
@@ -690,8 +698,8 @@ export function createServer(): express.Application {
     const after = parseInt(String(req.query.after || '0'), 10) || 0;
     const instance = typeof req.query.instance === 'string' ? req.query.instance : undefined;
     // the saved steps (every instance) when there is a database; else the memory of this instance
-    const stored = await readStoredActivity(instance === 'db' ? after : 0);
-    res.json(stored || getActivity(after, instance));
+    const stored = await readStoredActivity(instance === 'db' ? after : 0, ownerOf(key));
+    res.json(stored || getActivity(after, instance, ownerOf(key)));
   });
 
   // Which OpenSubtitles subtitles exist for an exact file hash, in ALL languages

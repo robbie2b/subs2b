@@ -1,4 +1,5 @@
 import { INSTANCE_ID } from './logger';
+import { currentOwner, visibleTo } from './requestContext';
 
 /**
  * What the server is doing, step by step, for the Live activity panel of the Debug page: a search starts, a source
@@ -37,6 +38,8 @@ export interface ActivityEvent {
   film: string;
   text: string;
   meta?: ActivityMeta;
+  /** whose request it belongs to (never sent to the page) */
+  owner?: string;
 }
 
 const MAX_EVENTS = 600;
@@ -62,7 +65,8 @@ export function attachActivitySink(save: (event: ActivityEvent) => void): void {
 }
 
 export function activity(kind: ActivityKind, film: string, text: string, meta?: ActivityMeta): void {
-  const event: ActivityEvent = { seq: nextSeq++, at: new Date().toISOString(), kind, film, text, ...(meta ? { meta } : {}) };
+  const owner = currentOwner();
+  const event: ActivityEvent = { seq: nextSeq++, at: new Date().toISOString(), kind, film, text, ...(meta ? { meta } : {}), ...(owner ? { owner } : {}) };
   buffer.push(event);
   try { sink?.(event); } catch { /* the page must never break a search */ }
   if (buffer.length > MAX_EVENTS) buffer.shift();
@@ -72,9 +76,10 @@ export function activity(kind: ActivityKind, film: string, text: string, meta?: 
  * Events newer than `afterSeq` (0 = everything still kept). `afterSeq` only counts when `instance` is this process
  * (a number from another instance means nothing here: the whole buffer is sent and the page drops what it has seen).
  */
-export function getActivity(afterSeq = 0, instance?: string): { events: ActivityEvent[]; last: number; instance: string } {
+export function getActivity(afterSeq = 0, instance?: string, viewer?: string): { events: ActivityEvent[]; last: number; instance: string } {
   const after = instance === undefined || instance === INSTANCE_ID ? afterSeq : 0;
-  return { events: buffer.filter(e => e.seq > after), last: nextSeq - 1, instance: INSTANCE_ID };
+  // only the viewer's own steps (and the server's own), without the owner tag
+  return { events: buffer.filter(e => e.seq > after && visibleTo(e.owner, viewer)).map(({ owner: _o, ...e }) => e), last: nextSeq - 1, instance: INSTANCE_ID };
 }
 
 export function clearActivity(): void {

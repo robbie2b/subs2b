@@ -1,5 +1,5 @@
 import { configStorage } from './configStore';
-import { ensureTableSafely } from './dbTools';
+import { ensureTableSafely, addColumnSafely } from './dbTools';
 import { Logger } from '../utils/logger';
 import { keepAlive } from '../utils/background';
 import { attachDownloadFailureStore, restoreDownloadFailures, DownloadFailure } from '../utils/downloadJournal';
@@ -24,25 +24,28 @@ export async function startDownloadFailureStore(): Promise<void> {
           place TEXT NOT NULL,
           reason TEXT NOT NULL DEFAULT '',
           recovered BOOLEAN NOT NULL DEFAULT FALSE,
-          release TEXT
+          release TEXT,
+          owner TEXT
         );
         CREATE INDEX IF NOT EXISTS download_failures_at ON download_failures (at)`);
+      // made before the profiles were kept apart: the owner column is added and the old rows (every profile mixed) dropped
+      await addColumnSafely(pool, 'download_failures', 'owner', ['ALTER TABLE download_failures ADD COLUMN owner TEXT', 'DELETE FROM download_failures']);
     } catch (err) {
       Logger.error('Could not prepare the download failures table, trying again in 10 min', err);
       setTimeout(() => { void startDownloadFailureStore(); }, 10 * 60 * 1000).unref();
       return;
     }
     await pool.query(`DELETE FROM download_failures WHERE at < NOW() - INTERVAL '${KEEP_DAYS} days'`);
-    const res = await pool.query(`SELECT at, host, place, reason, recovered, release FROM download_failures ORDER BY at DESC LIMIT 300`);
+    const res = await pool.query(`SELECT at, host, place, reason, recovered, release, owner FROM download_failures ORDER BY at DESC LIMIT 300`);
     restoreDownloadFailures(res.rows.map((r: any): DownloadFailure => ({
       at: new Date(r.at).toISOString(), host: r.host, place: r.place, reason: r.reason, recovered: r.recovered,
-      ...(r.release ? { release: r.release } : {})
+      ...(r.release ? { release: r.release } : {}), ...(r.owner ? { owner: r.owner } : {})
     })));
     Logger.info(`[DOWNLOAD] ${res.rows.length} saved download failure(s) read`);
     attachDownloadFailureStore(f => {
       keepAlive(pool.query(
-        `INSERT INTO download_failures (at, host, place, reason, recovered, release) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [f.at, f.host, f.place, f.reason, f.recovered, f.release || null]
+        `INSERT INTO download_failures (at, host, place, reason, recovered, release, owner) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [f.at, f.host, f.place, f.reason, f.recovered, f.release || null, f.owner || null]
       ).catch(err => Logger.error('Could not save a download failure', err)));
     });
   } catch (err) {

@@ -45,6 +45,24 @@ export async function ensureTableSafely(pool: Pool, table: string, ddl: string):
   }
 }
 
+/**
+ * Adds a column (and whatever else `statements` do) to a table that already exists, once: when the column is missing.
+ * Same care as table creation: a lookup nothing can block, then one transaction that gives up after 5 s of waiting.
+ */
+export async function addColumnSafely(pool: Pool, table: string, column: string, statements: string[]): Promise<void> {
+  const has = await pool.query(
+    `SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`, [table, column]);
+  if (has.rows.length > 0) return;
+  const client = await pool.connect();
+  try {
+    await client.query(`BEGIN; SET LOCAL lock_timeout = '${LOCK_WAIT}'; ${statements.join('; ')}; COMMIT;`);
+    client.release();
+  } catch (err) {
+    client.release(err instanceof Error ? err : true);
+    throw err;
+  }
+}
+
 /** What the database is doing now: sessions of this database that are not idle, and who waits for whom */
 export async function databaseActivity(pool: Pool): Promise<unknown> {
   const sessions = await pool.query(`
