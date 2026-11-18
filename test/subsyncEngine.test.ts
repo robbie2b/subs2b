@@ -158,7 +158,7 @@ check('speechFlags follows the same rule', JSON.stringify(speechFlags([{ start: 
   const srt = '1\n00:00:10,000 --> 00:00:12,500\nHello\nworld\n\n2\n00:01:00,000 --> 00:01:02,000\nBye\n\n3\n00:00:03,000 --> 00:00:04,000\nEarly\n';
   const cues = readCues(srt);
   check('cues are read with their text', cues.length === 3 && cues[0].text === 'Hello\nworld' && cues[1].start === 60);
-  const out = applyAlignment(srt, { ratio: 1, offsets: [-4.6, -4.6, -4.6], segments: [], overlap: 1, globalScore: 1 });
+  const out = applyAlignment(srt, { ratio: 1, offsets: [-4.6, -4.6, -4.6], segments: [], overlap: 1, globalScore: 1, mcc: 1 });
   check('times move, text is kept, a cue that ends before 0 is dropped and the rest renumbered', out.includes('00:00:05,400 --> 00:00:07,900\nHello\nworld') && out.includes('2\n00:00:55,400 --> 00:00:57,400\nBye') && !out.includes('Early'), out);
   const stretched = retimeSubtitle('1\n00:01:00,000 --> 00:01:02,000\nx\n', (_i, s, e) => [s * 1.04271 + 1, e * 1.04271 + 1]);
   check('a stretch is applied to both ends of a cue', stretched.includes('00:01:03,563 --> 00:01:05,648'), stretched);
@@ -181,3 +181,12 @@ if (failed) {
   process.exit(1);
 }
 console.log('All engine checks passed');
+
+// MCC is recorded on every alignment (Debug only): a perfect copy scores high, a shifted-by-far copy is not used by any decision
+{
+  const mk = (n: number, shift: number) => Array.from({ length: n }, (_, i) => ({ start: i * 6 + shift, end: i * 6 + shift + 2.5, text: `Line number ${i} of the film` }));
+  const ref = mk(200, 0);
+  const same = alignToReference(mk(200, 0), ref);
+  if (!same || typeof same.mcc !== 'number' || same.mcc < 0.8) { console.error('FAIL mcc of an identical subtitle', same && same.mcc); process.exit(1); }
+  console.log('  ok  mcc is recorded and high for an identical subtitle', same.mcc);
+}

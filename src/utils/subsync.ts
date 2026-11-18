@@ -184,6 +184,12 @@ export interface AlignResult {
   overlap: number;
   /** correlation score of the single-shift search for the winning ratio */
   globalScore: number;
+  /**
+   * Matthews correlation between the aligned subtitle's speech and the reference's speech over the subtitle's span
+   * (-1..1). Only recorded (Debug): it counts the reference speech the subtitle misses and the silence it agrees on,
+   * which the overlap does not. No decision uses it.
+   */
+  mcc: number;
 }
 
 export interface AlignOptions {
@@ -401,12 +407,23 @@ export function alignToReference(candidate: TimedCue[], reference: TimedCue[], o
       speechSum += c.end - c.start;
     });
     const overlap = speechSum > 0 ? overlapSum / speechSum : 0;
+    let mcc = 0;
+    if (cues.length > 0) {
+      const spanStart = cues[0].start + offsets[0];
+      const spanEnd = cues[cues.length - 1].end + offsets[cues.length - 1];
+      const span = spanEnd - spanStart;
+      const refIn = P.at(spanEnd) - P.at(spanStart);
+      const tp = overlapSum, fp = Math.max(0, speechSum - overlapSum), fn = Math.max(0, refIn - overlapSum);
+      const tn = Math.max(0, span - tp - fp - fn);
+      const den = Math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn));
+      mcc = den > 0 ? (tp * tn - fp * fn) / den : 0;
+    }
 
     // compare ratios by the split objective, or by the correlation score when splitting is off
     const value = options.split === false ? sc.score : objective;
     if (value > bestObjective) {
       bestObjective = value;
-      best = { ratio: sc.ratio, offsets, segments: merged, overlap, globalScore: sc.score };
+      best = { ratio: sc.ratio, offsets, segments: merged, overlap, globalScore: sc.score, mcc: Math.round(mcc * 100) / 100 };
     }
   }
   return best;

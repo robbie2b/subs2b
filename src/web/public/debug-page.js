@@ -897,7 +897,7 @@ function renderSubsync() {
     box.innerHTML = slice.map(e => {
       const label = { shifted: `shifted ${e.offset > 0 ? '+' : ''}${e.offset} s${e.ratio && e.ratio !== 1 ? ` ×${e.ratio}` : ''}${e.segments > 1 ? ` · ${e.segments} parts` : ''}`, unchanged: 'unchanged', timeout: 'too slow: sent unchanged', error: 'error: sent unchanged' }[e.outcome] || e.outcome;
       const cls = e.outcome === 'shifted' ? 'service' : 'addon';
-      const refs = (e.references || []).map(r => `<span class="dbg-chip dbg-ref" title="${escapeHtmlDebug(r.label)}">${referenceLabel(r)}: ${r.offset > 0 ? '+' : ''}${r.offset} s${r.ratio && r.ratio !== 1 ? ` ×${r.ratio}` : ''}${r.segments > 1 ? ` · ${r.segments} parts` : ''} (${r.score})</span>`).join('');
+      const refs = (e.references || []).map(r => `<span class="dbg-chip dbg-ref" title="${escapeHtmlDebug(r.label)}">${referenceLabel(r)}: ${r.offset > 0 ? '+' : ''}${r.offset} s${r.ratio && r.ratio !== 1 ? ` ×${r.ratio}` : ''}${r.segments > 1 ? ` · ${r.segments} parts` : ''} (${r.score}${typeof r.mcc === 'number' ? ` · mcc ${r.mcc}` : ''})</span>`).join('');
       return `<div class="dbg-req open"><div class="dbg-req-head" style="cursor:default">`
         + `<div class="dbg-req-title"><div class="dbg-req-file">${escapeHtmlDebug(e.subtitle || '(subtitle)')}</div>`
         + `<div class="dbg-req-sub">for ${escapeHtmlDebug(e.filename)} · ${escapeHtmlDebug(e.reason)}</div>`

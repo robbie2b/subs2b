@@ -23,7 +23,7 @@ export interface Reference {
 
 export interface AlignmentResult {
   decision: Decision;
-  references: Array<{ label: string; provider?: string; offset: number; score: number; ratio: number; segments: number }>;
+  references: Array<{ label: string; provider?: string; offset: number; score: number; ratio: number; segments: number; mcc?: number }>;
   /** what else the Debug page should know (references left out...) */
   note?: string;
 }
@@ -146,7 +146,8 @@ export function alignAgainst(candidateText: string, allReferences: Reference[], 
       offset: Math.round(medianOf(a.result.offsets) * 10) / 10,
       score: Math.round(a.result.overlap * 100) / 100,
       ratio: Math.round(a.result.ratio * 1000) / 1000,
-      segments: a.result.segments.length
+      segments: a.result.segments.length,
+      ...(typeof a.result.mcc === 'number' ? { mcc: a.result.mcc } : {})
     }))
   });
 
