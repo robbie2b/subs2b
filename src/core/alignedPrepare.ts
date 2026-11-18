@@ -228,7 +228,7 @@ export function prepareAlignedPeek(token: AlignedToken): boolean {
   return prepared.has(preparedKey(token));
 }
 
-export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config: UserConfig, baseUrl: string): Prepared {
+export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config: UserConfig, baseUrl: string, configId?: string): Prepared {
   const key = preparedKey(token);
   const existing = prepared.get(key);
   if (existing) return existing;
@@ -272,7 +272,7 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
     return l;
   });
   const original = loading.then(l => l.text);
-  const references = getReferences({ query, config, baseUrl, filename: token.f })
+  const references = getReferences({ query, config, baseUrl, filename: token.f, configId })
     .then(refs => {
       timing.references = Date.now() - started;
       activity('sync', film, `${refs.length} timing reference${refs.length === 1 ? '' : 's'} ready after ${fmtMs(timing.references)}`, { step: 'references', state: 'done', ms: timing.references });
@@ -285,7 +285,7 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
     // subtitle is checked again (Avatar: the stored ones said 0%, fresh ones 88-92%)
     if (!fitsReferences(s.result) && !s.replacedBy && /fits well enough|disagree|single reference/.test(s.result.decision.reason) && referencesCameFromStore(refs)) {
       activity('sync', film, 'The stored timing references fit nothing: searching new ones (once)');
-      const fresh = await refreshReferences({ query, config, baseUrl, filename: token.f }).catch(() => null);
+      const fresh = await refreshReferences({ query, config, baseUrl, filename: token.f, configId }).catch(() => null);
       if (fresh) {
         activity('sync', film, `${fresh.length} new timing reference${fresh.length === 1 ? '' : 's'} found: checking the subtitle again`);
         s = await alignOrReplace(loaded.text, loaded.release, token.f, fresh, loaded.alternatives, hosts, baseUrl);

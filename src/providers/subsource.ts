@@ -117,7 +117,7 @@ export class SubsourceProvider extends BaseSubtitleProvider {
         id: `subsource-${sub.subtitleId}`,
         provider: this.id,
         providerName: 'Subsource',
-        url: `/sub/proxy?url=${encodeURIComponent(downloadUrl)}&apiKey=${encodeURIComponent(apiKey)}&filename=${encodeURIComponent(releaseName + '.srt')}`,
+        url: `/sub/proxy?url=${encodeURIComponent(downloadUrl)}&p=subsource&filename=${encodeURIComponent(releaseName + '.srt')}`,
         lang: sub.language || 'unknown',
         release: releaseName,
         format: 'srt',

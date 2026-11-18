@@ -57,6 +57,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.3 — cheile API nu mai sunt în linkurile din listă (2026-11-18, cerut de utilizator).** Linkurile OpenSubtitles (`/proxy/download/os-rest/<id>?kt=<hash 8>&c=<profil>`) și Subsource
+  (`/sub/proxy?url=…&p=subsource&c=<profil>`) nu mai conțin cheia: poartă doar un hash scurt al ei (`kt`, ca să meargă memoria „cota atinsă", `keyTagOf`) și UUID-ul profilului (`c`, pus de
+  `linkOf` din aggregator, ca la Subs.ro); serverul citește cheia din configurație (`providerKeyOf` în `subtitleProxy.ts`) și o trimite doar la `api.subsource.net` / OpenSubtitles. Referințele
+  Subsync poartă `c` prin `ReferenceContext.configId` (`prepareAligned(…, configId)`). Linkurile vechi cu `apiKey=` în ele merg în continuare (compatibilitate). FĂRĂ UUID (configurație inline
+  în adresă) linkul nu poate purta `c`: OpenSubtitles merge doar pe mirror-uri, Subsource nu merge. Test: `test/apiKeyLinks.test.ts`.
 - **v1.6.2 — SSRF și `?nocache` (2026-11-18, cerut de utilizator; înregistrarea rămâne deschisă; OpenSubtitles v3 îl oprește utilizatorul din Services).**
   `utils/publicUrl.ts`: `assertPublicUrl` refuză adresele care duc la mașina însăși sau la rețele interne (loopback, 10.x, 172.16–31.x, 192.168.x, 169.254.x = metadate cloud, IPv6 local,
   `.local/.internal/localhost`, scheme ≠ http/https) după ce rezolvă numele (cache 5 min); pus la: validarea manifestului (`/api/manifest/validate`, 2 MB max, fără ecou de IP-uri în eroare),

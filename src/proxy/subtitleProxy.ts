@@ -13,7 +13,7 @@ import { Logger } from '../utils/logger';
 import { isWebVtt, vttToSrt, isMicroDvd, microDvdToSrt } from '../utils/subtitleFormat';
 import { decodeTicket, regieLiveApiKey, regieLiveHeaders, REGIELIVE_DOWNLOAD_HOST } from '../providers/regielive';
 import { parseRelease, rankSubtitles } from '../utils/scorer';
-import { configStorage } from '../storage/configStore';
+import { configStorage, isUuid } from '../storage/configStore';
 import { UserConfig } from '../types/config';
 import { USER_AGENT, APP_VERSION } from '../config/version';
 import { isBlocked, noteRefusal, recoveryFromMessage, statusOf } from '../utils/sourceHealth';
@@ -398,7 +398,11 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
       'User-Agent': siteOf(new URL(targetUrl).hostname.toLowerCase(), WEB_PAGE_SITES) ? BROWSER_UA : BROWSER_USER_AGENT,
       'Accept': '*/*'
     };
-    const apiKey = (req.query.apiKey as string) || (req.query.key as string);
+    // Subsource's key is read from the profile's configuration (the link names the profile, not the key) and is sent only
+    // to Subsource; a link made before 1.6.3 may still carry a key of its own
+    const subsourceKey = req.query.p === 'subsource' && new URL(targetUrl).hostname.toLowerCase() === 'api.subsource.net'
+      ? await providerKeyOf(req.query.c, 'subsource') : null;
+    const apiKey = subsourceKey || (req.query.apiKey as string) || (req.query.key as string);
     if (apiKey) {
       requestHeaders['X-API-Key'] = apiKey;
       requestHeaders['Api-Key'] = apiKey;
@@ -470,13 +474,29 @@ export const OPENSUBTITLES_MIRRORS = ['dl.opensubtitles.org', 'subs5.strem.io'];
  * The OpenSubtitles API as a source refusing this server: one per API key, since the daily download quota belongs to
  * the key (one person's quota reached must not stop another configuration's key). Only a short hash of the key is kept.
  */
+/** A short hash that names an API key without being it (what a link carries instead of the key) */
+export const keyTagOf = (apiKey: string): string => createHash('sha256').update(apiKey).digest('hex').slice(0, 8);
+
+/**
+ * The API key of a provider, read on the server from the configuration the link names (`c=<profile>`): a download link
+ * never carries a key (it travels to the player, the edge cache and the logs). Null when the profile or the key is unknown.
+ */
+export async function providerKeyOf(profile: unknown, providerId: string): Promise<string | null> {
+  if (typeof profile !== 'string' || !isUuid(profile)) return null;
+  const config = await configStorage.getConfigByUuidAsync(profile);
+  const key = config?.providers?.[providerId]?.apiKey;
+  return typeof key === 'string' && key.trim() ? key.trim() : null;
+}
+
 export function openSubtitlesApiSource(apiKey: string | null | undefined): string {
-  return apiKey ? `api.opensubtitles.com#${createHash('sha256').update(apiKey).digest('hex').slice(0, 8)}` : 'api.opensubtitles.com';
+  return apiKey ? `api.opensubtitles.com#${keyTagOf(apiKey)}` : 'api.opensubtitles.com';
 }
 
 /** Can this server download from OpenSubtitles right now with this key (at least one way is not refusing it)? */
-export const openSubtitlesDownloadable = (apiKey?: string | null): boolean =>
-  (Boolean(apiKey) && !isBlocked(openSubtitlesApiSource(apiKey))) || OPENSUBTITLES_MIRRORS.some(s => !isBlocked(s));
+export const openSubtitlesDownloadable = (apiKey?: string | null, keyTag?: string | null): boolean =>
+  (Boolean(apiKey) && !isBlocked(openSubtitlesApiSource(apiKey))) ||
+  (Boolean(keyTag) && !isBlocked(`api.opensubtitles.com#${keyTag}`)) ||
+  OPENSUBTITLES_MIRRORS.some(s => !isBlocked(s));
 
 /**
  * Can this server download the subtitle right now? (Subsync needs the file itself.) False only when every way to it
@@ -485,7 +505,9 @@ export const openSubtitlesDownloadable = (apiKey?: string | null): boolean =>
 export function serverCanDownload(item: { url: string }): boolean {
   const url = item.url;
   if (url.startsWith('/proxy/download/os-rest/')) {
-    return openSubtitlesDownloadable(new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('apiKey'));
+    const q = new URLSearchParams(url.slice(url.indexOf('?') + 1));
+    // (a link made before 1.6.3 still carries the key itself; the new ones carry its short hash)
+    return openSubtitlesDownloadable(q.get('apiKey'), q.get('kt'));
   }
   try {
     if (url.startsWith('/sub/proxy?')) {
@@ -523,7 +545,7 @@ function failureReason(err: unknown): string {
  */
 export async function handleOpenSubtitlesRestDownload(req: Request, res: Response): Promise<void> {
   const { fileId } = req.params;
-  const apiKey = req.query.apiKey as string;
+  const apiKey = (await providerKeyOf(req.query.c, 'opensubtitles')) || (req.query.apiKey as string) || '';
   const legacyId = (req.query.legacyId as string) || '';
   const filename = (req.query.filename as string) || `subtitle-${fileId}.srt`;
   const preferredFormat: 'srt' | 'vtt' = filename.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt';

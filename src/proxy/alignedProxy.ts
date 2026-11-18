@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { configStorage } from '../storage/configStore';
+import { configStorage, isUuid } from '../storage/configStore';
 import { Logger } from '../utils/logger';
 import { applyAlignment } from '../utils/subsync';
 import { parseSubtitleQuery } from '../core/aggregator';
@@ -76,7 +76,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
     // the work may already be under way: the list starts the likely choice while the player opens the video
     const query = parseSubtitleQuery(token.t || 'movie', token.id, { filename: token.f });
     const earlyPrepared = prepareAlignedPeek(token);
-    const prep = prepareAligned(token, query, config, baseUrl);
+    const prep = prepareAligned(token, query, config, baseUrl, isUuid(configKey) ? configKey : undefined);
     const film = filmLabel(token.id, token.f);
     const release = (token.r || 'subtitle').slice(0, 70);
     activity('send', film, `Player asked for "${release}" (${earlyPrepared ? `prepared ${fmtMs(Date.now() - prep.startedAt)} ago` : 'preparing it now'})`, { step: 'asked', state: 'done' });

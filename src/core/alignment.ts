@@ -210,13 +210,16 @@ export interface ReferenceContext {
   /** public address of this server, to fetch the subtitles that providers link through it */
   baseUrl: string;
   filename: string;
+  /** the profile asking: the server reads its API keys from the configuration for the downloads that need one */
+  configId?: string;
 }
 
 function absoluteUrl(item: RawSubtitleItem, ctx: ReferenceContext): string {
   if (item.url.startsWith('/')) {
     // an OpenSubtitles reference is taken from the download mirrors first: the API quota is kept for the user's picks
-    const extra = item.url.startsWith('/sub/proxy?') ? archivePickParams(ctx.query)
-      : item.url.startsWith('/proxy/download/os-rest/') ? '&mirrorFirst=1' : '';
+    const profile = ctx.configId ? `&c=${ctx.configId}` : '';
+    const extra = item.url.startsWith('/sub/proxy?') ? archivePickParams(ctx.query) + (item.url.includes('&p=subsource') ? profile : '')
+      : item.url.startsWith('/proxy/download/os-rest/') ? '&mirrorFirst=1' + profile : '';
     return `${ctx.baseUrl}${item.url}${extra}`;
   }
   return item.url;

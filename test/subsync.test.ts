@@ -707,7 +707,7 @@ async function main() {
     const before = await getAggregatedSubtitles(q3, stored, baseUrl, uuid);
     const first = before.subtitles[0];
     const fb = first.url.includes('/sub/fallback/') ? decodeFallbackToken(first.url.split('/sub/fallback/')[1].replace('.srt', '')) : null;
-    check('a hash match carries its copies as backups (served through the fallback link)', Boolean(fb && fb.u === baseUrl + OS_URL && fb.b.includes(PRO_URL)), before.subtitles.map(x => x.url.slice(0, 80)));
+    check('a hash match carries its copies as backups (served through the fallback link)', Boolean(fb && fb.u.startsWith(baseUrl + OS_URL) && fb.b.includes(PRO_URL)), before.subtitles.map(x => x.url.slice(0, 80)));
 
     // quota known: the working copy takes the place of the hash match (still a hash match), the one with no copy goes last
     noteRefusal(openSubtitlesApiSource('k'), 406, 'quota');
@@ -718,7 +718,7 @@ async function main() {
     const urls = after.subtitles.map(x => x.url);
     const firstAfter = urls[0].includes('/sub/fallback/') ? decodeFallbackToken(urls[0].split('/sub/fallback/')[1].replace('.srt', ''))!.u : urls[0];
     check('quota reached: the copy that works is served first', firstAfter === PRO_URL, urls.map(u => u.slice(0, 80)));
-    check('a subtitle nobody can download goes last, even with Subsync off', urls[urls.length - 1] === baseUrl + '/proxy/download/os-rest/999?apiKey=k', urls.map(u => u.slice(0, 80)));
+    check('a subtitle nobody can download goes last, even with Subsync off', urls[urls.length - 1].startsWith(baseUrl + '/proxy/download/os-rest/999?apiKey=k'), urls.map(u => u.slice(0, 80)));
 
     // remembered across a restart through the store
     const savedBlocks: string[] = [];

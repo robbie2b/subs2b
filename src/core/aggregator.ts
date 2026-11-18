@@ -218,7 +218,7 @@ export async function getAggregatedSubtitles(
   // Shared and remembered by `getReferences`, which reads the stored ones first.
   if (config.subsync !== false && configId && query.extra?.filename && !query.allLanguages) {
     const refQuery = parseSubtitleQuery(query.type, query.id, { filename: query.extra.filename });
-    keepAlive(getReferences({ query: refQuery, config, baseUrl, filename: query.extra.filename }).catch(() => []));
+    keepAlive(getReferences({ query: refQuery, config, baseUrl, filename: query.extra.filename, configId }).catch(() => []));
   }
   // The file hash changes which OpenSubtitles results are flagged as exact matches, so it is part of the key
   const cacheKey = searchCacheKey(query, config);
@@ -470,6 +470,8 @@ export async function getAggregatedSubtitles(
       if (finalUrl.startsWith('/sub/proxy?')) finalUrl += archivePickParams;
       // a Subs.ro pack opened on demand needs this configuration's key, read on the server (never put in a link)
       if (finalUrl.startsWith('/proxy/download/subsro/') && finalUrl.includes('/pick.srt?') && configId) finalUrl += `&c=${configId}`;
+      // the same for OpenSubtitles and Subsource: the link names the profile and the server reads the API key from its configuration
+      if (configId && (finalUrl.startsWith('/proxy/download/os-rest/') || (finalUrl.startsWith('/sub/proxy?') && finalUrl.includes('&p=subsource')))) finalUrl += `&c=${configId}`;
       finalUrl = `${baseUrl}${finalUrl}`;
     } else if (
       config.convertVttToSrt !== false &&
@@ -555,11 +557,11 @@ export async function getAggregatedSubtitles(
     // still opening (several seconds), so the subtitle is ready, or nearly, when the player asks for it
     const prepQuery = parseSubtitleQuery(query.type, query.id, { filename });
     for (const [lang, token] of [...firstOfLanguage.entries()].slice(0, MAX_PREPARED_LANGUAGES)) {
-      keepAlive(prepareAligned(token, prepQuery, config, baseUrl).served);
+      keepAlive(prepareAligned(token, prepQuery, config, baseUrl, configId).served);
       // the next ones of the language follow a moment later, so the first one has the processor to itself first
       for (const extra of nextOfLanguage.get(lang) || []) {
         keepAlive(new Promise<void>(resolve => setTimeout(resolve, EXTRA_PREPARE_DELAY_MS))
-          .then(() => prepareAligned(extra, prepQuery, config, baseUrl).served)
+          .then(() => prepareAligned(extra, prepQuery, config, baseUrl, configId).served)
           .catch(() => undefined));
       }
     }

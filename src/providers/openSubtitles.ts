@@ -1,3 +1,4 @@
+import { keyTagOf } from '../proxy/subtitleProxy';
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
 import { Logger } from '../utils/logger';
@@ -126,7 +127,7 @@ export class OpenSubtitlesProvider extends BaseSubtitleProvider {
       const legacyId = attr.legacy_subtitle_id || '';
       const fileName = file.file_name || attr.release || `${query.id}.srt`;
 
-      const downloadProxyUrl = `/proxy/download/os-rest/${fileId}?filename=${encodeURIComponent(fileName)}&apiKey=${encodeURIComponent(apiKey)}${legacyId ? `&legacyId=${encodeURIComponent(String(legacyId))}` : ''}`;
+      const downloadProxyUrl = `/proxy/download/os-rest/${fileId}?filename=${encodeURIComponent(fileName)}&kt=${keyTagOf(apiKey)}${legacyId ? `&legacyId=${encodeURIComponent(String(legacyId))}` : ''}`;
 
       items.push({
         id: `os-${item.id || fileId}`,
