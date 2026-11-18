@@ -20,6 +20,8 @@ import { BROWSER_UA } from '../utils/html';
 
 /** A subtitle is a small text file: anything bigger inside an archive is ignored (protects the server's memory) */
 const MAX_SUBTITLE_BYTES = 10 * 1024 * 1024;
+/** What a gzip may expand to (a 400 KB bomb expands to 400 MB): far above any real subtitle */
+const MAX_DECOMPRESSED_BYTES = 30 * 1024 * 1024;
 
 const BROWSER_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) subs2b/${APP_VERSION}`;
 
@@ -185,7 +187,7 @@ export function decompressBuffer(
     // 1. Detect GZIP (0x1F, 0x8B)
     if (buf[0] === 0x1f && buf[1] === 0x8b) {
       try {
-        buf = zlib.gunzipSync(buf);
+        buf = zlib.gunzipSync(buf, { maxOutputLength: MAX_DECOMPRESSED_BYTES });
         continue;
       } catch (err) {
         Logger.warn('Failed to gunzip buffer, continuing with raw buffer', { error: String(err) });
@@ -413,6 +415,7 @@ export async function handleUnifiedSubtitleProxy(req: Request, res: Response): P
     const upstreamRes = await axios.get<ArrayBuffer>(targetUrl, {
       responseType: 'arraybuffer',
       timeout: 15000,
+      maxContentLength: MAX_SUBTITLE_BYTES,
       headers: requestHeaders
     });
 

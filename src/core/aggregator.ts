@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { StremioSubtitle, StremioSubtitlesResponse } from '../types/stremio';
 import { SubtitleQuery, RawSubtitleItem, ProviderReport } from '../types/provider';
 import { UserConfig } from '../types/config';
@@ -189,10 +190,15 @@ export function searchCacheKey(query: SubtitleQuery, config: UserConfig): string
   const addonKey = (config.customAddons || [])
     .filter(a => a && a.enabled !== false && a.manifestUrl)
     .map(a => `${a.id}@${a.manifestUrl}`).sort().join(',');
+  // The items of the OpenSubtitles and Subsource carry the owner's API key in their download links: two profiles with the
+  // same services but other keys must not share a saved list (the links would spend the other's quota). Only a short
+  // hash of the keys is part of the key.
+  const keys = enabledProviderIds.map(id => config.providers[id]?.apiKey || '').filter(Boolean).sort().join('|');
+  const keyTag = keys ? `keys:${crypto.createHash('sha256').update(keys).digest('hex').slice(0, 10)}` : '';
   return globalSubtitleCache.generateKey(
     query.extra?.videoHash ? `${query.id}|h${query.extra.videoHash}` : query.id,
     config.languages,
-    [...enabledProviderIds, ...(addonKey ? [`addons:${addonKey}`] : [])],
+    [...enabledProviderIds, ...(addonKey ? [`addons:${addonKey}`] : []), ...(keyTag ? [keyTag] : [])],
     query.season,
     query.episode
   );

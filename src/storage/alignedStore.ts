@@ -1,4 +1,5 @@
 import zlib from 'zlib';
+import crypto from 'crypto';
 import { configStorage } from './configStore';
 import { ensureTableSafely } from './dbTools';
 import { Logger } from '../utils/logger';
@@ -28,7 +29,9 @@ const STALE_DAYS = 30;
 export const ALIGN_ENGINE_VERSION = 1;
 
 /** The key a result is kept under: the link's key plus the version of the logic that decided it */
-export const versionedKey = (key: string, version: number = ALIGN_ENGINE_VERSION): string => `e${version}|${key}`;
+export const versionedKey = (key: string, version: number = ALIGN_ENGINE_VERSION): string =>
+  // (hashed: the link in the key may carry an API key, which must not sit in the table as plain text)
+  `e${version}|${crypto.createHash('sha256').update(key).digest('hex').slice(0, 40)}`;
 const TOUCH_EVERY_MS = 60 * 60 * 1000;
 /** the lookup waits at most this long: a slow database must not slow the subtitle down */
 export const READ_CAP_MS = 150;

@@ -160,9 +160,56 @@ export function createServer(): express.Application {
   app.set('trust proxy', 1);
 
   app.disable("x-powered-by");
+
+  // A promise nobody waits for must not take the process down (Node ends the process on an unhandled rejection):
+  // it is logged, and the work that failed was in the background anyway
+  const guard = globalThis as unknown as { __subs2bRejections?: boolean };
+  if (!guard.__subs2bRejections) {
+    guard.__subs2bRejections = true;
+    process.on('unhandledRejection', reason => { Logger.error('Unhandled promise rejection (ignored)', reason); });
+  }
+
+  // An error inside an async route must never leave the player waiting or take the process down (Express 4 does not
+  // catch a rejected promise by itself): every handler given to app.get / app.post is wrapped, and a failure answers
+  // 503 for "the database is not reachable" and 500 for the rest, never cached.
+  const safeHandler = (fn: (req: Request, res: Response, next: NextFunction) => unknown) => (req: Request, res: Response, next: NextFunction): void => {
+    let result: unknown;
+    try {
+      result = fn(req, res, next);
+    } catch (err) {
+      failRoute(req, res, err);
+      return;
+    }
+    if (result && typeof (result as Promise<unknown>).catch === 'function') {
+      (result as Promise<unknown>).catch(err => failRoute(req, res, err));
+    }
+  };
+  const failRoute = (req: Request, res: Response, err: unknown): void => {
+    const message = err instanceof Error ? err.message : String(err);
+    Logger.error(`Route failed: ${req.method} ${req.path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<profile>')}`, err);
+    if (res.headersSent) { try { res.end(); } catch { /* the connection is gone */ } return; }
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(/not reachable|database/i.test(message) ? 503 : 500).json({ error: 'the request could not be completed, try again' });
+  };
+  for (const method of ['get', 'post'] as const) {
+    const original = (app[method] as (...a: unknown[]) => unknown).bind(app);
+    (app as unknown as Record<string, unknown>)[method] = (path: unknown, ...handlers: unknown[]) =>
+      handlers.length === 0
+        ? original(path)
+        : original(path, ...handlers.map(h => (typeof h === 'function' && h.length < 4 ? safeHandler(h as never) : h)));
+  }
+
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    const q = req.query as Record<string, unknown>;
+    for (const key of Object.keys(q)) {
+      const v = q[key];
+      if (typeof v !== 'string') q[key] = Array.isArray(v) ? String(v[0] ?? '') : '';
+    }
+    next();
+  });
   // Everything under /<uuid>/... runs as that profile: what the server records on the way (log lines, live activity,
   // failed downloads, request counts) is tagged with it, so the Debug page of one profile never shows another's
   app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -273,7 +320,7 @@ export function createServer(): express.Application {
   });
 
   app.post('/api/manifest/validate', async (req: Request, res: Response): Promise<void> => {
-    let inputUrl = ((req.body?.url as string) || '').trim();
+    let inputUrl = (typeof req.body?.url === 'string' ? req.body.url : '').trim();
     if (!inputUrl) {
       res.status(400).json({ valid: false, error: 'The manifest URL cannot be empty.' });
       return;
@@ -359,7 +406,7 @@ export function createServer(): express.Application {
 
   app.post('/api/validate-key/:service', async (req: Request, res: Response): Promise<void> => {
     const service = (req.params.service || '').toLowerCase();
-    const apiKey = (req.body?.apiKey as string || '').trim().replace(/^["']|["']$/g, '');
+    const apiKey = (typeof req.body?.apiKey === 'string' ? req.body.apiKey : '').trim().replace(/^["']|["']$/g, '');
 
     if (!apiKey) {
       res.json({ valid: false, error: 'No key provided.' });
@@ -461,6 +508,13 @@ export function createServer(): express.Application {
   const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
     try {
       const configParam = req.params.config;
+      // An address with a UUID that was never saved is not a profile: no search, nothing recorded (anyone could otherwise
+      // make the server search and write to the database with made-up UUIDs)
+      if (isUuid(configParam) && !(await configStorage.getConfigByUuidAsync(configParam))) {
+        res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
+        res.json({ subtitles: [], cacheMaxAge: 60 });
+        return;
+      }
       let userConfig = await decodeUserConfigAsync(configParam);
       const { type, id, extra } = req.params;
 

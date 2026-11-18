@@ -382,7 +382,9 @@ export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
         activity('warn', filmLabel(ctx.query.id, ctx.filename), 'No timing references: a search a moment ago found none (not searching again for 15 min)', { step: 'references', state: 'warn' });
         return [] as Reference[];
       }
-      return buildReferences(ctx).then(refs => { if (refs.length) storeReferences(key, refs); else storeNoReferences(key); return refs; });
+      // ("nothing found" is shared with every profile: only a configuration that really searched may say it)
+      const searched = Object.entries(ctx.config.providers || {}).some(([id, p]) => p?.enabled !== false && id !== 'regielive' && id !== 'subsrodirect');
+      return buildReferences(ctx).then(refs => { if (refs.length) storeReferences(key, refs); else if (searched) storeNoReferences(key); return refs; });
     }).then(refs => {
       // "nothing found" is remembered for a shorter time, so a later try can succeed
       if (refs.length === 0) referenceCache.set(key, pending!, { ttl: 15 * 60 * 1000 });

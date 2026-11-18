@@ -81,9 +81,19 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
     const release = (token.r || 'subtitle').slice(0, 70);
     activity('send', film, `Player asked for "${release}" (${earlyPrepared ? `prepared ${fmtMs(Date.now() - prep.startedAt)} ago` : 'preparing it now'})`, { step: 'asked', state: 'done' });
 
+    // The limit counts from the moment the player asked: the download of the original is part of the wait (it used to
+    // be added to it, so a slow source could take the answer past what the player waits for)
+    const remaining = (): number => Math.max(0, started + maxWaitMs() - Date.now());
     let text: string;
     try {
-      text = await prep.original;
+      const first = await Promise.race([prep.original, sleep(remaining()).then(() => 'timeout' as const)]);
+      if (first === 'timeout') {
+        Logger.info(`[SUBSYNC] the subtitle was not downloaded within ${maxWaitMs()} ms`, { id: token.id });
+        activity('warn', film, `"${release}" could not be downloaded in time: the player is sent to the original link`, { step: 'delivered', state: 'warn', ms: Date.now() - started });
+        originalFailed(new Error(`not downloaded within ${maxWaitMs()} ms`));
+        return;
+      }
+      text = first;
     } catch (err: unknown) {
       originalFailed(err);
       return;
@@ -125,7 +135,7 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
     };
 
     try {
-      const raced = await Promise.race([prep.served, sleep(maxWaitMs()).then(() => 'timeout' as const)]);
+      const raced = await Promise.race([prep.served, sleep(remaining()).then(() => 'timeout' as const)]);
       if (raced === 'timeout') {
         // safety only: the work goes on, the next request finds the answer ready
         Logger.info(`[SUBSYNC] no answer within ${maxWaitMs()} ms, sending the subtitle unchanged`, { id: token.id });

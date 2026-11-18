@@ -38,12 +38,12 @@ async function main(): Promise<void> {
   await sleep(500);
   const renewed = await loadAligned('old|logic', 2000);
   check('the same link decided again by the current logic is kept and found', !!renewed && (renewed.served.result as { n: number }).n === 8, renewed && renewed.served);
-  await pool.query("DELETE FROM aligned_cache WHERE cache_key LIKE 'e%|old|logic'");
+  await pool.query('DELETE FROM aligned_cache WHERE cache_key = $1', [versionedKey('old|logic')]);
 
   // fill past a small budget; film|1 is used again so it must survive, the unused oldest must go
   for (let i = 2; i <= 6; i++) { storeAligned(`film|${i}`, big(i)); await sleep(120); }
   await sleep(300);
-  await pool.query(`UPDATE aligned_cache SET last_used = NOW() - (INTERVAL '1 day' * (10 - substring(cache_key from 'film[|]([0-9]+)$')::int))`);
+  for (let i = 2; i <= 6; i++) await pool.query(`UPDATE aligned_cache SET last_used = NOW() - (INTERVAL '1 day' * $2::int) WHERE cache_key = $1`, [versionedKey(`film|${i}`), 10 - i]);
   await pool.query(`UPDATE aligned_cache SET last_used = NOW() WHERE cache_key = '${versionedKey('film|1')}'`);
   const before = Number((await pool.query('SELECT COUNT(*)::int n, SUM(bytes)::int b FROM aligned_cache')).rows[0].n);
   const sizes = (await pool.query('SELECT SUM(bytes)::int b FROM aligned_cache')).rows[0].b as number;

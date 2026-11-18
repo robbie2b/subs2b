@@ -50,7 +50,8 @@ export async function loadOriginal(url: string, allowedHosts: string[]): Promise
   const origin = new URL(url).origin;
   const upstream = await axios.get<ArrayBuffer>(url, {
     responseType: 'arraybuffer',
-    timeout: 15000,
+    // (on Vercel the answer has about 12 s in all: a link that has not answered in 6 s gives way to the next one)
+    timeout: process.env.VERCEL ? 6000 : 15000,
     maxContentLength: 10 * 1024 * 1024,
     maxRedirects: 3,
     beforeRedirect: (options: { href?: string }) => {
