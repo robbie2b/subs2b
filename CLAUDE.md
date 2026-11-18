@@ -57,6 +57,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.7 — VALUL 2, pasul 4: limba se vede în Debug (2026-11-18).** Fiecare intrare din `top` are `lang` (`ScoreDetail.lang`), iar înregistrarea unei liste are `byLanguage: { found, shown }` (câte subtitrări
+  în fiecare limbă au fost găsite după filtrul de limbă și câte s-au trimis) în `usage_events.details` și în `recent.json`: acum se poate măsura dacă româna lipsește sau doar pierde la scor.
+  **NEFĂCUT, cu motiv (decis cu utilizatorul în 2026-11-18 să nu se facă fără o decizie nouă):** (a) eticheta ✓ pentru subtitrările deja decise din `aligned_cache`: ar cere o interogare în plus pe drumul listei
+  (+~22 ms) și ar face `id`-ul instabil (se schimbă după prima redare; Nuvio afișează `id` și poate ține minte alegerea după el); câștig doar cosmetic; (b) egalitatea din nivelul de sus după potrivire în loc de Priority:
+  e regula utilizatorului din 1.5.0 (Priority bate potrivirea), nu se schimbă fără cererea lui.
 - **v1.6.6 — VALUL 2, pasul 3: alternativele Subsync vin și din ce a lăsat limita pe dinafară (2026-11-18).** În `aggregator.ts`, subtitrările tăiate de `maxSubtitles` (`leftOut`) rămân candidate pentru
   alternativele din token (până la `MAX_ALTERNATIVES` = 3, aceeași limbă, după cele din listă): înainte, cu lista tăiată la 3, prima subtitrare avea cel mult 2 alternative (uneori 0–1 când lista era
   amestecată). Alternativa se folosește când subtitrarea nu se potrivește cu referințele, deci mai multe alternative = mai des o subtitrare sincronizată în loc de originalul nepotrivit. Test în `test/languageList.test.ts`.

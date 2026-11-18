@@ -148,6 +148,13 @@ export function groupByLanguage<T extends { lang: string }>(items: T[], whitelis
   return items.map((item, i) => ({ item, i, r: rank(item.lang) })).sort((a, b) => a.r - b.r || a.i - b.i).map(x => x.item);
 }
 
+/** How many subtitles there are in each language (Debug: is the language the user wants first there at all?) */
+function countByLanguage(items: Array<{ lang: string }>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const i of items) out[i.lang] = (out[i.lang] || 0) + 1;
+  return out;
+}
+
 /** At most `limit` of each language, in the order given (nothing is moved) */
 export function capPerLanguage<T extends { lang: string }>(items: T[], limit: number): T[] {
   if (limit <= 0) return items;
@@ -490,6 +497,7 @@ export async function getAggregatedSubtitles(
       afterDedup: afterDedupCount,
       afterScoring: afterScoringCount,
       shown: orderedItems.length,
+      byLanguage: { found: countByLanguage(whitelistedItems), shown: countByLanguage(orderedItems) },
       usedFilename: debugUsedFilename,
       scoringFallback: debugFallback,
       subsync: { triggered: subsyncVerdict.needed, reason: subsyncVerdict.reason },

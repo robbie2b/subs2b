@@ -8,6 +8,7 @@ import { groupByLanguage, capPerLanguage, getAggregatedSubtitles, parseSubtitleQ
 import { DEFAULT_USER_CONFIG } from '../src/config/userConfig';
 import { UserConfig } from '../src/types/config';
 import { decodeAlignedToken } from '../src/core/alignedToken';
+import { getDebug } from '../src/utils/debugLog';
 
 let failed = 0;
 function check(label: string, ok: boolean, info?: unknown): void {
@@ -50,6 +51,12 @@ const it = (lang: string, n: number) => ({ lang, n });
     check('the Romanian ones come first (although the English ones score higher)', langs.slice(0, 3).every(l => l === 'ron'), langs);
     const noLimit = await ask('tt0000072', config({ maxSubtitles: 0 }));
     check('without a limit all ten are there, Romanian first', noLimit.subtitles.length === 10 && noLimit.subtitles.slice(0, 5).every(s => s.lang === 'ron'), noLimit.subtitles.map(s => s.lang));
+    // Debug knows the language of every subtitle and how many there are of each
+    const dbgId = 'a0000000-0000-4000-8000-0000000000d7';
+    await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000076', { filename: FILE }), config(), 'http://x', dbgId);
+    const rec = getDebug(dbgId)[0];
+    check('Debug counts the subtitles per language (found and shown)', Boolean(rec?.byLanguage) && rec.byLanguage!.found.ron === 5 && rec.byLanguage!.found.eng === 5 && rec.byLanguage!.shown.ron === 3 && rec.byLanguage!.shown.eng === 3, rec?.byLanguage);
+    check('and every ranked entry has its language', Boolean(rec) && rec.top.length > 0 && rec.top.every(t => t.lang === 'ron' || t.lang === 'eng'), rec?.top.map(t => t.lang));
     const eFirst = await ask('tt0000073', config({ languages: ['eng', 'ron'] }));
     check('with English first, English comes first', eFirst.subtitles.slice(0, 3).every(s => s.lang === 'eng'), eFirst.subtitles.map(s => s.lang));
     const oneLang = await ask('tt0000074', config({ languages: ['ron'] }));

@@ -9,6 +9,7 @@ export interface DebugTopEntry {
   score: number;
   rejected: boolean;
   provider: string;
+  lang?: string;
   release: string;
   reasons: string[];
 }
@@ -26,6 +27,8 @@ export interface DebugEntry {
   afterScoring: number;
   /** how many subtitles were actually sent to the player (after the Results limit) */
   shown?: number;
+  /** how many subtitles each language has (found, and sent to the player) */
+  byLanguage?: { found: Record<string, number>; shown: Record<string, number> };
   usedFilename: boolean;
   scoringFallback: boolean;
   top: DebugTopEntry[];

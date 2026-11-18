@@ -76,6 +76,8 @@ export interface ScoringContext {
 export interface ScoreDetail {
   release: string;
   provider: string;
+  /** the language of the subtitle (Debug shows it: which language each rank is in) */
+  lang?: string;
   score: number;
   rejected: boolean;
   reasons: string[];
@@ -714,6 +716,7 @@ function scoreOne(
   return {
     release: item.release || '',
     provider: item.provider,
+    lang: item.lang,
     score: Math.round(score * 10) / 10,
     rejected,
     reasons

@@ -22,7 +22,9 @@ export interface UsageDetails {
   shown: number;
   usedFilename: boolean;
   scoringFallback: boolean;
-  top: Array<{ rank: number; score: number; rejected: boolean; provider: string; release: string; reasons: string[] }>;
+  top: Array<{ rank: number; score: number; rejected: boolean; provider: string; lang?: string; release: string; reasons: string[] }>;
+  /** how many subtitles of each language were found (after the language filter) and sent; absent in older records */
+  byLanguage?: { found: Record<string, number>; shown: Record<string, number> };
   /** how each provider did in this search (absent when the answer came from the cache) */
   providers?: Array<{ id: string; name: string; ms: number; ok: boolean; count: number; error?: string; waived?: boolean }>;
   cached?: boolean;
