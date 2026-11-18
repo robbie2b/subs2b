@@ -74,6 +74,8 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
   `subs_per_page=30` (neverificat direct: parametrii vin din Bazarr; de verificat într-o cerere reală); Subsource cu `language=<nume>` și `limit=100` (fallback la cererea veche dacă răspunsul
   e gol; neverificat) și toate release-urile ca variante; o reîncercare la 502/504/52x/ECONNRESET venite în <500 ms (`BaseSubtitleProvider.httpGet`); statisticile de viteză pe ultimele 7 zile (dacă
   sunt ≥30 de liste). Teste noi: `test/robustness.test.ts`, `test/matching.test.ts`.
+  VERIFICAT LIVE pe 1.6.0 (Loki S02E06, 2 liste): `label` apare; numele cu `DD+5.1` ajunge întreg în Debug; Subsource dă 6 rezultate (nu 20 din toate limbile) și o subtitrare Subsource urcă pe locul 2 (scor 55);
+  SubDL dă 1 rezultat (nu 10 din alte episoade) și nu mai e respins. Cost: ~3 cereri Subs.ro.
   NEFĂCUT din Val 1 (decis să rămână pe mai târziu): cheile API scoase din linkurile din listă (acum doar separate pe cache), închiderea înregistrării (utilizatorul își face profile; nu s-a
   blocat), SSRF/validare manifest, `?nocache=1` deschis, OpenSubtitles v3 oprit (se oprește din Services). Vezi raportul echipei pentru Valurile 2–4 (oprire timpurie după limbă, limita pe limbă,
   MCC în Subsync, parser de rânduri, decodare după limbă, marker „în lucru" între instanțe, Debug mai puțin vorace).
