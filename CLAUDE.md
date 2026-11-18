@@ -57,6 +57,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **ÎNCHIS (2026-11-18, utilizatorul): eticheta „PGS" la prima subtitrare pe telefon** a fost probabil un bug punctual, n-a mai apărut; nu mai investigăm decât dacă reapare.
 - **DECIZIE (2026-11-18, utilizatorul): NU facem „slotul" (link fix cu subtitrare aleasă manual / mutare +/− s).** Motiv: nu ajută de fapt, vrem experiență seamless (totul automat, fără alegeri manuale);
   în plus, mutarea manuală ar putea intra în conflict cu autosync-ul Nuvio (necercetat). Nu reluăm fără motiv nou. Tot din 2026-11-18: referințe HD pentru fișiere UHD (modul „umbră")
   discutat și LĂSAT (câștig estimat ~3% din Play-uri); Subsync-ul rămâne cum e (regulă globală pe toată subtitrarea sau pe câteva bucăți mari, nu replică cu replică; 66% o singură regulă,
