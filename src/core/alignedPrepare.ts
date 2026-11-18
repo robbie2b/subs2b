@@ -12,7 +12,7 @@ import { AlignedToken, linksOf } from './alignedToken';
 import { getReferences, refreshReferences, referencesCameFromStore, fitsReferences, AlignmentResult, Reference } from './alignment';
 import { alignInWorker, referencesAgreeInWorker } from './alignPool';
 import { activity, filmLabel, fmtMs } from '../utils/activity';
-import { loadAligned, storeAligned } from '../storage/alignedStore';
+import { loadAligned, storeAligned, claimWork, releaseWork, waitForOther } from '../storage/alignedStore';
 import {
   addonHostsOf, isAllowedDownloadUrl, decompressBuffer, toCleanUtf8, validateAndFormatSubtitle, convertSubtitleFromUrl, convertTargetOf
 } from '../proxy/subtitleProxy';
@@ -246,7 +246,20 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
       activity('sync', filmLabel(token.id, token.f), `"${(token.r || 'subtitle').slice(0, 70)}": decided earlier, read from storage in ${fmtMs(ms)} (nothing downloaded or computed)`, { step: 'compute', state: 'done', ms, verdict: 'stored' });
       return { original: Promise.resolve(hit.original), served: Promise.resolve(served) };
     }
-    return compute();
+    return claimWork(key).then(mine => {
+      if (mine) return computeAndRelease();
+      // another instance is already at this very link: its stored result is used (at most ~10 s, then we compute ourselves)
+      activity('sync', filmLabel(token.id, token.f), `"${(token.r || 'subtitle').slice(0, 70)}": another server instance is already preparing it, waiting for its result`, { step: 'compute', state: 'start' });
+      return waitForOther(key, 10000).then(other => {
+        if (!other) return computeAndRelease();
+        const ms = Date.now() - started;
+        const served = other.served as Served;
+        served.result.note = ['decided by another instance', served.result.note].filter(Boolean).join('; ');
+        served.timing = { original: 0, references: 0, compute: 0, ready: ms };
+        activity('sync', filmLabel(token.id, token.f), `"${(token.r || 'subtitle').slice(0, 70)}": the other instance's result read after ${fmtMs(ms)}`, { step: 'compute', state: 'done', ms, verdict: 'stored' });
+        return { original: Promise.resolve(other.original), served: Promise.resolve(served) };
+      });
+    });
   });
   const entry: Prepared = { original: work.then(w => w.original), served: work.then(w => w.served), startedAt: started };
   prepared.set(key, entry);
@@ -257,6 +270,14 @@ export function prepareAligned(token: AlignedToken, query: SubtitleQuery, config
     if (prepared.get(key) === entry) prepared.delete(key);
   });
   return entry;
+
+  /** compute(), and the "work in progress" marker is removed when it ends (stored or not) */
+  function computeAndRelease(): { original: Promise<string>; served: Promise<Served> } {
+    const w = compute();
+    // (a stored result removes the marker itself, after it is written: a waiter must find the result as the marker goes)
+    w.served.then(out => { if (!fitsReferences(out.result)) releaseWork(key); }, () => releaseWork(key));
+    return w;
+  }
 
   function compute(): { original: Promise<string>; served: Promise<Served> } {
   const timing = { original: 0, references: 0, compute: 0, ready: 0 };

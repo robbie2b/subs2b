@@ -3,7 +3,7 @@
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || '';
 delete process.env.VERCEL;
 
-import { packAligned, unpackAligned, loadAligned, storeAligned, trimAligned, versionedKey, ALIGN_ENGINE_VERSION } from '../src/storage/alignedStore';
+import { packAligned, unpackAligned, loadAligned, storeAligned, trimAligned, versionedKey, ALIGN_ENGINE_VERSION, claimWork, releaseWork, waitForOther } from '../src/storage/alignedStore';
 import { configStorage } from '../src/storage/configStore';
 
 let failed = 0;
@@ -55,6 +55,31 @@ async function main(): Promise<void> {
   const total = Number((await pool.query('SELECT SUM(bytes)::bigint n FROM aligned_cache')).rows[0].n);
   check('the total is under the budget after trimming', total <= sizes / 2, { total, sizes });
   check('under budget nothing is deleted', (await trimAligned(sizes * 10)) === 0);
+
+  // "work in progress" marker between instances
+  check('the first to ask gets the work', (await claimWork('work|1', 2000)) === true);
+  check('the second one is told another instance is at it', (await claimWork('work|1', 2000)) === false);
+  const waiter = waitForOther('work|1', 5000, 100);
+  await sleep(300);
+  storeAligned('work|1', { original: 'T', served: { result: { n: 42 } } });
+  const gotOther = await waiter;
+  check('the waiter gets the stored result', !!gotOther && (gotOther.served.result as { n: number }).n === 42, gotOther);
+  check('the marker is gone once the result is stored', (await claimWork('work|1', 2000)) === true);
+  releaseWork('work|1');
+  await sleep(300);
+  check('after a release (work ended without a result) the link can be claimed again', (await claimWork('work|1', 2000)) === true);
+  const startedAt = Date.now();
+  releaseWork('work|2');
+  await claimWork('work|2', 2000);
+  const w2 = waitForOther('work|2', 5000, 100);
+  await sleep(250);
+  releaseWork('work|2');
+  check('a waiter whose other instance ends with no result stops waiting at once (and gets nothing)', (await w2) === null && Date.now() - startedAt < 3000);
+  // a marker of a dead instance expires
+  await pool.query(`UPDATE aligned_cache SET created_at = NOW() - INTERVAL '60 seconds' WHERE cache_key LIKE 'w|%'`);
+  await claimWork('work|3', 2000);
+  await pool.query(`UPDATE aligned_cache SET created_at = NOW() - INTERVAL '60 seconds' WHERE cache_key LIKE 'w|%'`);
+  check('an old marker (a dead instance) does not block anybody', (await claimWork('work|3', 2000)) === true);
 
   await pool.query('DROP TABLE aligned_cache');
 }

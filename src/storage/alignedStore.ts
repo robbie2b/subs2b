@@ -116,6 +116,8 @@ export function loadAligned(key: string, capMs: number = READ_CAP_MS): Promise<S
 export async function trimAligned(budget: number = budgetBytes()): Promise<number> {
   const pool = await configStorage.getPool();
   if (!pool) return 0;
+  // markers of work that never ended (an instance that died) are only clutter after a few minutes
+  await pool.query("DELETE FROM aligned_cache WHERE cache_key LIKE 'w|%' AND created_at < NOW() - INTERVAL '5 minutes'").catch(() => undefined);
   const total = Number((await pool.query('SELECT COALESCE(SUM(bytes), 0)::bigint AS n FROM aligned_cache')).rows[0].n);
   if (total <= budget) return 0;
   const target = Math.floor(budget * TRIM_TO);
@@ -144,6 +146,8 @@ export function storeAligned(key: string, value: StoredAligned): void {
          ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, bytes = EXCLUDED.bytes, created_at = NOW(), last_used = NOW()`,
         [versionedKey(key), data.length, data]
       );
+      // the work is over: the "in progress" marker goes after the result is there
+      await pool!.query('DELETE FROM aligned_cache WHERE cache_key = $1', [markerKey(key)]).catch(() => undefined);
       if (++writesSinceCheck >= CHECK_EVERY_WRITES) {
         writesSinceCheck = 0;
         await trimAligned();
@@ -152,6 +156,75 @@ export function storeAligned(key: string, value: StoredAligned): void {
       Logger.error('Could not store a Subsync result', err);
     }
   })());
+}
+
+/**
+ * "Work in progress" marker, shared by the instances: two instances asked for the same link at once (3 of 8 subtitles were
+ * prepared twice on different instances) would both download, search references and compute. The first one to claim the
+ * marker computes; the others wait for its stored result. The marker is a small row in the same table (key `w|…`), valid
+ * for WORK_MARKER_SECONDS (a crashed instance never blocks anybody longer) and removed when the work is over.
+ */
+const WORK_MARKER_SECONDS = 25;
+/** the claim waits at most this long: a slow database must not hold the subtitle back (then we simply compute) */
+export const CLAIM_CAP_MS = 150;
+const markerKey = (key: string): string => `w|${versionedKey(key)}`;
+
+/** true = this instance may do the work (nobody else is at it, or no database); false = another instance is at it */
+export function claimWork(key: string, capMs: number = CLAIM_CAP_MS): Promise<boolean> {
+  return withCap((async () => {
+    if (!(await ensureTable())) return true;
+    const pool = await configStorage.getPool();
+    const res = await pool!.query(
+      `INSERT INTO aligned_cache (cache_key, bytes, data) VALUES ($1, 1, ''::bytea)
+       ON CONFLICT (cache_key) DO UPDATE SET created_at = NOW(), last_used = NOW()
+         WHERE aligned_cache.created_at < NOW() - INTERVAL '${WORK_MARKER_SECONDS} seconds'
+       RETURNING cache_key`,
+      [markerKey(key)]
+    );
+    return res.rows.length > 0;
+  })(), capMs).then(v => v !== false);
+}
+
+/** Work is over (stored or not): the marker goes. Never throws. */
+export function releaseWork(key: string): void {
+  keepAlive((async () => {
+    try {
+      if (!(await ensureTable())) return;
+      const pool = await configStorage.getPool();
+      await pool!.query('DELETE FROM aligned_cache WHERE cache_key = $1', [markerKey(key)]);
+    } catch {
+      // not important: the marker expires by itself
+    }
+  })());
+}
+
+/** Is another instance still at work on this link? (unknown = no) */
+async function workGoesOn(key: string): Promise<boolean> {
+  const answer = await withCap((async () => {
+    if (!(await ensureTable())) return false;
+    const pool = await configStorage.getPool();
+    const res = await pool!.query(
+      `SELECT 1 FROM aligned_cache WHERE cache_key = $1 AND created_at > NOW() - INTERVAL '${WORK_MARKER_SECONDS} seconds'`,
+      [markerKey(key)]
+    );
+    return res.rows.length > 0;
+  })(), CLAIM_CAP_MS);
+  return answer === true;
+}
+
+/**
+ * Waits for the result another instance is computing: returns it as soon as it is stored, or null when that work ended
+ * without a stored result (or took longer than `maxMs`): then the caller computes it itself.
+ */
+export async function waitForOther(key: string, maxMs: number, pollMs: number = 350): Promise<StoredAligned | null> {
+  const until = Date.now() + maxMs;
+  while (Date.now() < until) {
+    const hit = await loadAligned(key);
+    if (hit) return hit;
+    if (!(await workGoesOn(key))) return loadAligned(key);
+    await new Promise(r => setTimeout(r, pollMs));
+  }
+  return null;
 }
 
 /** Forgets a result (the references it was decided with were replaced). Never throws. */
