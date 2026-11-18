@@ -10,6 +10,14 @@ export type Source = 'remux' | 'bluray' | 'webdl' | 'webrip' | 'hdtv' | 'dvd' | 
 
 export interface ParsedRelease {
   titleTokens: string[];
+  seasonTo: number | null;
+  episodeTo: number | null;
+  looseEpisode: number | null;
+  seriesYear: number | null;
+  trailingNumber: number | null;
+  code: number | null;
+  special: boolean;
+  date: string | null;
   year: number | null;
   season: number | null;
   episode: number | null;
@@ -99,7 +107,9 @@ const SERVICES: Array<[RegExp, string]> = [
   [/\bhulu\b/, 'hulu'],
   [/\b(pcok|peacock)\b/, 'pcok'],
   [/\b(pmtp|paramount)\b/, 'pmtp'],
-  [/\bvoyo\b/, 'voyo']
+  [/\bvoyo\b/, 'voyo'],
+  [/\bskst\b/, 'skst'],
+  [/\batv\b/, 'atvp']
 ];
 
 const EDITIONS: Array<[RegExp, string]> = [
@@ -119,6 +129,11 @@ function normalize(raw: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/&amp;|&/g, ' and ')
+    // dotted acronyms: U.S. -> us, F.R.I.E.N.D.S. -> friends
+    .replace(/(?<![a-z0-9])([a-z])\.(?=[a-z](?:\.|(?![a-z0-9])))/g, '$1')
+    // apostrophes join, they do not split: Ocean's -> oceans
+    .replace(/['\u2019`\u00b4]/g, '')
     // a resolution glued to a word ("amb-friends720p", "1080pBluRay") is a word of its own
     .replace(/([a-z])(\d{3,4}p)(?![a-z0-9])/g, '$1 $2')
     .replace(/(?<![a-z0-9])(\d{3,4}p)([a-z])/g, '$1 $2')
@@ -127,8 +142,15 @@ function normalize(raw: string): string {
     .trim();
 }
 
-function detectSource(norm: string): Source | null {
-  if (/\b(cam|camrip|hdcam|ts|hdts|telesync|tc|hdtc|telecine|scr|screener|dvdscr|predvd|trial)\b/.test(norm)) return 'cam';
+/** The part of a name after the title: from the first year or resolution (a title may hold "cam", "trial", "amazon"...) */
+function afterTitle(norm: string): string {
+  const m = /\b(19\d{2}|20\d{2}|2160p|1080p|1080i|720p|576p|480p|4k|uhd)\b/.exec(norm);
+  return m && m.index > 0 ? norm.slice(m.index) : norm;
+}
+
+function detectSource(fullNorm: string): Source | null {
+  const norm = fullNorm;
+  if (/\b(cam|camrip|hdcam|ts|hdts|telesync|tc|hdtc|telecine|scr|screener|dvdscr|predvd|trial)\b/.test(afterTitle(norm))) return 'cam';
   if (/\b(remux|bdremux)\b/.test(norm)) return 'remux';
   if (/\b(blu ray|bluray|bdrip|brrip|bd rip|br rip|bd25|bd50)\b/.test(norm)) return 'bluray';
   if (/\b(web dl|webdl)\b/.test(norm)) return 'webdl';
@@ -160,6 +182,9 @@ function detectGroup(raw: string): string | null {
     return bracket[1].toLowerCase();
   }
   s = s.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+  s = s.replace(/-rum(\(\d+\))?$/i, '').trim();
+  const dotted = s.match(/\.(yify|yts|rarbg|ettv|eztv)$/i);
+  if (dotted) return dotted[1].toLowerCase();
 
   for (let i = 0; i < 2; i++) {
     const next = s.replace(LANG_SUFFIX, '');
@@ -227,14 +252,58 @@ export function parseRelease(raw: string): ParsedRelease {
   return parsed;
 }
 
+
+/** Episode number written without S01E02 ("Show - 05", "Show_05_", "Episode 5", "[Sub] Show 05 [1080p]"): used for anime / absolute numbering */
+function looseEpisodeOf(rawLower: string, norm: string): number | null {
+  const ep = norm.match(/(?:^| )(?:ep|episode|episodul|episod) ?0*(\d{1,4})(?= |$)/);
+  if (ep) return parseInt(ep[1], 10);
+  const base = rawLower.replace(/\.(mkv|mp4|avi|srt|vtt)$/, '');
+  const m = base.match(/(?:\s-\s|_|\.-\.|\s)0*(\d{2,4})(?:v\d)?(?=[\s._\[(\-]|$)/g);
+  if (!m) return null;
+  for (const piece of m) {
+    const n = parseInt(piece.replace(/\D/g, '').replace(/v\d$/, ''), 10);
+    if (!(n >= 1900 && n <= 2099) && !/^(480|576|720|1080|2160)$/.test(String(n)) && n < 1000) {
+      // not followed by p/i (resolution) -- the lookahead above already rejects "720p"
+      return n;
+    }
+  }
+  return null;
+}
+
+const NUMBER_WORDS: Record<string, string> = { two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9', ten: '10', eleven: '11', twelve: '12', thirteen: '13', fourteen: '14', fifteen: '15', twenty: '20',
+  ii: '2', iii: '3', iv: '4', vi: '6', vii: '7', viii: '8', ix: '9', x: '10', xi: '11', xii: '12' };
+/** Same number written as a word, a roman numeral or digits ("Ocean's Eleven" = "Ocean's 11", "Rocky II" = "Rocky 2") */
+function canonTokens(tokens: string[]): string[] {
+  return tokens.map((t, i) => (i > 0 ? NUMBER_WORDS[t] : undefined) ?? t);
+}
+function sequelNumber(tokens: string[]): number {
+  const last = tokens[tokens.length - 1];
+  if (tokens.length >= 2 && /^\d{1,2}$/.test(last)) return parseInt(last, 10);
+  if (tokens.length >= 2 && (last === 'i' || last === 'one')) return 1;
+  return 1;
+}
+
 function parseReleaseUncached(raw: string): ParsedRelease {
   const norm = normalize(raw || '');
+  // fansub tag in front ("[SubsPlease] Show - 05"): not part of the title
+  const normT = /^\s*\[[^\]]*\]\s*[^\[\s]/.test(raw || '') ? normalize((raw || '').replace(/^(\s*\[[^\]]*\])+/, '')) : norm;
 
-  const se = norm.match(/\bs(\d{1,2}) ?e(\d{1,3})\b/) || norm.match(/\b(\d{1,2}) ?x ?(\d{2,3})\b/);
+  const se = norm.match(/\bs ?(\d{1,2}) ?e ?(\d{1,3})\b/) || norm.match(/\bs(\d{1,2})e(\d{1,3})(?=e\d)/) || norm.match(/\b(\d{1,2}) ?x ?(?!26[456]\b)(\d{2,3})\b/);
+  const rawLower = (raw || '').toLowerCase();
+  // "Friends - 314 - The One With..." / "F.R.I.E.N.D.S. 315 - ...": season and episode written together (S3E14)
+  const sseeM = !se ? rawLower.match(/(?:\s-\s|\s)([1-9]\d?)(\d{2})\s-\s/) : null;
+  const ssee = sseeM && !(parseInt(sseeM[1] + sseeM[2], 10) >= 1900 && parseInt(sseeM[1] + sseeM[2], 10) <= 2099) ? sseeM : null;
+  const multi = rawLower.match(/s(\d{1,2})e(\d{1,3})(?:e(\d{1,3})|-e?(\d{1,3}))(?![\dp])/) || rawLower.match(/\b(\d{1,2})x(\d{2,3})-(\d{2,3})(?![\dp])/);
+  const range = norm.match(/\bs(\d{1,2}) ?(?:s|to)? ?(\d{1,2})\b(?! ?e)/) ;
+  const rangeRaw = rawLower.match(/\bs(\d{1,2})[ ._]?-[ ._]?s?(\d{1,2})\b(?!e)/) || rawLower.match(/\bseasons?[ ._]?(\d{1,2})[ ._]?-[ ._]?(\d{1,2})\b/) || rawLower.match(/\bsezoan?el?e?[ ._]?(\d{1,2})[ ._]?-[ ._]?(\d{1,2})\b/);
   const seasonOnly = !se ? norm.match(/\b(?:s|season|sezon|sezonul) ?(\d{1,2})\b/) : null;
-  const season = se ? parseInt(se[1], 10) : seasonOnly ? parseInt(seasonOnly[1], 10) : null;
+  const season = se ? parseInt(se[1], 10) : rangeRaw ? parseInt(rangeRaw[1], 10) : seasonOnly ? parseInt(seasonOnly[1], 10) : null;
+  const seasonTo = !se && rangeRaw ? parseInt(rangeRaw[2], 10) : null;
   const episode = se ? parseInt(se[2], 10) : null;
+  const code = ssee ? parseInt(ssee[1] + ssee[2], 10) : null;
+  const episodeTo = multi ? parseInt(multi[3] || multi[4], 10) : null;
 
+  const dateM = norm.match(/\b(19\d{2}|20\d{2}) (0[1-9]|1[0-2]) (0[1-9]|[12]\d|3[01])\b/);
   const yearMatch = norm.match(/\b(19\d{2}|20\d{2})\b/);
   const year = yearMatch ? parseInt(yearMatch[1], 10) : null;
 
@@ -242,8 +311,9 @@ function parseReleaseUncached(raw: string): ParsedRelease {
   const resolution = detectResolution(norm);
 
   let service: string | null = null;
+  const afterName = afterTitle(norm);
   for (const [re, name] of SERVICES) {
-    if (re.test(norm)) {
+    if (re.test(afterName)) {
       service = name;
       break;
     }
@@ -258,25 +328,48 @@ function parseReleaseUncached(raw: string): ParsedRelease {
   const edition = EDITIONS.filter(([re]) => re.test(norm)).map(([, name]) => name);
 
   const group = detectGroup(raw || '');
+  const special = /\b(ova|oad|oav|specials?|recap|making of|behind the scenes|featurette|nced|ncop)\b/.test(norm);
+  const looseEpisode = se || ssee ? null : looseEpisodeOf(rawLower, norm);
 
   // Title = words before the first year / season-episode / technical token
   const cutPatterns = [
     yearMatch ? new RegExp('\\b' + yearMatch[1] + '\\b') : null,
-    se ? /\bs\d{1,2} ?e\d{1,3}\b|\b\d{1,2} ?x ?\d{2,3}\b/ : null,
-    /\b(2160p|1080p|1080i|720p|576p|480p|4k|uhd|bluray|blu ray|bdrip|brrip|remux|web dl|webdl|web rip|webrip|hdtv|dvdrip|dvd|hdrip|hdtc|hdts|cam|xvid|x264|x265|hevc|extended|unrated)\b/
+    ssee ? new RegExp('\\b' + ssee[1] + ssee[2] + '\\b') : null,
+    /\b3d\b/,
+    se ? /\bs ?\d{1,2} ?e ?\d{1,3}\b|\b\d{1,2} ?x ?\d{2,3}\b/ : null,
+    /\bs\d{1,2}\b|\b(?:season|seasons|sezonul|sezon|sezoanele|complete) ?\d{0,2}\b|\b(?:tv series)\b/,
+    dateM ? new RegExp('\\b' + dateM[1] + ' ' + dateM[2] + ' ' + dateM[3] + '\\b') : null,
+    /\b(2160p|1080p|1080i|720p|576p|480p|4k|uhd|bluray|blu ray|bdrip|brrip|remux|web dl|webdl|web rip|webrip|hdtv|dvdrip|dvd|hdrip|hdtc|hdts|cam|xvid|x264|x265|hevc|extended|unrated|internal|proper|repack|readnfo|dvdscr|dvdr|ntsc|hybrid|multi|pdtv|dsr|tvrip|telesync|cd ?\d)\b/
   ].filter((r): r is RegExp => r !== null);
-  let cut = norm.length;
+  let cut = normT.length;
   for (const re of cutPatterns) {
-    const m = re.exec(norm);
+    const m = re.exec(normT);
     if (m && m.index < cut) cut = m.index;
   }
-  const titleTokens = norm
+  // strong loose-episode markers: "Show 001 v4", "Show 05 1080p" are decided by looseEpisode; cut the title there
+  if (looseEpisode !== null && !se) {
+    const strong = (rawLower.match(/(?:\s-\s|_|\s)0*\d{2,4}v\d|(?:\s-\s|_)0*\d{1,4}(?=[\s_\-\[(]|$)|\b0*\d{2,4} v\d\b/) !== null) || /\b(?:ep|episode|episodul|episod) ?\d/.test(norm);
+    if (strong) {
+      const re = new RegExp('(?:^| )(?:(?:ep|episode|episodul|episod) )?0*' + looseEpisode + '(?: v\\d)?(?= |$)');
+      const m = re.exec(normT);
+      if (m && m.index > 0 && m.index < cut) cut = m.index;
+    }
+  }
+  const titleTokens = normT
     .slice(0, cut)
     .split(' ')
     .filter(t => t && !STOP_WORDS.has(t));
 
   return {
-    titleTokens,
+    titleTokens: canonTokens(titleTokens),
+    seasonTo,
+    episodeTo,
+    looseEpisode,
+    seriesYear: year !== null && (!se || (norm.search(new RegExp('\\b' + year + '\\b')) < norm.search(/\bs ?\d{1,2} ?e ?\d{1,3}\b|\b\d{1,2} ?x ?\d{2,3}\b/))) ? year : null,
+    trailingNumber: (() => { const t = canonTokens(titleTokens); const l = t[t.length - 1]; return t.length >= 2 && /^\d{1,3}$/.test(l) ? parseInt(l, 10) : null; })(),
+    code,
+    special,
+    date: dateM ? `${dateM[1]}-${dateM[2]}-${dateM[3]}` : null,
     year,
     season,
     episode,
@@ -321,9 +414,13 @@ function stripLeadingLanguage(tokens: string[]): string[] {
  * in front ("Andor" / "Star Wars Andor"). A continuation ("Matrix Reloaded" vs "Matrix") still does not match.
  */
 export function titlesMatch(a: string[], b: string[]): boolean {
-  if (jaccard(a, b) >= TITLE_MATCH_THRESHOLD) return true;
-  const x = stripLeadingLanguage(a);
-  const y = stripLeadingLanguage(b);
+  const ca = canonTokens(a.filter(t => t !== 'i' || a.length === 1)), cb = canonTokens(b.filter(t => t !== 'i' || b.length === 1));
+  if (ca.join('') === cb.join('')) return true; // "john wick" + "chapter 4" = "johnwick chapter4"
+  if (sequelNumber(ca) !== sequelNumber(cb)) return false;
+  const strip = (t: string[]) => t.filter((x, i) => !(i === t.length - 1 && t.length >= 2 && (x === '1')));
+  if (jaccard(strip(ca), strip(cb)) > TITLE_MATCH_THRESHOLD) return true;
+  const x = stripLeadingLanguage(strip(ca));
+  const y = stripLeadingLanguage(strip(cb));
   const [short, long] = x.length <= y.length ? [x, y] : [y, x];
   if (short.length === 0 || long.length - short.length > MAX_TITLE_PREFIX_WORDS) return false;
   const offset = long.length - short.length;
@@ -437,6 +534,8 @@ function baselineResolution(res: number | null): number {
 
 interface Reference {
   titleTokens: string[] | null;
+  alt?: string[] | null;
+  fileYear?: number | null;
   year: number | null;
 }
 
@@ -454,8 +553,18 @@ function scoreOne(
   const isSeries = ctx.season != null && ctx.episode != null;
 
   // ---- strict filters: other title / year / episode ----
-  if (sub.informative && ref.titleTokens && sub.titleTokens.length > 0) {
-    if (!titlesMatch(sub.titleTokens, ref.titleTokens)) {
+  if (ref.titleTokens && sub.titleTokens.length > 0) {
+    // a bare name ("Ocean's Thirteen") cannot be judged on its own, but one that shares words with the title and still
+    // differs is another film (sequel, spin-off): rejected like an informative one
+    const shares = sub.titleTokens.some(t => ref.titleTokens!.includes(t) && t.length > 2);
+    // (the title most providers agree on stands for the file's own only when it is the same film number: if most of the
+    // list is "Toy Story 2" and the file is "Toy Story 3", the majority is not the film)
+    const altUsable = ref.alt && sequelNumber(canonTokens(ref.alt)) === sequelNumber(canonTokens(ref.titleTokens!)) ? ref.alt : null;
+    const okTitle = (t: string[]) => titlesMatch(t, ref.titleTokens!) || (altUsable ? titlesMatch(t, altUsable) : false);
+    // series: "Naruto 1 - Intra!", "Naruto 001": a trailing number is the episode (absolute numbering), not part of the title
+    const withoutNumber = isSeries && sub.episode === null && sub.trailingNumber !== null ? sub.titleTokens.slice(0, -1) : null;
+    // (a bare name that shares words with the title but differs is judged only for films: in a series it is often the title of the episode)
+    if ((sub.informative || (!isSeries && shares && sub.titleTokens.length >= 2)) && !okTitle(sub.titleTokens) && !(withoutNumber && withoutNumber.length > 0 && okTitle(withoutNumber))) {
       rejected = true;
       reasons.push('title mismatch');
     }
@@ -463,19 +572,41 @@ function scoreOne(
   if (!isSeries && sub.year !== null && ref.year !== null && Math.abs(sub.year - ref.year) > 1) {
     rejected = true;
     reasons.push('year mismatch ' + sub.year + ' vs ' + ref.year);
+  } else if (isSeries && sub.seriesYear !== null && ref.fileYear != null && Math.abs(sub.seriesYear - ref.fileYear) > 1 && sub.date === null) {
+    rejected = true;
+    reasons.push('year mismatch ' + sub.seriesYear + ' vs ' + ref.fileYear);
   } else if (!isSeries && sub.year !== null && ref.year !== null) {
     score += sub.year === ref.year ? 3 : -4;
   }
   if (isSeries) {
-    if (sub.season !== null && sub.season !== ctx.season) {
+    const inSeasons = (n: number | null): boolean => n === null || (sub.season !== null && n >= sub.season && n <= (sub.seasonTo ?? sub.season));
+    const inEpisodes = (n: number): boolean => sub.episode !== null && n >= sub.episode && n <= (sub.episodeTo ?? sub.episode);
+    if (sub.season !== null && !inSeasons(ctx.season ?? null)) {
       rejected = true;
       reasons.push('season mismatch S' + sub.season);
-    } else if (sub.episode !== null && sub.episode !== ctx.episode) {
+    } else if (sub.episode !== null && !inEpisodes(ctx.episode as number)) {
       rejected = true;
       reasons.push('episode mismatch E' + sub.episode);
     } else if (sub.season !== null && sub.episode !== null) {
       score += 20;
       reasons.push('episode match');
+    } else if (sub.episode === null && sub.code !== null && ctx.season != null && ctx.episode != null) {
+      if (sub.code === ctx.season * 100 + ctx.episode) { score += 20; reasons.push('episode match (SEE code)'); }
+      else { rejected = true; reasons.push('episode mismatch (code ' + sub.code + ')'); }
+    } else if (sub.episode === null && sub.looseEpisode !== null && ctx.episode != null) {
+      const expected = video && video.looseEpisode !== null && video.episode === null ? video.looseEpisode : ctx.season === 1 ? ctx.episode : null;
+      if (expected !== null && sub.looseEpisode !== expected && sub.looseEpisode !== ctx.episode) {
+        rejected = true;
+        reasons.push('episode mismatch (number ' + sub.looseEpisode + ')');
+      }
+    }
+    if (sub.special && !(video && video.special)) {
+      rejected = true;
+      reasons.push('special / OVA / making-of');
+    }
+    if (sub.date && video && video.date && sub.date !== video.date) {
+      rejected = true;
+      reasons.push('date mismatch ' + sub.date);
     }
   }
 
@@ -632,35 +763,39 @@ export function rankSubtitles(items: RawSubtitleItem[], ctx: ScoringContext): Ra
   const video = filename ? parseRelease(filename) : null;
 
   const medoid = medoidTitle(parsedItems);
-  let refTokens: string[] | null = medoid;
-  if (video && video.titleTokens.length > 0) {
-    // trust the file name's title only when it agrees with what the providers returned
-    if (!medoid || titlesMatch(video.titleTokens, medoid)) {
-      refTokens = video.titleTokens;
-    }
-  }
+  // a subtitle may carry the title of the FILE or the title most providers agree on (one of them is spelled differently:
+  // "Ocean's" / "Oceans", a translated name...): it is rejected only when it matches neither
+  const refTokens: string[] | null = video && video.titleTokens.length > 0 ? video.titleTokens : medoid;
+  const alt = refTokens !== medoid ? medoid : null;
   const refYear = video && video.year !== null && refTokens === video.titleTokens ? video.year : mostCommonYear(parsedItems);
-  const reference: Reference = { titleTokens: refTokens, year: refYear };
+  const reference: Reference = { titleTokens: refTokens, alt, year: refYear, fileYear: video ? video.seriesYear : null };
 
   const details = items.map((item, idx) => {
     if (!ruleOn(ctx, 'multiVariant')) return scoreOne(item, parsedItems[idx], video, reference, ctx);
     // several releases listed in one name ("A; B", or "Title.ro [Release-GRP]"): the subtitle fits all of them, so
     // the best variant counts. A release in brackets only adds to a name that is not rejected itself (it often has
     // no episode, so it must never let another episode through).
-    const parts = (item.release || '').split(';').map(v => v.trim()).filter(Boolean);
+    const parts = (item.release || '').split(';').map(v => v.trim()).filter(p => p && !/\n|translated by|uploaded by|subtitle (sourced|automatically)/i.test(p));
     const scored: ScoreDetail[] = [];
     const consider = (d: ScoreDetail) => { scored.push(d); };
     for (const part of parts.length > 1 ? parts : [item.release || '']) {
       const whole = parts.length > 1 ? scoreOne({ ...item, release: part }, parseRelease(part), video, reference, ctx)
         : scoreOne(item, parsedItems[idx], video, reference, ctx);
       consider(whole);
-      if (whole.rejected) continue;
+      const onlyTitle = whole.rejected && whole.reasons.every(r => !/mismatch/.test(r) || r === 'title mismatch');
+      if (whole.rejected && !onlyTitle) continue;
+      const wp = parseRelease(part);
       for (const inner of bracketedReleases(part)) {
-        const d = scoreOne({ ...item, release: inner }, parseRelease(inner), video, reference, ctx);
-        if (!d.rejected) consider(d);
+        const ip = parseRelease(inner);
+        const merged = { ...ip, season: ip.season ?? wp.season, episode: ip.episode ?? wp.episode, episodeTo: ip.episodeTo ?? wp.episodeTo };
+        const d = scoreOne({ ...item, release: inner }, merged, video, reference, ctx);
+        // (when the name as a whole did not fit the title, a variant that has no title of its own, like "[WEB-DL 3 variante]",
+        // must not bring it back)
+        if (!d.rejected && !(whole.rejected && ip.titleTokens.length === 0)) consider(d);
       }
     }
-    const b = scored.reduce((x, y) => (y.score > x.score ? y : x));
+    const usable = scored.filter(d => !d.rejected);
+    const b = (usable.length ? usable : scored).reduce((x, y) => (y.score > x.score ? y : x));
     if (scored.length < 2) return b;
     return { ...b, release: item.release || '', reasons: ['best of ' + scored.length + ' variants', ...b.reasons] };
   });

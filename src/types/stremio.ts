@@ -29,6 +29,8 @@ export interface StremioSubtitle {
   url: string;
   lang: string;
   title?: string;
+  /** shown by Stremio next to the language (an entry without it shows only the language name, five times the same) */
+  label?: string;
 }
 
 export interface StremioSubtitlesResponse {

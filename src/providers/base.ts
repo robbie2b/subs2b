@@ -68,7 +68,8 @@ export abstract class BaseSubtitleProvider implements SubtitleProvider {
     options: AxiosRequestConfig = {},
     signal?: AbortSignal
   ): Promise<AxiosResponse<T>> {
-    return axios.get<T>(url, {
+    const started = Date.now();
+    const run = () => axios.get<T>(url, {
       ...options,
       signal,
       headers: {
@@ -76,6 +77,20 @@ export abstract class BaseSubtitleProvider implements SubtitleProvider {
         ...(options.headers || {})
       }
     });
+    try {
+      return await run();
+    } catch (err: unknown) {
+      // A gateway error that came back at once (a 502 in 100 ms: the addon's own proxy blinked) is tried once more; the
+      // same source answered fine in the same minute. Not for 429/503 (a limit or a maintenance), and not when the
+      // first try was slow (the time is the limit) or the search was already given up.
+      const e = err as { response?: { status?: number }; code?: string };
+      const transient = [502, 504, 520, 521, 522, 523, 524].includes(e?.response?.status ?? 0) || e?.code === 'ECONNRESET';
+      if (transient && Date.now() - started < 500 && !signal?.aborted) {
+        await new Promise(r => setTimeout(r, 150));
+        if (!signal?.aborted) return run();
+      }
+      throw err;
+    }
   }
 
   protected async httpPost<T = unknown>(

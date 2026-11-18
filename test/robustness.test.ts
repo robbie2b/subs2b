@@ -14,6 +14,7 @@ import { createServer } from '../src/server';
 import { configStorage } from '../src/storage/configStore';
 import { mergeWithDefaults } from '../src/config/userConfig';
 import { searchCacheKey, parseSubtitleQuery } from '../src/core/aggregator';
+import { BaseSubtitleProvider } from '../src/providers/base';
 
 let failed = 0;
 function check(label: string, ok: boolean, info?: unknown): void {
@@ -47,6 +48,30 @@ function check(label: string, ok: boolean, info?: unknown): void {
     // an address with a UUID that was never saved is not a profile
     const ghost = await client.get('/f0000000-0000-4000-8000-0000000000f1/subtitles/movie/tt0000002/filename=Some.File.2020.1080p.WEB-DL-GRP.mkv.json');
     check('a made-up UUID gets an empty list without a search', ghost.status === 200 && ghost.data.subtitles.length === 0, ghost.data);
+    // a gateway error that comes back at once is tried once more; a slow or a 429 one is not
+    class Probe extends BaseSubtitleProvider {
+      readonly id = 'probe'; readonly name = 'Probe'; readonly description = ''; readonly requiresApiKey = false; readonly defaultEnabled = false;
+      protected async executeSearch(): Promise<never[]> { return []; }
+      get(url: string) { return this.httpGet<{ ok: boolean }>(url, { timeout: 3000 }); }
+    }
+    const calls: Record<string, number> = {};
+    const flaky = http.createServer((req, res) => {
+      const key = req.url || '';
+      calls[key] = (calls[key] || 0) + 1;
+      if (key === '/blink' && calls[key] === 1) { res.statusCode = 502; res.end('bad gateway'); return; }
+      if (key === '/limited') { res.statusCode = 429; res.end('slow down'); return; }
+      res.setHeader('Content-Type', 'application/json'); res.end('{"ok":true}');
+    });
+    await new Promise<void>(r => flaky.listen(0, '127.0.0.1', r));
+    const flakyBase = `http://127.0.0.1:${(flaky.address() as AddressInfo).port}`;
+    const probe = new Probe();
+    const blinked = await probe.get(`${flakyBase}/blink`);
+    check('a 502 that came back at once is retried and the answer is used', blinked.data.ok === true && calls['/blink'] === 2, calls);
+    let limitedStatus = 0;
+    try { await probe.get(`${flakyBase}/limited`); } catch (err: unknown) { limitedStatus = (err as { response?: { status?: number } }).response?.status ?? 0; }
+    check('a 429 is not retried', limitedStatus === 429 && calls['/limited'] === 1, calls);
+    flaky.close();
+
     const r5 = await client.get('/health');
     check('the server is still alive after all that', r5.status === 200);
 

@@ -32,6 +32,7 @@ import { SUPPORTED_LANGUAGES } from './utils/languages';
 import { getDebug } from './utils/debugLog';
 import { getUsage, getProviderStats, getRuleImpact } from './storage/usageStore';
 import { ownerOf, runAsOwner } from './utils/requestContext';
+import { parseExtraSegment } from './utils/extraArgs';
 import { createAlignedHandler, createFallbackHandler } from './proxy/alignedProxy';
 import { databaseActivity } from './storage/dbTools';
 import { probeSite, probeAllowed, PROBE_HOSTS } from './proxy/siteProbe';
@@ -521,9 +522,9 @@ export function createServer(): express.Application {
       // Merge the query string with the arguments Stremio puts in the path (":extra", e.g. filename=...&videoHash=...)
       const extraArgs: Record<string, string> = { ...(req.query as Record<string, string>) };
       if (extra) {
-        for (const [key, value] of new URLSearchParams(extra).entries()) {
-          extraArgs[key] = value;
-        }
+        // (from the raw path, decoded once: the parameter Express gives was already decoded, and decoding it again broke
+        // names with "+" or "&")
+        Object.assign(extraArgs, parseExtraSegment(req.path.split('/').pop() || ''));
       }
 
       // Testing aids (the players never send them): ?dynamic=1|0 sets the dynamic timeout for this request only, and

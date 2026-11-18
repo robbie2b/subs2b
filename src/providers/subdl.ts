@@ -40,13 +40,17 @@ export class SubDLProvider extends BaseSubtitleProvider {
 
     const params: Record<string, string | number> = {
       imdb_id: cleanImdb,
-      api_key: apiKey
+      api_key: apiKey,
+      // up to 30 per page (the default is 10)
+      subs_per_page: 30
     };
 
     if (query.season !== null && query.episode !== null) {
       params.type = 'tv';
-      params.season = query.season;
-      params.episode = query.episode;
+      // (the API names are season_number / episode_number; with "season" / "episode" the filter was not applied, and the
+      // 10 results of the default page were mostly other episodes: 281 rejected against 28 usable in the live data)
+      params.season_number = query.season;
+      params.episode_number = query.episode;
     } else {
       params.type = 'movie';
     }

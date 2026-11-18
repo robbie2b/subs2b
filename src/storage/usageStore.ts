@@ -243,25 +243,31 @@ export interface ProviderSpeed {
 }
 
 const SPEED_ROWS = 150;
+const MIN_ROWS_FOR_WINDOW = 30;
 
 /** The speed of every source over the latest searches (memory, or the database when there is one) */
 export async function getProviderSpeeds(configKey: string): Promise<Map<string, ProviderSpeed>> {
   const owner = ownerOf(configKey);
-  type Row = { providers: Array<{ id: string; ms: number; ok: boolean; waived?: boolean }>; top: Array<{ provider: string; rejected?: boolean }> };
+  type Row = { at: string; providers: Array<{ id: string; ms: number; ok: boolean; waived?: boolean }>; top: Array<{ provider: string; rejected?: boolean }> };
   let lists: Row[] = (memory.get(owner) || [])
-    .slice(0, SPEED_ROWS).filter(e => e.details).map(e => ({ providers: e.details!.providers || [], top: (e.details!.top || []) as Row['top'] }));
+    .slice(0, SPEED_ROWS).filter(e => e.details).map(e => ({ at: e.at, providers: e.details!.providers || [], top: (e.details!.top || []) as Row['top'] }));
   if (await ensureTable()) {
     try {
       const pool = await configStorage.getPool();
       const res = await pool!.query(
-        "SELECT details->'providers' AS providers, details->'top' AS top FROM usage_events WHERE owner = $1 AND details IS NOT NULL ORDER BY at DESC LIMIT $2",
+        "SELECT at, details->'providers' AS providers, details->'top' AS top FROM usage_events WHERE owner = $1 AND details IS NOT NULL ORDER BY at DESC LIMIT $2",
         [owner, SPEED_ROWS]
       );
-      lists = res.rows.map((r: any) => ({ providers: Array.isArray(r.providers) ? r.providers : [], top: Array.isArray(r.top) ? r.top : [] }));
+      lists = res.rows.map((r: any) => ({ at: new Date(r.at).toISOString(), providers: Array.isArray(r.providers) ? r.providers : [], top: Array.isArray(r.top) ? r.top : [] }));
     } catch (err) {
       Logger.error('Could not read the source speeds', err);
     }
   }
+  // A source that was down last week and is fine now must not be judged by last week (Titrari failed 100 times before
+  // 9 Nov and none since, but its 33% stayed): the latest 7 days count, when there are enough lists in them
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const lastWeek = lists.filter(r => r.at >= weekAgo);
+  if (lastWeek.length >= MIN_ROWS_FOR_WINDOW) lists = lastWeek;
   const acc = new Map<string, { times: number[]; total: number; failed: number; wins: number; inTop: number }>();
   let ranked = 0;
   for (const row of lists) {

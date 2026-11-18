@@ -508,7 +508,8 @@ export async function getAggregatedSubtitles(
       id: uniqueId,
       lang: item.lang,
       url: linkOf(item),
-      title: item.release || `${item.providerName || item.provider} Subtitle`
+      title: item.release || `${item.providerName || item.provider} Subtitle`,
+      label: uniqueId
     };
   });
 

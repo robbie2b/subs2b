@@ -35,6 +35,35 @@ function similarity(tokensA: Set<string>, tokensB: Set<string>): number {
   return (2 * intersection) / (tokensA.size + tokensB.size);
 }
 
+/**
+ * What tells two releases apart even when their names are almost the same word for word (Dice counts "S02E05" and
+ * "S02E06" as one different token out of many): season/episode, year, resolution and the group at the end. Two names that
+ * both state one of these and differ are different subtitles, whatever the rest of the name says.
+ */
+function identityOf(release: string): { se: string | null; year: string | null; res: string | null; group: string | null } {
+  const r = release.toLowerCase();
+  const se = r.match(/\bs(\d{1,2})e(\d{1,3})\b/) || r.match(/\b(\d{1,2})x(\d{2,3})\b(?!\d)/);
+  const year = r.match(/(?<![0-9])(19\d{2}|20\d{2})(?![0-9])/);
+  const res = r.match(/\b(2160|1080|720|576|480)p\b/);
+  const group = r.replace(/\.(srt|vtt|ass|mkv|mp4|avi)$/, '').replace(/-rum(\(\d+\))?$/, '').match(/-([a-z0-9]{2,15})$/);
+  return { se: se ? `${parseInt(se[1], 10)}x${parseInt(se[2], 10)}` : null, year: year ? year[1] : null, res: res ? res[1] : null, group: group ? group[1] : null };
+}
+const identityCache = new Map<string, ReturnType<typeof identityOf>>();
+function identity(release: string): ReturnType<typeof identityOf> {
+  let v = identityCache.get(release);
+  if (!v) {
+    if (identityCache.size >= TOKEN_CACHE_MAX) identityCache.clear();
+    v = identityOf(release);
+    identityCache.set(release, v);
+  }
+  return v;
+}
+function sameIdentity(a: string, b: string): boolean {
+  const x = identity(a), y = identity(b);
+  return !((x.se && y.se && x.se !== y.se) || (x.year && y.year && x.year !== y.year) ||
+    (x.res && y.res && x.res !== y.res) || (x.group && y.group && x.group !== y.group));
+}
+
 const bucketKey = (i: RawSubtitleItem): string => `${i.lang}|${i.hearingImpaired ? 1 : 0}`;
 
 /**
@@ -75,7 +104,7 @@ export function deduplicateSubtitles(
           if (existing.release) {
             const existingTokens = tokenize(existing.release);
             const score = similarity(itemTokens, existingTokens);
-            if (score >= similarityThreshold) {
+            if (score >= similarityThreshold && sameIdentity(item.release!, existing.release)) {
               isDuplicate = true;
               original = existing;
               break;
@@ -111,7 +140,7 @@ export function copiesOf(item: RawSubtitleItem, others: RawSubtitleItem[], simil
   if (tokens.size === 0) return [];
   return others.filter(o => o !== item && o.url && o.url !== item.url && o.lang === item.lang &&
     Boolean(o.hearingImpaired) === Boolean(item.hearingImpaired) && o.release &&
-    similarity(tokens, tokenize(o.release)) >= similarityThreshold);
+    similarity(tokens, tokenize(o.release)) >= similarityThreshold && sameIdentity(item.release!, o.release));
 }
 
 /**

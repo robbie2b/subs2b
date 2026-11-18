@@ -57,6 +57,26 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.0 — VALUL 1 din raportul echipei de 11 agenți (2026-11-18; a doua cifră trecută la 6 la cererea utilizatorului; de acum fiecare update = 1.6.1, 1.6.2...).**
+  Raportul a venit de la 11 subagenți (cod, clasament, Subsync, alte addonuri, surse, performanță, protocol, securitate, fișiere, identificare conținut, experiență reală).
+  FĂCUT în 1.6.0: (1) robustețe: orice rută `app.get/post` e învelită (`safeHandler` în `createServer`): eroare async = 503/500 `no-store`, nu agățare sau cădere; valorile din `?query`
+  sunt mereu șiruri (`?url[]=` omora procesul); `process.on('unhandledRejection')` doar loghează; plafonul de 12 s al Subsync se numără de la cererea playerului (descărcarea originalului
+  intră în el; la timp depășit playerul e trimis la linkul original); descărcarea are 6 s pe link pe Vercel; gzip `maxOutputLength` 30 MB și `maxContentLength` pe `/sub/proxy`.
+  (2) chei/profile: `searchCacheKey` conține un hash scurt al cheilor API (linkurile din listă poartă cheia proprietarului: două profile cu chei diferite nu mai împart lista); cheia din
+  `aligned_cache` e un hash (nu mai apare linkul cu cheie în tabel); un UUID salvat NICIODATĂ primește listă goală fără căutare și fără scris în DB; `storeNoReferences` doar dacă configurația
+  chiar a căutat. (3) clasament (`scorer.ts`, prototip al agentului de identificare + corecții): apostroful se șterge („Ocean's" = „Oceans"), `&`→and, acronime cu puncte („U.S."), cifre ca
+  cuvinte/romane („Eleven"=11), numărul continuării contează („Toy Story 2" ≠ 3), titlul fișierului SAU consensul (consensul nu ajută dacă are alt număr de film), nume goale care împart
+  cuvinte cu titlul se resping doar la filme, serii: an diferit = alt serial, intervale de sezon/episod, cod SEE („314", „- 101 -"), episod absolut la anime („Naruto 001"), OVA/special/making-of
+  respinse dacă fișierul nu e unul, dată pentru emisiuni zilnice; varianta respinsă nu mai câștigă la „best of variants", părți-gunoi („Translated by...") ignorate, o variantă fără titlu nu
+  readuce un nume respins; parser: `DD5.1.x264` nu mai e S1E264, „cam"/„trial"/„amazon" din titlu nu mai sunt sursă/serviciu (se caută doar după an/rezoluție), `-rum(1)` nu mai e grup,
+  `.YIFY` e grup, serviciile SKST/ATV; dedup nu mai unește nume cu episod/an/rezoluție/grup diferite (`sameIdentity`). (4) protocol/surse: numele fișierului se decodează o singură dată din
+  segmentul brut (`utils/extraArgs.ts`: „DD%2B5.1" rămâne plus, „%26" rămâne &); câmpul `label` (= id) pe fiecare subtitrare pentru Stremio; SubDL cu `season_number`/`episode_number` +
+  `subs_per_page=30` (neverificat direct: parametrii vin din Bazarr; de verificat într-o cerere reală); Subsource cu `language=<nume>` și `limit=100` (fallback la cererea veche dacă răspunsul
+  e gol; neverificat) și toate release-urile ca variante; o reîncercare la 502/504/52x/ECONNRESET venite în <500 ms (`BaseSubtitleProvider.httpGet`); statisticile de viteză pe ultimele 7 zile (dacă
+  sunt ≥30 de liste). Teste noi: `test/robustness.test.ts`, `test/matching.test.ts`.
+  NEFĂCUT din Val 1 (decis să rămână pe mai târziu): cheile API scoase din linkurile din listă (acum doar separate pe cache), închiderea înregistrării (utilizatorul își face profile; nu s-a
+  blocat), SSRF/validare manifest, `?nocache=1` deschis, OpenSubtitles v3 oprit (se oprește din Services). Vezi raportul echipei pentru Valurile 2–4 (oprire timpurie după limbă, limita pe limbă,
+  MCC în Subsync, parser de rânduri, decodare după limbă, marker „în lucru" între instanțe, Debug mai puțin vorace).
 - **ÎNCHIS (2026-11-18, utilizatorul): eticheta „PGS" la prima subtitrare pe telefon** a fost probabil un bug punctual, n-a mai apărut; nu mai investigăm decât dacă reapare.
 - **DECIZIE (2026-11-18, utilizatorul): NU facem „slotul" (link fix cu subtitrare aleasă manual / mutare +/− s).** Motiv: nu ajută de fapt, vrem experiență seamless (totul automat, fără alegeri manuale);
   în plus, mutarea manuală ar putea intra în conflict cu autosync-ul Nuvio (necercetat). Nu reluăm fără motiv nou. Tot din 2026-11-18: referințe HD pentru fișiere UHD (modul „umbră")
