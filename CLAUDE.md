@@ -57,6 +57,7 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.8 — o sursă care câștigă des se așteaptă oricum (2026-11-18).** În `goodEnough` (aggregator.ts): dacă cel mai bun nu e la nivelul de sus (hash/nume exact), o sursă încă în așteptare cu `winRate ≥ 0.3`, `ranked ≥ 30`, `failRate ≤ 0.2` se așteaptă cât durează de obicei (`priorityWaitFor`), INDIFERENT de poziția ei în Priority. Motiv: la o configurație cu o singură limbă (ron) lista Loki S02E05 s-a închis la 1,04 s cu SubDL 45 în frunte și Subs.ro «waived» (Subs.ro nu era mai sus în Priority decât SubDL, sau lipsea din listă). Test în `test/dynamicTimeout.test.ts`. De urmărit în Debug: ponderea listelor cu Subs.ro waived (era 35%) și lista mediană.
 - **v1.6.7 — VALUL 2, pasul 4: limba se vede în Debug (2026-11-18).** Fiecare intrare din `top` are `lang` (`ScoreDetail.lang`), iar înregistrarea unei liste are `byLanguage: { found, shown }` (câte subtitrări
   în fiecare limbă au fost găsite după filtrul de limbă și câte s-au trimis) în `usage_events.details` și în `recent.json`: acum se poate măsura dacă româna lipsește sau doar pierde la scor.
   **NEFĂCUT, cu motiv (decis cu utilizatorul în 2026-11-18 să nu se facă fără o decizie nouă):** (a) eticheta ✓ pentru subtitrările deja decise din `aligned_cache`: ar cere o interogare în plus pe drumul listei

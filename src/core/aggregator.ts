@@ -207,6 +207,13 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
   const topLevel = best.hashMatch === true || detail.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r));
   const minScore = typeof config.dynamicTimeoutScore === 'number' ? config.dynamicTimeoutScore : 30;
   if (!topLevel && detail.score < minScore && !lowRisk) return false;
+  // A source that wins most of the time (Subs.ro: 77%) and answers reliably is waited for, as long as it usually takes,
+  // wherever it stands in the user's Priority: a list closed without it was a worse list (Loki: first list SubDL 45, with
+  // Subs.ro 126). Not when the best is an exact match.
+  if (!topLevel && pendingIds.some(id => {
+    const s = speeds?.get(id);
+    return Boolean(s) && s!.ranked >= 30 && s!.winRate >= 0.3 && s!.failRate <= 0.2 && elapsedMs < priorityWaitFor(id, speeds);
+  })) return false;
   const priority = (id: string): number => {
     const i = (config.providerPriority || []).findIndex(x => x.toLowerCase() === id.toLowerCase());
     return i < 0 ? 999 : i;

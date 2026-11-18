@@ -86,6 +86,11 @@ async function main(): Promise<void> {
   const t2 = Date.now();
   await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000034', { filename: FILE }), speedConfig({}), 'http://x', 'speed-test');
   check('a source that often fails is not waited for', Date.now() - t2 < 700, Date.now() - t2);
+  // a source that wins most of the time is waited for wherever it stands in Priority (Subs.ro left out of the first list)
+  setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50, winRate: 0.77, inTopRate: 0.9, ranked: 50 }]]));
+  const t3w = Date.now();
+  await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000035', { filename: FILE }), speedConfig({ providerPriority: ['near', 'slow'] }), 'http://x', 'speed-test');
+  check('a source that wins 77% of the time is waited for although it is below the best one in Priority', Date.now() - t3w >= 600, Date.now() - t3w);
   // below the score wanted, the sources left decide: if they almost never win the list does not wait for them, if one often does it is waited for as long as it usually takes
   const hopeless = (patch: Partial<UserConfig>) => config({ dynamicTimeoutScore: 200, subsync: false, customAddons: [addon('near'), addon('slow')], ...patch });
   setSourceSpeeds('speed-test', new Map([['slow', { p75: 700, failRate: 0, searches: 50, winRate: 0.01, inTopRate: 0.5, ranked: 50 }]]));
