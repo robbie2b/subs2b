@@ -57,6 +57,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.4 — VALUL 2, pasul 1: oprirea timpurie ține cont de limba primară (2026-11-18).** `goodEnough` (aggregator.ts) judecă după cea mai bună subtitrare din PRIMA limbă din `languages` (ron):
+  până apare una, o potrivire bună în altă limbă (hash OpenSubtitles în engleză) NU închide lista: așteaptă cel mult `PRIMARY_LANGUAGE_WAIT_MS` = 2,5 s, și deloc dacă ce a mai rămas rar schimbă
+  prima subtitrare (`lowRisk`). O sursă care câștigă des (≥30%: Subs.ro) e așteptată 1,3 × p75 (max 2 s), nu p75. Cu o singură limbă în listă nimic nu se schimbă. Motiv (raportul „utilizator"):
+  Subs.ro era lăsat în afara primei liste la 35% din redările de titluri noi (Loki S02E06: primul loc SubDL 45, la repetare Subs.ro 126). Test în `test/dynamicTimeout.test.ts`.
+  De urmărit în Debug după câteva zile: ponderea listelor oprite devreme cu Subs.ro waived (era 35%) și lista mediană (aștept +0,5–1 s la titlurile noi).
 - **v1.6.3 — cheile API nu mai sunt în linkurile din listă (2026-11-18, cerut de utilizator).** Linkurile OpenSubtitles (`/proxy/download/os-rest/<id>?kt=<hash 8>&c=<profil>`) și Subsource
   (`/sub/proxy?url=…&p=subsource&c=<profil>`) nu mai conțin cheia: poartă doar un hash scurt al ei (`kt`, ca să meargă memoria „cota atinsă", `keyTagOf`) și UUID-ul profilului (`c`, pus de
   `linkOf` din aggregator, ca la Subs.ro); serverul citește cheia din configurație (`providerKeyOf` în `subtitleProxy.ts`) și o trimite doar la `api.subsource.net` / OpenSubtitles. Referințele

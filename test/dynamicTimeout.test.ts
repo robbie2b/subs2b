@@ -24,8 +24,11 @@ async function main(): Promise<void> {
     const near = (req.url || '').startsWith('/near/');
     // "near": the same kind of release as the playing file (1080p BluRay), but by another group: good, not exact
     const title = slow ? 'Movie.2001.720p.WEB-DL.x264-OTHER' : near ? 'Movie.2001.1080p.BluRay.x264-OTHER' : 'Movie.2001.1080p.BluRay.x264-GRP';
-    const answer = () => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ subtitles: [{ url: `https://dl.example/${slow ? 's' : 'f'}.srt`, lang: 'ron', title }] })); };
-    if (slow) setTimeout(answer, 3000); else if (!near && fastDelayMs) setTimeout(answer, fastDelayMs); else answer();
+    // "eng": the exact release, in English, at once; "laterro": the exact release in Romanian after 0.9 s
+    const eng = (req.url || '').startsWith('/eng/');
+    const laterro = (req.url || '').startsWith('/laterro/');
+    const answer = () => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ subtitles: [{ url: `https://dl.example/${slow ? 's' : eng ? 'e' : laterro ? 'r' : 'f'}.srt`, lang: eng ? 'eng' : 'ron', title }] })); };
+    if (slow) setTimeout(answer, 3000); else if (laterro) setTimeout(answer, 900); else if (!near && !eng && fastDelayMs) setTimeout(answer, fastDelayMs); else answer();
   });
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -40,6 +43,17 @@ async function main(): Promise<void> {
     const answer = await getAggregatedSubtitles(query, cfg, 'http://x');
     return { ms: Date.now() - t0, answer, key: searchCacheKey(query, cfg) };
   };
+
+  // 0. the first language of the user decides: an exact match in English does not close a list with nothing in Romanian yet
+  const bothLangs = (patch: Partial<UserConfig> = {}) => config({ languages: ['ron', 'eng'], customAddons: [addon('eng'), addon('laterro')], ...patch });
+  const waitsRo = await ask('tt0000051', bothLangs());
+  check('an English exact match waits for the Romanian one that is on its way (0.9 s)', waitsRo.ms >= 800 && waitsRo.ms < 2200 && waitsRo.answer.subtitles.some(s => s.lang === 'ron'), { ms: waitsRo.ms, langs: waitsRo.answer.subtitles.map(s => s.lang) });
+  const noRo = await ask('tt0000052', bothLangs({ customAddons: [addon('eng'), addon('slow')] }));
+  check('but not for ever: after 2.5 s the English list goes out (Romanian came at 3 s)', noRo.ms >= 2400 && noRo.ms < 3000 && noRo.answer.subtitles.every(s => s.lang === 'eng'), { ms: noRo.ms, langs: noRo.answer.subtitles.map(s => s.lang) });
+  const onlyEng = await ask('tt0000053', config({ languages: ['eng', 'ron'], customAddons: [addon('eng'), addon('laterro')] }));
+  check('with English first, the English exact match closes the list at once', onlyEng.ms < 700, onlyEng.ms);
+  const single = await ask('tt0000054', config({ languages: ['ron'], customAddons: [addon('eng'), addon('laterro')] }));
+  check('a single language: nothing changes (the Romanian one is waited for as before, the English one is not shown)', single.answer.subtitles.every(s => s.lang === 'ron'), single.answer.subtitles.map(s => s.lang));
 
   // 1. something good arrives at once: the list does not wait for the slow source, and the saved list is completed later
   const one = await ask('tt0000011', config());

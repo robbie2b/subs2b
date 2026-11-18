@@ -99,6 +99,14 @@ const DYNAMIC_GRACE_MS = 100;
  */
 const PRIORITY_WAIT_MS = 2000;
 
+/**
+ * How long the list waits for a subtitle in the FIRST language of the user (Romanian) when only other languages have
+ * arrived: an exact match in English must not close a list that has nothing in Romanian yet (it did: Subs.ro, which wins
+ * 77% of the time, was left out of 35% of the first lists of a title). Not longer than this, and not at all when the sources
+ * left almost never change the first subtitle.
+ */
+const PRIMARY_LANGUAGE_WAIT_MS = 2500;
+
 /** The sources still pending are together this unlikely to change the first subtitle: the list does not wait for them */
 const LOW_RISK = 0.06;
 /** Under this the list leaves at once, with no moment of grace */
@@ -121,6 +129,9 @@ function priorityWaitFor(id: string, speeds: Map<string, ProviderSpeed> | null):
   if (s.failRate > 0.2) return 0;
   // a source that almost never brings the best subtitle (and rarely any in the top) is not worth a wait
   if (s.ranked >= 30 && s.winRate < 0.03 && s.inTopRate < 0.2) return 0;
+  // a source that wins often (Subs.ro: 77%) is waited for a little beyond its usual time (3 in 4 are in by p75): the 1 in 4
+  // that is slower is the one that used to be left out of the list
+  if (s.ranked >= 30 && s.winRate >= 0.3) return Math.min(PRIORITY_WAIT_MS, Math.max(300, Math.round(s.p75 * 1.3)));
   return Math.min(PRIORITY_WAIT_MS, Math.max(300, s.p75));
 }
 
@@ -148,14 +159,21 @@ function goodEnough(items: RawSubtitleItem[], pendingIds: string[], query: Subti
     providerPriority: config.providerPriority
   });
   if (ranked.fallback || ranked.items.length === 0) return false;
-  const best = ranked.items[0];
-  const detail = ranked.details[0];
-  const topLevel = best.hashMatch === true || detail.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r));
-  const minScore = typeof config.dynamicTimeoutScore === 'number' ? config.dynamicTimeoutScore : 30;
   // How likely is it that what is still pending changes the first subtitle? The sum of the pending sources' win rates
   // (over the latest ranked requests); a source later than it usually is counts no more. Unknown sources count 10%.
   const risk = pendingIds.reduce((sum, id) => sum + changeChance(id, speeds, elapsedMs), 0);
   const lowRisk = risk < LOW_RISK;
+  // The judge is the best subtitle in the user's FIRST language. Until one has arrived, a good subtitle in another language
+  // (an English hash match) does not close the list: it waits for one, at most PRIMARY_LANGUAGE_WAIT_MS and not at all when
+  // what is still pending rarely changes anything.
+  const primary = whitelist[0];
+  const primaryIndex = whitelist.length > 1 ? ranked.items.findIndex(it => isLanguageWhitelisted(it.lang, [primary])) : 0;
+  if (primaryIndex < 0 && !lowRisk && elapsedMs < PRIMARY_LANGUAGE_WAIT_MS) return false;
+  const bestIndex = primaryIndex < 0 ? 0 : primaryIndex;
+  const best = ranked.items[bestIndex];
+  const detail = ranked.details[bestIndex];
+  const topLevel = best.hashMatch === true || detail.reasons.some(r => /HASH MATCH|EXACT NAME MATCH/.test(r));
+  const minScore = typeof config.dynamicTimeoutScore === 'number' ? config.dynamicTimeoutScore : 30;
   if (!topLevel && detail.score < minScore && !lowRisk) return false;
   const priority = (id: string): number => {
     const i = (config.providerPriority || []).findIndex(x => x.toLowerCase() === id.toLowerCase());
