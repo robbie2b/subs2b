@@ -57,6 +57,11 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **DECIZIE (2026-11-18, utilizatorul): NU facem „slotul" (link fix cu subtitrare aleasă manual / mutare +/− s).** Motiv: nu ajută de fapt, vrem experiență seamless (totul automat, fără alegeri manuale);
+  în plus, mutarea manuală ar putea intra în conflict cu autosync-ul Nuvio (necercetat). Nu reluăm fără motiv nou. Tot din 2026-11-18: referințe HD pentru fișiere UHD (modul „umbră")
+  discutat și LĂSAT (câștig estimat ~3% din Play-uri); Subsync-ul rămâne cum e (regulă globală pe toată subtitrarea sau pe câteva bucăți mari, nu replică cu replică; 66% o singură regulă,
+  34% 2–8 bucăți; nicio împărțire nouă din 7 nov). Statistici 2026-11-18: de la 1.5.25 lista mediană 0,75 s (p90 1,6 s, 0 liste >3,5 s), playerul a așteptat mediană 3 ms (p90 0,57 s);
+  11% din fișiere fără referințe (cauza: regula „aceeași clasă de rezoluție", 450 din 454 subtitrări respinse la Inside Out UHD); Subs.ro câștigă 77%.
 - **v1.5.29 — `aligned_cache`: versiunea motorului în cheie, 30 de zile (2026-11-17, cerut de utilizator).** Cheia salvată e `e<ALIGN_ENGINE_VERSION>|<cheia linkului>` (`versionedKey` în
   `storage/alignedStore.ts`). **REGULĂ: când schimb logica de aliniere (motorul din `utils/subsync.ts`, alegerea referințelor, ce înseamnă „se potrivește", `alignDecision.ts`), urc
   `ALIGN_ENGINE_VERSION`**: deciziile vechi nu se mai găsesc și pleacă singure când se umple bugetul (cele mai vechi folosite întâi). Limita de timp coboară de la 45 la 30 de zile.
