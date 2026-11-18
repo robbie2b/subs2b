@@ -26,7 +26,7 @@ const STALE_DAYS = 30;
  * engine, the choice of references, what counts as a fit), raise this number and every earlier decision stops being
  * used (the entries are just never found again; the budget clears them away, the oldest first).
  */
-export const ALIGN_ENGINE_VERSION = 1;
+export const ALIGN_ENGINE_VERSION = 2;
 
 /** The key a result is kept under: the link's key plus the version of the logic that decided it */
 export const versionedKey = (key: string, version: number = ALIGN_ENGINE_VERSION): string =>
