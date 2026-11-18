@@ -57,6 +57,12 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.2 — SSRF și `?nocache` (2026-11-18, cerut de utilizator; înregistrarea rămâne deschisă; OpenSubtitles v3 îl oprește utilizatorul din Services).**
+  `utils/publicUrl.ts`: `assertPublicUrl` refuză adresele care duc la mașina însăși sau la rețele interne (loopback, 10.x, 172.16–31.x, 192.168.x, 169.254.x = metadate cloud, IPv6 local,
+  `.local/.internal/localhost`, scheme ≠ http/https) după ce rezolvă numele (cache 5 min); pus la: validarea manifestului (`/api/manifest/validate`, 2 MB max, fără ecou de IP-uri în eroare),
+  căutarea în addonurile importate, conversia `.vtt` (`convertSubtitleFromUrl`) și `loadOriginal`; `refuseRedirectToPrivate` la redirecturi. **TESTELE rulează cu `ALLOW_PRIVATE_HOSTS=1`**
+  (`export` la începutul scriptului `test` din package.json, fiindcă folosesc servere pe 127.0.0.1); `test/publicUrl.test.ts` îl scoate. `?nocache=1` e respectat de cel mult 6 ori pe oră pe profil
+  (`NOCACHE_PER_HOUR`), apoi ignorat (fiecare titlu nou costă 3–4 cereri din cele 300/zi la Subs.ro). RĂMAS: cheile API scoase din linkuri (acum doar separate pe cache).
 - **v1.6.1 — corecție la 1.6.0 (2026-11-18; găsită verificând pe 1.654 de nume din datele live).** Etichetele scurte de serviciu (AMZN, NF, DSNP, ATVP/ATV, SKST...) se caută în tot numele (stau și
   înaintea rezoluției: „Show.S01E01.AMZN.WEB-DL.1080p"), doar cuvintele întregi (Amazon, Netflix, Disney...) numai după titlu; cuvintele de cam fără echivoc (TELESYNC, HDCAM, HDTS, DVDSCR...) se caută
   în tot numele, doar „cam/ts/tc/scr/trial" după titlu. În 1.6.0 se pierdeau „The.Mentalist...AMZN.WEB-DL.1080p" (serviciu) și „Inception.iNTERNAL.TELESYNC.720p" (cam). Pe nume reale: 22 de servicii

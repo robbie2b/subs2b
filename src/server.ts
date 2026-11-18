@@ -1,3 +1,4 @@
+import { assertPublicUrl, refuseRedirectToPrivate } from './utils/publicUrl';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -333,8 +334,12 @@ export function createServer(): express.Application {
     }
 
     try {
+      // (only public addresses: this check fetches whatever address a visitor gives, and tells what it found)
+      await assertPublicUrl(inputUrl);
       const response = await axios.get(inputUrl, {
         timeout: 8000,
+        maxContentLength: 2 * 1024 * 1024,
+        beforeRedirect: (options: { hostname?: string }) => refuseRedirectToPrivate(options.hostname),
         headers: { 'User-Agent': `${USER_AGENT} (Stremio Addon Validator)`, 'Accept': 'application/json' }
       });
 
@@ -382,7 +387,9 @@ export function createServer(): express.Application {
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      res.status(400).json({ valid: false, error: `Could not reach the manifest at "${inputUrl}": ${msg}` });
+      // (an internal address is refused without saying more than that)
+      const shown = /not public|http and https|valid address/i.test(msg) ? msg : msg.replace(/\b\d{1,3}(\.\d{1,3}){3}(:\d+)?\b/g, '<address>');
+      res.status(400).json({ valid: false, error: `Could not reach the manifest at "${inputUrl}": ${shown}` });
     }
   });
 
@@ -506,6 +513,19 @@ export function createServer(): express.Application {
     res.json(await buildManifest(req.params.config));
   });
 
+  // ?nocache=1 makes a new search (a new title costs 3-4 of the 300 daily requests of Subs.ro): anyone who has the address
+  // could use it up, so it is honoured at most 6 times an hour for a profile (a measurement needs a few); then it is ignored
+  const nocacheUses = new Map<string, number[]>();
+  const nocacheAllowed = (profile: string): boolean => {
+    const limit = parseInt(process.env.NOCACHE_PER_HOUR || '', 10) || 6;
+    const since = Date.now() - 60 * 60 * 1000;
+    const uses = (nocacheUses.get(profile) || []).filter(t => t > since);
+    if (uses.length >= limit) { nocacheUses.set(profile, uses); return false; }
+    uses.push(Date.now());
+    nocacheUses.set(profile, uses);
+    if (nocacheUses.size > 200) nocacheUses.clear();
+    return true;
+  };
   const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
     try {
       const configParam = req.params.config;
@@ -530,7 +550,7 @@ export function createServer(): express.Application {
       // Testing aids (the players never send them): ?dynamic=1|0 sets the dynamic timeout for this request only, and
       // ?nocache=1 forgets the saved list of this film first, so a timing test really searches
       const dynamicParam = extraArgs.dynamic;
-      const noCache = extraArgs.nocache === '1';
+      const noCache = extraArgs.nocache === '1' && nocacheAllowed(isUuid(configParam) ? configParam : 'inline');
       delete extraArgs.dynamic;
       delete extraArgs.nocache;
       if (dynamicParam === '1' || dynamicParam === '0') userConfig = { ...userConfig, dynamicTimeout: dynamicParam === '1' };

@@ -1,3 +1,4 @@
+import { assertPublicUrl, refuseRedirectToPrivate } from '../utils/publicUrl';
 import { Request, Response } from 'express';
 import { noteDownloadFailure } from '../utils/downloadJournal';
 import { isBrokenFile, noteBrokenFile, isBrokenFileReason } from '../utils/brokenFiles';
@@ -658,13 +659,15 @@ const convertedSubtitles = new LRUCache<string, string>({ max: 200, ttl: 4 * 60 
 export async function convertSubtitleFromUrl(original: string, hosts: string[]): Promise<string> {
   let srt = convertedSubtitles.get(original);
   if (srt === undefined) {
+    await assertPublicUrl(original);
     const upstream = await axios.get<ArrayBuffer>(original, {
       responseType: 'arraybuffer',
       timeout: 15000,
       maxContentLength: MAX_SUBTITLE_BYTES,
       maxRedirects: 3,
-      // a redirect must not lead outside the allowed hosts
+      // a redirect must not lead outside the allowed hosts (nor to a private address)
       beforeRedirect: (options: { hostname?: string }) => {
+        refuseRedirectToPrivate(options.hostname);
         if (!options.hostname || !isAllowedHost(options.hostname, hosts)) {
           throw new Error('Redirect to a host that is not allowed');
         }

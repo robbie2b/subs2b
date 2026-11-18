@@ -1,3 +1,4 @@
+import { assertPublicUrl, refuseRedirectToPrivate } from '../utils/publicUrl';
 import axios from 'axios';
 import { LRUCache } from 'lru-cache';
 import { UserConfig } from '../types/config';
@@ -48,13 +49,15 @@ export const preparedKey = (token: AlignedToken): string => `${token.u}|${token.
 /** Downloads the original subtitle and returns it as clean SRT text */
 export async function loadOriginal(url: string, allowedHosts: string[]): Promise<string> {
   const origin = new URL(url).origin;
+  await assertPublicUrl(url);
   const upstream = await axios.get<ArrayBuffer>(url, {
     responseType: 'arraybuffer',
     // (on Vercel the answer has about 12 s in all: a link that has not answered in 6 s gives way to the next one)
     timeout: process.env.VERCEL ? 6000 : 15000,
     maxContentLength: 10 * 1024 * 1024,
     maxRedirects: 3,
-    beforeRedirect: (options: { href?: string }) => {
+    beforeRedirect: (options: { href?: string; hostname?: string }) => {
+      refuseRedirectToPrivate(options.hostname);
       // a redirect must stay on an allowed host (or on this server)
       const target = options.href || '';
       if (!isAllowedDownloadUrl(target, allowedHosts) && !target.startsWith(origin + '/')) {

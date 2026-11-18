@@ -1,3 +1,4 @@
+import { assertPublicUrl } from '../utils/publicUrl';
 import { BaseSubtitleProvider } from './base';
 import { SubtitleQuery, ProviderContext, RawSubtitleItem } from '../types/provider';
 import { shortHash } from '../utils/ids';
@@ -70,6 +71,7 @@ export class GenericStremioAddonProvider extends BaseSubtitleProvider {
     const url = `${this.baseUrl}/subtitles/${encodeURIComponent(query.type)}/${encodeURIComponent(query.id)}.json`;
     const timeout = context.timeoutMs || 20000;
 
+    await assertPublicUrl(this.baseUrl);
     const response = await this.httpGet<GenericStremioSubtitlesResponse>(
       url,
       { timeout },
