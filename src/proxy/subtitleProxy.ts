@@ -230,10 +230,24 @@ export function decompressBuffer(
 }
 
 /**
- * Accurately decodes buffers of unknown charset (UTF-8, Windows-1252, ISO-8859-1, UTF-16 LE/BE)
+ * Accurately decodes buffers of unknown charset (UTF-8, Windows-1250/1251/1252, ISO-8859-1, UTF-16 LE/BE; the old
+ * 8-bit one is guessed from the bytes unless the caller knows it)
  * into a clean UTF-8 string and strips BOMs.
  */
-export function toCleanUtf8(buffer: Buffer, legacyCharset: 'win1252' | 'win1250' = 'win1252'): string {
+export function guessLegacyCharset(buffer: Buffer): 'win1252' | 'win1250' | 'win1251' {
+  const count = new Array<number>(256).fill(0);
+  for (const byte of buffer) count[byte]++;
+  const high = count.slice(0x80).reduce((a, b) => a + b, 0);
+  // Cyrillic text in Windows-1251: almost every letter is a high byte (in Western text they are a few per cent)
+  if (buffer.length > 200 && high / buffer.length > 0.3) return 'win1251';
+  // Romanian / Polish / Czech... in Windows-1250: ţ Ţ (FE DE), ł ą ć (B3 B9 E6) are letters there and signs nobody writes
+  // in Windows-1252 (þ Þ ³ ¹ æ); a few of them are proof (ş and ă alone are not: they are º and ã in Western text)
+  const only1250 = count[0xfe] + count[0xde] + count[0xb3] + count[0xb9] + count[0xe6];
+  if (only1250 >= 3) return 'win1250';
+  return 'win1252';
+}
+
+export function toCleanUtf8(buffer: Buffer, legacyCharset?: 'win1252' | 'win1250' | 'win1251'): string {
   if (!buffer || buffer.length === 0) return '';
 
   let text = '';
@@ -252,7 +266,7 @@ export function toCleanUtf8(buffer: Buffer, legacyCharset: 'win1252' | 'win1250'
   } else {
     // Standard UTF-8 attempt, falling back to Windows-1252 for Latin diacritics
     const utf8 = buffer.toString('utf8');
-    text = utf8.includes('�') ? iconv.decode(buffer, legacyCharset) : utf8;
+    text = utf8.includes('�') ? iconv.decode(buffer, legacyCharset || guessLegacyCharset(buffer)) : utf8;
   }
 
   // 2. Strip UTF-8 BOM if present at index 0
