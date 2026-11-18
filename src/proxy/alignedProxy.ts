@@ -58,9 +58,11 @@ export function createAlignedHandler(getBaseUrl: (req: Request) => string) {
     const originalFailed = (err: unknown) => {
       Logger.warn('Aligned subtitle: the original could not be loaded', { reason: err instanceof Error ? err.message : String(err) });
       if (own) {
-        res.status(502).set('Cache-Control', 'no-store').type('text/plain').send('Could not load the subtitle.');
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(502).type('text/plain').send('Could not load the subtitle.');
       } else {
-        res.set('Cache-Control', 'no-store').redirect(302, token.u);
+        res.setHeader('Cache-Control', 'no-store');
+        res.redirect(302, token.u);
       }
     };
 
@@ -206,8 +208,9 @@ export function createFallbackHandler(getBaseUrl: (req: Request) => string) {
       sendSubtitleResponse(res, text, 'srt', 'subtitle.srt', 'public, max-age=3600, s-maxage=3600');
     } catch {
       // every source failed here: the player may still reach the first one itself
-      if (own) res.status(502).set('Cache-Control', 'no-store').type('text/plain').send('Could not load the subtitle from any source.');
-      else res.set('Cache-Control', 'no-store').redirect(302, token.u);
+      res.setHeader('Cache-Control', 'no-store');
+      if (own) res.status(502).type('text/plain').send('Could not load the subtitle from any source.');
+      else res.redirect(302, token.u);
     }
   };
 }
