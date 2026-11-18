@@ -240,7 +240,7 @@ async function buildReferences(ctx: ReferenceContext): Promise<Reference[]> {
     ...ctx.config,
     providerTimeoutMs: Math.min(ctx.config.providerTimeoutMs || REFERENCE_SEARCH_LIMIT_MS, REFERENCE_SEARCH_LIMIT_MS),
     customAddons: [],
-    providers: { ...ctx.config.providers, regielive: { enabled: false, apiKey: '' }, subsrodirect: { enabled: false, apiKey: '' } }
+    providers: { ...ctx.config.providers, regielive: { enabled: false, apiKey: '' } }
   };
   const load = async (item: RawSubtitleItem): Promise<Reference> => {
     const text = await fetchText(absoluteUrl(item, ctx), REFERENCE_DOWNLOAD_TIMEOUT_MS);
@@ -386,7 +386,7 @@ export function getReferences(ctx: ReferenceContext): Promise<Reference[]> {
         return [] as Reference[];
       }
       // ("nothing found" is shared with every profile: only a configuration that really searched may say it)
-      const searched = Object.entries(ctx.config.providers || {}).some(([id, p]) => p?.enabled !== false && id !== 'regielive' && id !== 'subsrodirect');
+      const searched = Object.entries(ctx.config.providers || {}).some(([id, p]) => p?.enabled !== false && id !== 'regielive');
       return buildReferences(ctx).then(refs => { if (refs.length) storeReferences(key, refs); else if (searched) storeNoReferences(key); return refs; });
     }).then(refs => {
       // "nothing found" is remembered for a shorter time, so a later try can succeed

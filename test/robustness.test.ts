@@ -35,8 +35,10 @@ function check(label: string, ok: boolean, info?: unknown): void {
     const r1 = await client.get('/sub/proxy', { params: { 'url[]': 'https://example.com/x.zip' }, paramsSerializer: { serialize: () => 'url[]=https://example.com/x.zip' } });
     check('an array in ?url[]= is an error answer, not a crash', r1.status === 400, r1.status);
     check('an error answer is never kept (no-store)', r1.headers['cache-control'] === 'no-store', r1.headers['cache-control']);
-    const r404 = await client.get('/proxy/download/subsro/nothing/pick.srt');
+    const r404 = await client.get('/proxy/download/anything/nothing/pick.srt');
     check('a 4xx from a route that sets no header is no-store too', r404.status >= 400 && r404.headers['cache-control'] === 'no-store', { s: r404.status, c: r404.headers['cache-control'] });
+    const old = mergeWithDefaults({ providers: { subsrodirect: { enabled: true, apiKey: 'k' } } as never, providerPriority: ['opensubtitles', 'subsrodirect', 'org.stremio.subsro'] });
+    check('a saved configuration with the removed direct Subs.ro service is cleaned (no entry, no priority)', !('subsrodirect' in old.providers) && !old.providerPriority.includes('subsrodirect') && old.providerPriority.includes('org.stremio.subsro'), { p: old.providers, o: old.providerPriority });
     const r3 = await client.post('/api/validate-key/subdl', { apiKey: 123 });
     check('a number as API key is "no key", not a crash', r3.status === 200 && r3.data.valid === false, r3.data);
     const r4 = await client.post('/api/manifest/validate', { url: 1 });

@@ -19,7 +19,6 @@ const SOURCE_BY_PROVIDER: Record<string, string> = {
   subdl: 'SubDL',
   subsource: 'Subsource',
   regielive: 'RegieLive',
-  subsrodirect: 'Subs.ro',
   titrari: 'Titrari',
   subtitrarinoi: 'Subtitrari-noi',
   yify: 'YIFY',

@@ -24,8 +24,6 @@ import { createFormatTestHandler, setFormatTest, formatTestUntil } from './proxy
 import { Logger, getLogLines } from './utils/logger';
 import { getActivity, attachActivitySink } from './utils/activity';
 import { persistActivity, readStoredActivity } from './storage/activityStore';
-import { handleSubsroDownload } from './proxy/subsroDownload';
-import { getSearch, getPack } from './storage/subsroStore';
 import { installRequestCounter, attachRequestCountSink, memoryRequestCounts } from './utils/requestCounter';
 import { saveRequestCounts, readRequestCounts } from './storage/requestCountStore';
 import { configStorage, isUuid } from './storage/configStore';
@@ -115,22 +113,6 @@ const KEY_VALIDATORS: Record<string, (apiKey: string) => Promise<KeyValidation>>
       return { valid: false, error: `Wyzie did not accept this key${res.data?.message ? `: ${res.data.message}` : ''}.` };
     } catch (err: any) {
       return { valid: false, error: `Could not reach Wyzie: ${err?.code || err?.message || 'error'}.` };
-    }
-  },
-
-  // Subs.ro: the quota check answers for a good key and does not count as a request
-  async subsrodirect(apiKey) {
-    try {
-      const res = await axios.get('https://api.subs.ro/v1.0/quota', {
-        headers: { 'X-Subs-Api-Key': apiKey, Accept: 'application/json', 'User-Agent': USER_AGENT },
-        timeout: 8000,
-        validateStatus: () => true
-      });
-      if (res.status === 200 && res.data?.quota) return { valid: true };
-      if (res.status === 401 || res.status === 403) return { valid: false, error: 'Subs.ro did not accept this key.' };
-      return { valid: false, error: `Subs.ro answered HTTP ${res.status}.` };
-    } catch (err: any) {
-      return { valid: false, error: `Could not reach Subs.ro: ${err?.code || err?.message || 'error'}.` };
     }
   },
 
@@ -707,25 +689,6 @@ export function createServer(): express.Application {
     });
   });
 
-  // What the Subs.ro search kept for a title (no request to Subs.ro): the packs with their descriptions, and what is inside
-  app.get('/:config/debug/subsro.json', async (req: Request, res: Response): Promise<void> => {
-    const key = await requireStoredConfig(req, res);
-    if (!key) return;
-    res.setHeader('Cache-Control', 'no-store');
-    const imdb = String(req.query.imdb || '');
-    if (!/^tt\d{5,9}$/.test(imdb)) { res.status(400).json({ error: 'imdb=tt1234567 is needed' }); return; }
-    const items = ((await getSearch(imdb)) || []) as Array<Record<string, unknown>>;
-    const packs = [];
-    for (const i of items) {
-      const pack = await getPack(String(i.id));
-      packs.push({
-        id: i.id, title: i.title, description: i.description, language: i.language, translator: i.translator, updatedAt: i.updatedAt, type: i.type,
-        kept: pack ? { version: pack.version, files: pack.entries.length, mb: Math.round(pack.archive.length / 104857.6) / 10, sample: pack.entries.slice(0, 4) } : null
-      });
-    }
-    res.json({ imdb, cachedSearch: items.length > 0, packs });
-  });
-
   // Does reusing connections to the sources save time from here? Three requests in a row to each host with the default
   // agent (what the server uses) and three each with a fresh connection every time, so the two can be compared.
   app.get('/:config/debug/connect.json', async (req: Request, res: Response): Promise<void> => {
@@ -863,7 +826,6 @@ export function createServer(): express.Application {
   // /sub/proxy/:data and /proxy/subtitle/:data  legacy links with a base64 URL
   app.get(['/sub/proxy', '/sub/proxy/:data', '/proxy/subtitle/:data'], handleUnifiedSubtitleProxy);
   app.get('/proxy/download/os-rest/:fileId', handleOpenSubtitlesRestDownload);
-  app.get('/proxy/download/subsro/:packId/:entry', handleSubsroDownload);
   app.get('/proxy/download/regielive/:data', handleRegieLiveDownload);
   app.get(['/:config/sub/convert/:data.srt', '/:config/sub/convert.srt'], subtitlesLimiter, handleVttConvert);
   app.get('/:config/sub/aligned/:data.srt', subtitlesLimiter, createAlignedHandler(getBaseUrl));

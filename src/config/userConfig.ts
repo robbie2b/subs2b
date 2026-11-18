@@ -17,8 +17,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'subtitrarinoi': { enabled: false, apiKey: '' },
     'yify': { enabled: false, apiKey: '' },
     'addic7ed': { enabled: false, apiKey: '' },
-    'wyzie': { enabled: false, apiKey: '' },
-    'subsrodirect': { enabled: false, apiKey: '' }
+    'wyzie': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
@@ -30,8 +29,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     'subtitrarinoi',
     'yify',
     'addic7ed',
-    'wyzie',
-    'subsrodirect'
+    'wyzie'
   ],
   languages: ['ron', 'eng'],
   allowUnknownLanguages: false,
@@ -161,8 +159,8 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
   if (Array.isArray(partial.providerPriority)) {
     for (const item of partial.providerPriority) {
       const mapped = item === 'opensubtitles-rest' || item === 'opensubtitles-v3' ? 'opensubtitles' : item;
-      // the removed direct Subs.ro provider and Podnapisi (closed in 2026) are dropped from saved priority lists
-      if (mapped !== 'subsro' && mapped !== 'podnapisi' && !providerPriority.includes(mapped)) {
+      // the removed direct Subs.ro providers ('subsro', 'subsrodirect') and Podnapisi (closed in 2026) are dropped from saved priority lists
+      if (mapped !== 'subsro' && mapped !== 'subsrodirect' && mapped !== 'podnapisi' && !providerPriority.includes(mapped)) {
         providerPriority.push(mapped);
       }
     }
@@ -170,15 +168,6 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
   if (providerPriority.length === 0) {
     providerPriority.push(...DEFAULT_USER_CONFIG.providerPriority);
   }
-  // Subs.ro (direct) replaces the community Subs.ro addon: where the addon is ranked, the direct service takes its place
-  // (added at the end of an old list it would be waited behind every other source by the dynamic timeout)
-  const subsroAddon = providerPriority.findIndex(id => id.toLowerCase() === 'org.stremio.subsro');
-  const subsroDirect = providerPriority.indexOf('subsrodirect');
-  if (subsroAddon >= 0 && subsroDirect > subsroAddon) {
-    providerPriority.splice(subsroDirect, 1);
-    providerPriority.splice(subsroAddon, 0, 'subsrodirect');
-  }
-
   const rawRemap = (partial.language_remapping && typeof partial.language_remapping === 'object')
     ? partial.language_remapping
     : ((partial.languageRemap && typeof partial.languageRemap === 'object')
@@ -208,8 +197,7 @@ export function mergeWithDefaults(partial: PartialUserConfig): UserConfig {
       'subtitrarinoi': { enabled: false, apiKey: '' },
       'yify': { enabled: false, apiKey: '' },
       'addic7ed': { enabled: false, apiKey: '' },
-      'wyzie': { enabled: false, apiKey: '' },
-      'subsrodirect': { enabled: false, apiKey: '' }
+      'wyzie': { enabled: false, apiKey: '' }
     },
     customAddons,
     providerPriority,

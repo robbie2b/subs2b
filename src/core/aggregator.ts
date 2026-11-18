@@ -547,7 +547,6 @@ export async function getAggregatedSubtitles(
       // Archive downloads also learn what is being played, to pick the right file inside a season pack
       if (finalUrl.startsWith('/sub/proxy?')) finalUrl += archivePickParams;
       // a Subs.ro pack opened on demand needs this configuration's key, read on the server (never put in a link)
-      if (finalUrl.startsWith('/proxy/download/subsro/') && finalUrl.includes('/pick.srt?') && configId) finalUrl += `&c=${configId}`;
       // the same for OpenSubtitles and Subsource: the link names the profile and the server reads the API key from its configuration
       if (configId && (finalUrl.startsWith('/proxy/download/os-rest/') || (finalUrl.startsWith('/sub/proxy?') && finalUrl.includes('&p=subsource')))) finalUrl += `&c=${configId}`;
       finalUrl = `${baseUrl}${finalUrl}`;

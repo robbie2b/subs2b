@@ -52,8 +52,7 @@ const DEFAULT_CONFIG = {
     'subtitrarinoi': { enabled: false, apiKey: '' },
     'yify': { enabled: false, apiKey: '' },
     'addic7ed': { enabled: false, apiKey: '' },
-    'wyzie': { enabled: false, apiKey: '' },
-    'subsrodirect': { enabled: false, apiKey: '' }
+    'wyzie': { enabled: false, apiKey: '' }
   },
   customAddons: [],
   providerPriority: [
@@ -65,8 +64,7 @@ const DEFAULT_CONFIG = {
     'subtitrarinoi',
     'yify',
     'addic7ed',
-    'wyzie',
-    'subsrodirect'
+    'wyzie'
   ],
   languages: ['ron', 'eng'],
   allowUnknownLanguages: false,
@@ -111,11 +109,6 @@ const SERVICES_META = {
   subtitrarinoi: { id: 'subtitrarinoi', name: 'Subtitrari-noi.ro', helpText: 'No key needed.' },
   yify: { id: 'yify', name: 'YIFY', helpText: 'No key needed. Films only.' },
   addic7ed: { id: 'addic7ed', name: 'Addic7ed', helpText: 'No key needed. TV series only.' },
-  subsrodirect: {
-    id: 'subsrodirect',
-    name: 'Subs.ro (direct)',
-    helpText: 'Your free key is on <a href="https://subs.ro/utilizator/api" target="_blank" rel="noopener noreferrer">subs.ro/utilizator/api</a> (300 requests a day). Searches the packs of the season being played only and keeps what it fetches, so it spends far fewer requests than the Subs.ro addon. Turn the Subs.ro addon off when this one is on.'
-  },
   wyzie: {
     id: 'wyzie',
     name: 'Wyzie',
@@ -854,7 +847,7 @@ function renderHomeBranding() {
 }
 
 function setupServicesActions() {
-  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie', 'subsrodirect'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
 
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
@@ -1101,7 +1094,7 @@ function triggerAutoValidation(serviceId, apiKey) {
 }
 
 function renderServicesState() {
-  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie', 'subsrodirect'];
+  const serviceIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
   serviceIds.forEach(id => {
     const toggle = document.getElementById(`svc-toggle-${id}`);
     if (toggle) {
@@ -2159,7 +2152,7 @@ function renderFiltersPriority() {
 
   const activeItemsMap = new Map();
 
-  const nativeKeys = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie', 'subsrodirect'];
+  const nativeKeys = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
   for (const id of nativeKeys) {
     const prov = state.config.providers[id];
     // ONLY show native services that are enabled AND have an API key
@@ -2430,7 +2423,7 @@ function setupInstallPageActions() {
 
     // Check credentials on active services
     const missingCreds = [];
-    const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie', 'subsrodirect'];
+    const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
     for (const id of nativeIds) {
       const prov = state.config.providers[id];
       if (prov && prov.enabled === true && !KEY_OPTIONAL_SERVICES.has(id) && (!prov.apiKey || prov.apiKey.trim() === '')) {
@@ -2575,7 +2568,7 @@ function setupInstallPageActions() {
 
 async function saveCurrentConfiguration(andShowInstall = false) {
   const missingCreds = [];
-  const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie', 'subsrodirect'];
+  const nativeIds = ['opensubtitles', 'subdl', 'subsource', 'regielive', 'titrari', 'subtitrarinoi', 'yify', 'addic7ed', 'wyzie'];
   for (const id of nativeIds) {
     const prov = state.config.providers[id];
     if (prov && prov.enabled === true && !KEY_OPTIONAL_SERVICES.has(id)) {
