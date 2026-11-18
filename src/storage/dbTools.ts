@@ -79,10 +79,24 @@ export async function databaseActivity(pool: Pool): Promise<unknown> {
     SELECT t AS table, to_regclass('public.' || t) IS NOT NULL AS exists,
            CASE WHEN to_regclass('public.' || t) IS NULL THEN NULL ELSE round(pg_total_relation_size(to_regclass('public.' || t)) / 1048576.0, 1) END AS mb,
            CASE WHEN to_regclass('public.' || t) IS NULL THEN NULL ELSE (SELECT reltuples::bigint FROM pg_class WHERE oid = to_regclass('public.' || t)) END AS approx_rows
-    FROM unnest(ARRAY['configurations', 'usage_events', 'subsync_decisions', 'subsync_references', 'source_blocks', 'download_failures', 'activity_events']) AS t`);
+    FROM unnest(ARRAY['configurations', 'usage_events', 'subsync_decisions', 'subsync_references', 'source_blocks', 'download_failures', 'activity_events', 'aligned_cache', 'request_counts', 'subsro_cache']) AS t`);
+  // the Subsync results kept (exact numbers; the rows `w|…` are "work in progress" markers, not results)
+  let alignedCache: unknown = null;
+  if (tables.rows.some(t => t.table === 'aligned_cache' && t.exists)) {
+    alignedCache = (await pool.query(`
+      SELECT count(*) FILTER (WHERE cache_key NOT LIKE 'w|%')::int AS results,
+             count(*) FILTER (WHERE cache_key LIKE 'w|%')::int AS markers,
+             round(coalesce(sum(bytes) FILTER (WHERE cache_key NOT LIKE 'w|%'), 0) / 1048576.0, 2) AS mb,
+             round(coalesce(avg(bytes) FILTER (WHERE cache_key NOT LIKE 'w|%'), 0))::int AS avg_bytes,
+             min(created_at) FILTER (WHERE cache_key NOT LIKE 'w|%') AS oldest,
+             max(created_at) FILTER (WHERE cache_key NOT LIKE 'w|%') AS newest,
+             count(*) FILTER (WHERE cache_key NOT LIKE 'w|%' AND last_used > created_at + INTERVAL '1 minute')::int AS reused_hours_later
+      FROM aligned_cache`)).rows[0];
+  }
   return {
     pool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount },
     tables: tables.rows,
+    alignedCache,
     sessions: sessions.rows
   };
 }
