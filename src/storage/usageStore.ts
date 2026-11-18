@@ -29,7 +29,7 @@ export interface UsageDetails {
   providers?: Array<{ id: string; name: string; ms: number; ok: boolean; count: number; error?: string; waived?: boolean }>;
   cached?: boolean;
   /** where the time of the list went (ms); absent in older records */
-  timing?: { totalMs: number; searchMs: number; scoringMs: number; stoppedEarly: boolean };
+  timing?: { totalMs: number; searchMs: number; scoringMs: number; stoppedEarly: boolean; preMs?: number; speedsMs?: number; instance?: { id: string; ageSec: number; seq: number } };
   /** whether a timing reference was needed for this request, and why (not) */
   subsync?: { triggered: boolean; reason: string };
 }

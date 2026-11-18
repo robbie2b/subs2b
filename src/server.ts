@@ -1,3 +1,4 @@
+import { noteRequest } from './utils/coldStart';
 import { assertPublicUrl, refuseRedirectToPrivate } from './utils/publicUrl';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -539,6 +540,8 @@ export function createServer(): express.Application {
     return true;
   };
   const handleSubtitles = async (req: Request, res: Response): Promise<void> => {
+    const arrivedAt = Date.now();
+    const instance = noteRequest();
     try {
       const configParam = req.params.config;
       // An address with a UUID that was never saved is not a profile: no search, nothing recorded (anyone could otherwise
@@ -570,7 +573,7 @@ export function createServer(): express.Application {
       const query = parseSubtitleQuery(type, id, extraArgs);
       if (noCache) globalSubtitleCache.delete(searchCacheKey(query, userConfig));
       const debugKey = configParam && isUuid(configParam) ? configParam : undefined;
-      const response = await getAggregatedSubtitles(query, userConfig, getBaseUrl(req), debugKey);
+      const response = await getAggregatedSubtitles(query, userConfig, getBaseUrl(req), debugKey, { instance, preMs: Date.now() - arrivedAt });
 
       // (the edge keeps a copy too, for at most 5 min: the same list is asked for again by the phone and the TV, and by Nuvio)
       const listMaxAge = response.cacheMaxAge ?? 1800;

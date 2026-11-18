@@ -36,6 +36,15 @@ async function main(): Promise<void> {
   check('the search took the slow source\'s time', full.timing.searchMs >= 1300 && full.timing.totalMs >= full.timing.searchMs, full.timing);
   check('not stopped early without the dynamic timeout', full.timing.stoppedEarly === false);
 
+  // cold-start data: when the server hands over how the request arrived, the record keeps it
+  const { noteRequest, resetColdStart } = await import('../src/utils/coldStart');
+  resetColdStart();
+  await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000035', file), config({ dynamicTimeout: false }), 'http://x', KEY, { instance: noteRequest(), preMs: 12 });
+  const first = getDebug(KEY)[0] as any;
+  check('the first request of an instance is marked seq 1, with its age and the time before the search', first.timing.instance?.seq === 1 && typeof first.timing.instance?.ageSec === 'number' && first.timing.preMs === 12 && typeof first.timing.speedsMs === 'number', first.timing);
+  await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000036', file), config({ dynamicTimeout: false }), 'http://x', KEY, { instance: noteRequest(), preMs: 3 });
+  check('the next one is seq 2', (getDebug(KEY)[0] as any).timing.instance?.seq === 2);
+
   // stopped early: the timing says so, and the source not waited for is marked in the providers
   await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000032', file), config({ dynamicTimeout: true }), 'http://x', KEY);
   const early = getDebug(KEY)[0] as any;

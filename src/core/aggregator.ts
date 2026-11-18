@@ -22,6 +22,7 @@ import type { ProviderSpeed } from '../storage/usageStore';
 import { activity, filmLabel, fmtMs } from '../utils/activity';
 import { formatTestUntil, formatTestEntries } from '../proxy/formatTest';
 import { isAllowedDownloadUrl, addonHostsOf, serverCanDownload } from '../proxy/subtitleProxy';
+import { InstanceInfo } from '../utils/coldStart';
 
 /** The copy kept for a subtitle: itself, or its first backup this server can download when it cannot */
 function preferDownloadable(item: RawSubtitleItem): RawSubtitleItem {
@@ -265,9 +266,12 @@ export async function getAggregatedSubtitles(
   query: SubtitleQuery,
   config: UserConfig,
   baseUrl: string,
-  configId?: string
+  configId?: string,
+  /** how the request arrived (cold-start data for Debug): this instance, and the time spent before the search began */
+  arrival?: { instance: InstanceInfo; preMs: number }
 ): Promise<StremioSubtitlesResponse> {
   const requestStart = Date.now();
+  let speedsMs = 0;
   const film = filmLabel(query.id, query.extra?.filename);
   activity('request', film, `Subtitle request: ${query.type} ${query.id}${query.extra?.filename ? '' : ' (the player sent no file name)'}`, { step: 'request', state: 'done', ms: 0 });
   // The timing references for Subsync are searched now, in parallel with the list: nearly every subtitle needs them,
@@ -305,7 +309,9 @@ export async function getAggregatedSubtitles(
         const outcome = { stoppedEarly: false };
         // Dynamic timeout: it needs the playing file's name to tell what is good (a hash match always counts)
         const dynamic = config.dynamicTimeout === true && Boolean(query.extra?.filename || query.extra?.videoHash);
+        const speedsStart = Date.now();
         const speeds = dynamic ? await awaitSourceSpeeds(configId) : null;
+        speedsMs = Date.now() - speedsStart;
         const items = await executeParallelSearch(query, config, report, {
           ...(dynamic ? { earlyStop: { recheck: { everyMs: 150, forMs: 4200 }, isEnough: (got: RawSubtitleItem[], pendingIds: string[]) => goodEnough(got, pendingIds, query, config, Date.now() - searchStart, speeds) } } : {}),
           outcome,
@@ -510,7 +516,12 @@ export async function getAggregatedSubtitles(
       subsync: { triggered: subsyncVerdict.needed, reason: subsyncVerdict.reason },
       // where the time of this list went (ms): the whole request until the answer is built, the search of the sources,
       // the ranking; `stoppedEarly` = the dynamic timeout did not wait for every source
-      timing: { totalMs: Date.now() - requestStart, searchMs, scoringMs, stoppedEarly },
+      timing: {
+        totalMs: Date.now() - requestStart, searchMs, scoringMs, stoppedEarly,
+        // cold start: the time before the search began (profile lookup...), the wait for the source statistics, and which
+        // request of its instance this was (seq 1 = the first one: cold)
+        ...(arrival ? { preMs: arrival.preMs, speedsMs, instance: arrival.instance } : {})
+      },
       top: debugTop,
       // timings exist only for searches that really ran (a cached answer did not ask the providers again)
       ...(fromCache ? { cached: true } : { providers: providerReport })
