@@ -5,6 +5,7 @@ import { UserConfig } from '../types/config';
 import { DEFAULT_USER_CONFIG } from '../config/userConfig';
 import { executeParallelSearch } from '../providers';
 import { validateAndNormalizeLanguage, isLanguageWhitelisted } from '../utils/normalizer';
+import { normalizeLanguageCode } from '../utils/languages';
 import { deduplicateSubtitles, prioritizeSubtitles, copiesOf } from '../utils/deduplicator';
 import { globalSubtitleCache } from '../utils/cache';
 import { Logger } from '../utils/logger';
@@ -133,6 +134,30 @@ function priorityWaitFor(id: string, speeds: Map<string, ProviderSpeed> | null):
   // that is slower is the one that used to be left out of the list
   if (s.ranked >= 30 && s.winRate >= 0.3) return Math.min(PRIORITY_WAIT_MS, Math.max(300, Math.round(s.p75 * 1.3)));
   return Math.min(PRIORITY_WAIT_MS, Math.max(300, s.p75));
+}
+
+/**
+ * The list in the order of the user's languages (Romanian first, then English...), each language keeping its own order
+ * (the score); and the limit counts per language (`capPerLanguage`). A single limit over the whole list
+ * left a language out (13 of 55 real plays had no Romanian subtitle among the 3 shown, others had 3 Romanian and no
+ * English to fall back on). The limit counts the same for every language, so a language never takes the places of another.
+ */
+export function groupByLanguage<T extends { lang: string }>(items: T[], whitelist: string[]): T[] {
+  const codes = whitelist.map(l => normalizeLanguageCode(l) || l.trim().toLowerCase());
+  const rank = (lang: string): number => { const i = codes.indexOf(lang.trim().toLowerCase()); return i < 0 ? codes.length : i; };
+  return items.map((item, i) => ({ item, i, r: rank(item.lang) })).sort((a, b) => a.r - b.r || a.i - b.i).map(x => x.item);
+}
+
+/** At most `limit` of each language, in the order given (nothing is moved) */
+export function capPerLanguage<T extends { lang: string }>(items: T[], limit: number): T[] {
+  if (limit <= 0) return items;
+  const counts = new Map<string, number>();
+  return items.filter(item => {
+    const n = counts.get(item.lang) || 0;
+    if (n >= limit) return false;
+    counts.set(item.lang, n + 1);
+    return true;
+  });
 }
 
 /**
@@ -417,6 +442,8 @@ export async function getAggregatedSubtitles(
   const subsyncVerdict = config.subsync !== false && configId
     ? needsReference(query.extra?.filename, orderedItems)
     : { needed: false, reason: configId ? 'subsync is switched off' : 'no configuration id' };
+  // The user's languages in their order, each with its own order: the limit below is then applied per language
+  orderedItems = groupByLanguage(orderedItems, effectiveWhitelist);
   // A subtitle whose only link goes through this server to a source refusing it (an OpenSubtitles quota reached)
   // cannot be downloaded by anyone, player included: it goes last, whatever its score
   const dead = orderedItems.filter(i => i.url.startsWith('/') && !serverCanDownload(i));
@@ -441,9 +468,11 @@ export async function getAggregatedSubtitles(
   // All subtitles are always searched and scored; the limit only trims what is shown to the player
   const afterScoringCount = orderedItems.length;
   const limit = config.maxSubtitles;
-  if (limit > 0 && orderedItems.length > limit) {
-    Logger.info(`Showing the best ${limit} of ${orderedItems.length} subtitles (limit set in the configuration)`);
-    orderedItems = orderedItems.slice(0, limit);
+  if (limit > 0 && orderedItems.length > 0) {
+    // (per language: the best `limit` of each, and the ones that cannot be downloaded stay after those that can)
+    const before = orderedItems.length;
+    orderedItems = capPerLanguage(orderedItems, limit);
+    if (orderedItems.length < before) Logger.info(`Showing the best ${limit} of each language: ${orderedItems.length} of ${before} subtitles (limit set in the configuration)`);
   }
 
   if (configId) {

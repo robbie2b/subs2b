@@ -57,6 +57,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.5 — VALUL 2, pasul 2: lista în ordinea limbilor și limita PE LIMBĂ (2026-11-18).** `groupByLanguage` (limbile din `languages` în ordine, fiecare cu ordinea ei după scor) și `capPerLanguage`
+  (`maxSubtitles` = cel mult N din FIECARE limbă) în `aggregator.ts`; subtitrările nedescărcabile rămân la sfârșit. Înainte, o singură limită peste lista amestecată: în 13 din 55 de redări reale
+  nu era nicio subtitrare românească printre cele 3, iar alteori 3 românești și nicio engleză de rezervă. Cu `maxSubtitles = 3` și două limbi lista are acum până la 6 intrări (3 + 3);
+  Nuvio filtrează pe limbă singur. Pregătirea din timp (prima subtitrare din fiecare limbă) merge acum în ordinea limbilor. Test: `test/languageList.test.ts`.
 - **v1.6.4 — VALUL 2, pasul 1: oprirea timpurie ține cont de limba primară (2026-11-18).** `goodEnough` (aggregator.ts) judecă după cea mai bună subtitrare din PRIMA limbă din `languages` (ron):
   până apare una, o potrivire bună în altă limbă (hash OpenSubtitles în engleză) NU închide lista: așteaptă cel mult `PRIMARY_LANGUAGE_WAIT_MS` = 2,5 s, și deloc dacă ce a mai rămas rar schimbă
   prima subtitrare (`lowRisk`). O sursă care câștigă des (≥30%: Subs.ro) e așteptată 1,3 × p75 (max 2 s), nu p75. Cu o singură limbă în listă nimic nu se schimbă. Motiv (raportul „utilizator"):
