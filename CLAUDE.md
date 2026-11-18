@@ -57,6 +57,9 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.6 — VALUL 2, pasul 3: alternativele Subsync vin și din ce a lăsat limita pe dinafară (2026-11-18).** În `aggregator.ts`, subtitrările tăiate de `maxSubtitles` (`leftOut`) rămân candidate pentru
+  alternativele din token (până la `MAX_ALTERNATIVES` = 3, aceeași limbă, după cele din listă): înainte, cu lista tăiată la 3, prima subtitrare avea cel mult 2 alternative (uneori 0–1 când lista era
+  amestecată). Alternativa se folosește când subtitrarea nu se potrivește cu referințele, deci mai multe alternative = mai des o subtitrare sincronizată în loc de originalul nepotrivit. Test în `test/languageList.test.ts`.
 - **v1.6.5 — VALUL 2, pasul 2: lista în ordinea limbilor și limita PE LIMBĂ (2026-11-18).** `groupByLanguage` (limbile din `languages` în ordine, fiecare cu ordinea ei după scor) și `capPerLanguage`
   (`maxSubtitles` = cel mult N din FIECARE limbă) în `aggregator.ts`; subtitrările nedescărcabile rămân la sfârșit. Înainte, o singură limită peste lista amestecată: în 13 din 55 de redări reale
   nu era nicio subtitrare românească printre cele 3, iar alteori 3 românești și nicio engleză de rezervă. Cu `maxSubtitles = 3` și două limbi lista are acum până la 6 intrări (3 + 3);

@@ -7,6 +7,7 @@ process.env.ALLOW_PRIVATE_HOSTS = '1';
 import { groupByLanguage, capPerLanguage, getAggregatedSubtitles, parseSubtitleQuery } from '../src/core/aggregator';
 import { DEFAULT_USER_CONFIG } from '../src/config/userConfig';
 import { UserConfig } from '../src/types/config';
+import { decodeAlignedToken } from '../src/core/alignedToken';
 
 let failed = 0;
 function check(label: string, ok: boolean, info?: unknown): void {
@@ -29,7 +30,7 @@ const it = (lang: string, n: number) => ({ lang, n });
   const server = http.createServer((req, res) => {
     const eng = (req.url || '').startsWith('/eng/');
     const subs = [0, 1, 2, 3, 4].map(i => ({
-      url: `https://dl.example/${eng ? 'e' : 'r'}${i}.srt`, lang: eng ? 'eng' : 'ron',
+      url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/dl/${eng ? 'e' : 'r'}${i}.srt`, lang: eng ? 'eng' : 'ron',
       title: eng ? `Movie.2001.1080p.BluRay.x264-GRP${i ? 'X' + i : ''}` : `Movie.2001.720p.WEB-DL.x264-OTHER${i}`
     }));
     res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ subtitles: subs }));
@@ -53,6 +54,15 @@ const it = (lang: string, n: number) => ({ lang, n });
     check('with English first, English comes first', eFirst.subtitles.slice(0, 3).every(s => s.lang === 'eng'), eFirst.subtitles.map(s => s.lang));
     const oneLang = await ask('tt0000074', config({ languages: ['ron'] }));
     check('a single language: 3 of it, as before', oneLang.subtitles.length === 3 && oneLang.subtitles.every(s => s.lang === 'ron'), oneLang.subtitles.map(s => s.lang));
+
+    // the Subsync alternatives of a subtitle are the next ones of its language, also the ones the limit does not show
+    const sync = await getAggregatedSubtitles(parseSubtitleQuery('movie', 'tt0000075', { filename: FILE }),
+      config({ languages: ['ron'], maxSubtitles: 2, subsync: true, customAddons: [addon('ro')] }), 'http://x', 'a0000000-0000-4000-8000-0000000000a5');
+    const tokenOf = (u: string) => { const m = /\/sub\/aligned\/([^/]+)\.srt$/.exec(u); return m ? decodeAlignedToken(m[1]) : null; };
+    const first = tokenOf(sync.subtitles[0]?.url || '');
+    check('the list shows the 2 allowed', sync.subtitles.length === 2, sync.subtitles.length);
+    check('the first subtitle carries 3 alternatives although only 2 are shown (the others come from what the limit left out)', Boolean(first && first.a && first.a.length === 3), first && first.a && first.a.length);
+    check('and they are not repeated or the subtitle itself', Boolean(first && first.a && new Set([first.u, ...first.a.map(x => x.u)]).size === 4));
   } finally { server.close(); }
   if (failed) { console.error(`${failed} FAIL`); process.exit(1); }
   console.log('languageList: all ok');

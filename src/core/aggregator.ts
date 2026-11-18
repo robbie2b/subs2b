@@ -468,10 +468,15 @@ export async function getAggregatedSubtitles(
   // All subtitles are always searched and scored; the limit only trims what is shown to the player
   const afterScoringCount = orderedItems.length;
   const limit = config.maxSubtitles;
+  // what the limit leaves out is still a candidate for the Subsync alternatives: a subtitle that does not fit the references
+  // is replaced by the next of its language, and the next of a short list may be one the player is not shown
+  let leftOut: RawSubtitleItem[] = [];
   if (limit > 0 && orderedItems.length > 0) {
     // (per language: the best `limit` of each, and the ones that cannot be downloaded stay after those that can)
     const before = orderedItems.length;
+    const all = orderedItems;
     orderedItems = capPerLanguage(orderedItems, limit);
+    leftOut = all.filter(i => !orderedItems.includes(i));
     if (orderedItems.length < before) Logger.info(`Showing the best ${limit} of each language: ${orderedItems.length} of ${before} subtitles (limit set in the configuration)`);
   }
 
@@ -575,15 +580,22 @@ export async function getAggregatedSubtitles(
   if (subsyncVerdict.needed && configId && query.extra?.filename) {
     const filename = query.extra.filename;
     const alignable = directUrls.map(fetchable);
+    // the candidates for the alternatives: the list, then what the limit left out (in the same order, language by language)
+    const poolItems = [...orderedItems, ...leftOut];
+    const poolUrls = [...directUrls, ...leftOut.map(linkOf)];
+    const poolAlignable = poolUrls.map((u, k) => (k < alignable.length ? alignable[k] : fetchable(u)));
+    const poolBackups = [...backups, ...leftOut.map((item, k) => fetchable(poolUrls[directUrls.length + k])
+      ? (item.backups || []).map(linkOf).filter(u => u !== poolUrls[directUrls.length + k] && fetchable(u)).slice(0, MAX_BACKUPS)
+      : [])];
     const firstOfLanguage = new Map<string, AlignedToken>();
     const nextOfLanguage = new Map<string, AlignedToken[]>();
     subtitles.forEach((sub, idx) => {
       // a subtitle from the file's own release group is trusted and served directly
       if (!alignable[idx] || fromFileGroup(filename, orderedItems[idx].release)) return;
       const alternatives: Array<{ u: string; r?: string; b?: string[] }> = [];
-      for (let j = idx + 1; j < subtitles.length && alternatives.length < MAX_ALTERNATIVES; j++) {
-        if (alignable[j] && orderedItems[j].lang === orderedItems[idx].lang) {
-          alternatives.push({ u: directUrls[j], r: orderedItems[j].release, ...(backups[j].length ? { b: backups[j] } : {}) });
+      for (let j = idx + 1; j < poolItems.length && alternatives.length < MAX_ALTERNATIVES; j++) {
+        if (poolAlignable[j] && poolItems[j].lang === orderedItems[idx].lang) {
+          alternatives.push({ u: poolUrls[j], r: poolItems[j].release, ...(poolBackups[j].length ? { b: poolBackups[j] } : {}) });
         }
       }
       const token: AlignedToken = {
