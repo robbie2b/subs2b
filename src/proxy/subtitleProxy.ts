@@ -93,6 +93,8 @@ function sendError(res: Response, status: number, message: string): void {
     });
   }
   res.status(status);
+  // an error is never kept (by the player, a proxy or the edge): the next request tries again
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.send(message);
@@ -756,6 +758,8 @@ export async function handleVttConvert(req: Request, res: Response): Promise<voi
     sendSubtitleResponse(res, srt, 'srt', 'subtitle.srt');
   } catch (err: unknown) {
     Logger.warn('VTT -> SRT conversion failed, sending the player to the original link', { reason: err instanceof Error ? err.message : String(err) });
+    // (the redirect is the answer to a failure of the moment: not kept)
+    res.setHeader('Cache-Control', 'no-store');
     res.redirect(302, original);
   }
 }

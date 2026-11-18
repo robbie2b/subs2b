@@ -201,6 +201,18 @@ export function createServer(): express.Application {
         : original(path, ...handlers.map(h => (typeof h === 'function' && h.length < 4 ? safeHandler(h as never) : h)));
   }
 
+  // An error answer (4xx/5xx) is never kept by a player, a proxy or the edge, unless a route said otherwise: the next
+  // request must try again (a pack that was not there a minute ago, a source that blinked)
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    const writeHead = res.writeHead;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res.writeHead = function (this: Response, code: number, ...rest: any[]): Response {
+      if (code >= 400 && !this.getHeader('Cache-Control')) this.setHeader('Cache-Control', 'no-store');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (writeHead as any).call(this, code, ...rest);
+    } as typeof res.writeHead;
+    next();
+  });
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
