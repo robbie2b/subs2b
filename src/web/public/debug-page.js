@@ -191,10 +191,22 @@ function startDebugPage() {
   formatTest();
   refreshLogs();
   refreshActivity();
-  debugState.logTimer = setInterval(refreshLogs, 2000);
-  debugState.actTimer = setInterval(refreshActivity, 2000);
+  // Nothing is asked while the tab is hidden (a forgotten tab used to cost ~7,800 server calls an hour); coming back
+  // refreshes everything at once. The big, slow-changing tables are read every 2 minutes, not every 30 s.
+  const whenVisible = (fn) => () => { if (!document.hidden) fn(); };
+  const refreshSlow = () => { refreshUsage(); refreshProviders(); refreshSubsync(); refreshDownloads(); refreshRequestCounts(); };
+  debugState.logTimer = setInterval(whenVisible(refreshLogs), 2000);
+  debugState.actTimer = setInterval(whenVisible(refreshActivity), 2000);
   debugState.actTick = setInterval(tickActivity, 1000);
-  debugState.usageTimer = setInterval(() => { refreshUsage(); refreshProviders(); refreshSubsync(); refreshDownloads(); refreshRequestCounts(); }, 30000);
+  debugState.usageTimer = setInterval(whenVisible(refreshSlow), 120000);
+  debugState.visibleHandler = () => {
+    if (document.hidden) return;
+    refreshLogs();
+    refreshActivity();
+    // (the tables only if they are 30 s old or more)
+    if (Date.now() - (debugState.slowAt || 0) > 30000) refreshSlow();
+  };
+  document.addEventListener('visibilitychange', debugState.visibleHandler);
 }
 
 function stopDebugPage() {
@@ -205,6 +217,8 @@ function stopDebugPage() {
   debugState.logTimer = null;
   debugState.actTimer = null;
   debugState.usageTimer = null;
+  if (debugState.visibleHandler) document.removeEventListener('visibilitychange', debugState.visibleHandler);
+  debugState.visibleHandler = null;
 }
 
 // One log line as colored pieces: dim time, level, tags like [SUBSYNC] and a few key words highlighted.
@@ -296,6 +310,7 @@ async function refreshLogs() {
 }
 
 async function refreshUsage() {
+  debugState.slowAt = Date.now();
   const base = debugBase();
   if (!base) return;
   try {
