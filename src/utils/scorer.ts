@@ -98,18 +98,22 @@ const NOT_A_GROUP = new Set([
 
 const LANG_SUFFIX = /[. ](ro|en|is|dan|fin|nor|swe|hun|ell|deu|fra|ita|spa|por|pob|tur|pol|hin|ara|heb|kor|jpn|chi|zho|ces|slk|slv|srp|hrv|bul|ukr|rus|vie|tha|ind|msa|may|ger|fre|eng|rum|ron)$/i;
 
-const SERVICES: Array<[RegExp, string]> = [
-  [/\b(nf|netflix)\b/, 'nf'],
-  [/\b(amzn|amazon)\b/, 'amzn'],
-  [/\b(dsnp|dsny|disney)\b/, 'dsnp'],
-  [/\b(hmax|hbomax|hbo max)\b/, 'hmax'],
-  [/\b(atvp|appletv)\b/, 'atvp'],
-  [/\bhulu\b/, 'hulu'],
-  [/\b(pcok|peacock)\b/, 'pcok'],
-  [/\b(pmtp|paramount)\b/, 'pmtp'],
-  [/\bvoyo\b/, 'voyo'],
-  [/\bskst\b/, 'skst'],
-  [/\batv\b/, 'atvp']
+/**
+ * Streaming services: the short tags (AMZN, NF, SKST...) are looked for in the whole name (they sit before the resolution
+ * as often as after it: "Show.S01E01.AMZN.WEB-DL.1080p"); the full words (Amazon, Netflix, Disney...) only after the title,
+ * since they can be part of one ("Tears of the Amazon").
+ */
+const SERVICES: Array<[RegExp | null, RegExp | null, string]> = [
+  [/\bnf\b/, /\bnetflix\b/, 'nf'],
+  [/\bamzn\b/, /\bamazon\b/, 'amzn'],
+  [/\b(dsnp|dsny)\b/, /\bdisney\b/, 'dsnp'],
+  [/\bhmax\b/, /\b(hbomax|hbo max)\b/, 'hmax'],
+  [/\b(atvp|atv)\b/, /\bappletv\b/, 'atvp'],
+  [/\bhulu\b/, null, 'hulu'],
+  [/\bpcok\b/, /\bpeacock\b/, 'pcok'],
+  [/\bpmtp\b/, /\bparamount\b/, 'pmtp'],
+  [null, /\bvoyo\b/, 'voyo'],
+  [/\bskst\b/, null, 'skst']
 ];
 
 const EDITIONS: Array<[RegExp, string]> = [
@@ -150,7 +154,8 @@ function afterTitle(norm: string): string {
 
 function detectSource(fullNorm: string): Source | null {
   const norm = fullNorm;
-  if (/\b(cam|camrip|hdcam|ts|hdts|telesync|tc|hdtc|telecine|scr|screener|dvdscr|predvd|trial)\b/.test(afterTitle(norm))) return 'cam';
+  if (/\b(camrip|hdcam|hdts|telesync|hdtc|telecine|screener|dvdscr|predvd)\b/.test(norm)) return 'cam';
+  if (/\b(cam|ts|tc|scr|trial)\b/.test(afterTitle(norm))) return 'cam';
   if (/\b(remux|bdremux)\b/.test(norm)) return 'remux';
   if (/\b(blu ray|bluray|bdrip|brrip|bd rip|br rip|bd25|bd50)\b/.test(norm)) return 'bluray';
   if (/\b(web dl|webdl)\b/.test(norm)) return 'webdl';
@@ -312,8 +317,8 @@ function parseReleaseUncached(raw: string): ParsedRelease {
 
   let service: string | null = null;
   const afterName = afterTitle(norm);
-  for (const [re, name] of SERVICES) {
-    if (re.test(afterName)) {
+  for (const [code, word, name] of SERVICES) {
+    if ((code && code.test(norm)) || (word && word.test(afterName))) {
       service = name;
       break;
     }

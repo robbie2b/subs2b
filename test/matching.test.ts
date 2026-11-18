@@ -117,6 +117,9 @@ const kept = (r: ReturnType<typeof rankSubtitles>) => r.items.map(i => i.release
   check('a title with "Trial" or "Cam" is not a cam rip', parseRelease('The.Trial.of.the.Chicago.7.2020.1080p.BluRay.x264-GRP').source === 'bluray' && parseRelease('Cam.2018.1080p.WEB-DL').source === 'webdl');
   check('"Tears of the Amazon" is not Amazon', parseRelease('Tears.of.the.Amazon.2020.1080p.BluRay.x264-GRP').service === null);
   check('but a real Amazon tag is', parseRelease('Show.S01E01.1080p.AMZN.WEB-DL-GRP').service === 'amzn');
+  check('an AMZN tag before the resolution is still Amazon', parseRelease('The.Mentalist.S01E01.AMZN.WEB-DL.1080p').service === 'amzn');
+  check('TELESYNC before the resolution is still a cam rip', parseRelease('Inception.iNTERNAL.TELESYNC.720p.x264-ORC').source === 'cam');
+  check('SKST and ATV are services', parseRelease('Tulsa.King.S02E10.SKST.WEB-DL').service === 'skst' && parseRelease('Dexter.S02E01.2160p.ATV.WEB-DL-GRP').service === 'atvp');
   check('the OpenSubtitles "-rum(1)" tag is not the group', parseRelease('Movie.2020.1080p.BluRay.DTS.x264-CtrlHD-rum(1)').group === 'ctrlhd');
   check('a name ending in .YIFY has the group yify', parseRelease('Movie.2020.1080p.BluRay.x264.YIFY').group === 'yify');
 }

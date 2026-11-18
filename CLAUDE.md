@@ -57,6 +57,10 @@ Fișierul ăsta e citit automat la începutul fiecărei sesiuni. Ține-l la zi l
     Uneltele sunt în `experiments/subsync/benchmark/`; corpusul nu e în repo.
 
 ## Istoric recent
+- **v1.6.1 — corecție la 1.6.0 (2026-11-18; găsită verificând pe 1.654 de nume din datele live).** Etichetele scurte de serviciu (AMZN, NF, DSNP, ATVP/ATV, SKST...) se caută în tot numele (stau și
+  înaintea rezoluției: „Show.S01E01.AMZN.WEB-DL.1080p"), doar cuvintele întregi (Amazon, Netflix, Disney...) numai după titlu; cuvintele de cam fără echivoc (TELESYNC, HDCAM, HDTS, DVDSCR...) se caută
+  în tot numele, doar „cam/ts/tc/scr/trial" după titlu. În 1.6.0 se pierdeau „The.Mentalist...AMZN.WEB-DL.1080p" (serviciu) și „Inception.iNTERNAL.TELESYNC.720p" (cam). Pe nume reale: 22 de servicii
+  noi recunoscute (SKST la Tulsa King/MobLand/Dexter/The Office/Ted, ATV), 2 corecte scoase („Tears of the Amazon"), 0 pierderi.
 - **v1.6.0 — VALUL 1 din raportul echipei de 11 agenți (2026-11-18; a doua cifră trecută la 6 la cererea utilizatorului; de acum fiecare update = 1.6.1, 1.6.2...).**
   Raportul a venit de la 11 subagenți (cod, clasament, Subsync, alte addonuri, surse, performanță, protocol, securitate, fișiere, identificare conținut, experiență reală).
   FĂCUT în 1.6.0: (1) robustețe: orice rută `app.get/post` e învelită (`safeHandler` în `createServer`): eroare async = 503/500 `no-store`, nu agățare sau cădere; valorile din `?query`
